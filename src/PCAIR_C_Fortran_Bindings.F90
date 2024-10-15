@@ -1,0 +1,1330 @@
+module pcair_c_fortran_bindings
+
+   use iso_c_binding
+   use petsc
+   use pcair_interfaces
+
+#include "petsc/finclude/petsc.h"
+#include "finclude/pflare_types.h"
+
+   implicit none
+
+   public
+
+   contains
+
+   ! -------------------------------------------------------------------------------------------------------------------------------
+   ! -------------------------------------------------------------------------------------------------------------------------------
+   ! Contains C bindings to the PCAIR options 
+   ! -------------------------------------------------------------------------------------------------------------------------------
+   ! -------------------------------------------------------------------------------------------------------------------------------      
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetPrintStatsTimings_c(pc_ptr, print_stats) bind(C, name='PCAIRGetPrintStatsTimings_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, intent(out)              :: print_stats
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetPrintStatsTimings(pc, print_stats, ierr)
+
+   end subroutine PCAIRGetPrintStatsTimings_c   
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetMaxLevels_c(pc_ptr, max_levels) bind(C, name='PCAIRGetMaxLevels_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, intent(out)               :: max_levels
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetMaxLevels(pc, max_levels, ierr)
+
+   end subroutine PCAIRGetMaxLevels_c
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetNumLevels_c(pc_ptr, num_levels) bind(C, name='PCAIRGetNumLevels_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, intent(out)               :: num_levels
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetNumLevels(pc, num_levels, ierr)
+
+   end subroutine PCAIRGetNumLevels_c   
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetProcessorAgglom_c(pc_ptr, processor_agglom) bind(C, name='PCAIRGetProcessorAgglom_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, intent(out)        :: processor_agglom
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetProcessorAgglom(pc, processor_agglom, ierr)
+
+   end subroutine PCAIRGetProcessorAgglom_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetProcessorAgglomRatio_c(pc_ptr, ratio) bind(C, name='PCAIRGetProcessorAgglomRatio_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscReal, intent(out)        :: ratio
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetProcessorAgglomRatio(pc, ratio, ierr)
+
+   end subroutine PCAIRGetProcessorAgglomRatio_c
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetProcessorAgglomFactor_c(pc_ptr, factor) bind(C, name='PCAIRGetProcessorAgglomFactor_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, intent(out)        :: factor
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetProcessorAgglomFactor(pc, factor, ierr)
+
+   end subroutine PCAIRGetProcessorAgglomFactor_c   
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetSubcomm_c(pc_ptr, subcomm) bind(C, name='PCAIRGetSubcomm_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, intent(out)        :: subcomm
+      
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetSubcomm(pc, subcomm, ierr)
+
+   end subroutine PCAIRGetSubcomm_c   
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetStrongThreshold_c(pc_ptr, thresh) bind(C, name='PCAIRGetStrongThreshold_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscReal, intent(out)        :: thresh
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetStrongThreshold(pc, thresh, ierr)
+
+   end subroutine PCAIRGetStrongThreshold_c   
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetDDCFraction_c(pc_ptr, frac) bind(C, name='PCAIRGetDDCFraction_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscReal, intent(out)        :: frac
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetDDCFraction(pc, frac, ierr)
+
+   end subroutine PCAIRGetDDCFraction_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetCFSplittingType_c(pc_ptr, algo) bind(C, name='PCAIRGetCFSplittingType_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      CFSplittingType, intent(out)         :: algo
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetCFSplittingType(pc, algo, ierr)
+
+   end subroutine PCAIRGetCFSplittingType_c
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetMaxLubySteps_c(pc_ptr, steps) bind(C, name='PCAIRGetMaxLubySteps_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, intent(out)         :: steps
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetMaxLubySteps(pc, steps, ierr)
+
+   end subroutine PCAIRGetMaxLubySteps_c   
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetMaxitsAff_c(pc_ptr, maxits) bind(C, name='PCAIRGetMaxitsAff_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, intent(out)         :: maxits
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetMaxitsAff(pc, maxits, ierr)
+
+   end subroutine PCAIRGetMaxitsAff_c
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetOneCSmooth_c(pc_ptr, smooth) bind(C, name='PCAIRGetOneCSmooth_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, intent(out)        :: smooth
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetOneCSmooth(pc, smooth, ierr)
+
+   end subroutine PCAIRGetOneCSmooth_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetMatrixFreePolys_c(pc_ptr, mf) bind(C, name='PCAIRGetMatrixFreePolys_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, intent(out)        :: mf
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetMatrixFreePolys(pc, mf, ierr)
+
+   end subroutine PCAIRGetMatrixFreePolys_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetOnePointClassicalProlong_c(pc_ptr, onep) bind(C, name='PCAIRGetOnePointClassicalProlong_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, intent(out)        :: onep
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetOnePointClassicalProlong(pc, onep, ierr)
+
+   end subroutine PCAIRGetOnePointClassicalProlong_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetFullSmoothingUpAndDown_c(pc_ptr, full) bind(C, name='PCAIRGetFullSmoothingUpAndDown_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, intent(out)        :: full
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetFullSmoothingUpAndDown(pc, full, ierr)
+
+   end subroutine PCAIRGetFullSmoothingUpAndDown_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetSymmetric_c(pc_ptr, sym) bind(C, name='PCAIRGetSymmetric_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, intent(out)        :: sym
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetSymmetric(pc, sym, ierr)
+
+   end subroutine PCAIRGetSymmetric_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetConstrainW_c(pc_ptr, constrain) bind(C, name='PCAIRGetConstrainW_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, intent(out)        :: constrain
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetConstrainW(pc, constrain, ierr)
+
+   end subroutine PCAIRGetConstrainW_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetConstrainZ_c(pc_ptr, constrain) bind(C, name='PCAIRGetConstrainZ_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, intent(out)        :: constrain
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetConstrainZ(pc, constrain, ierr)
+
+   end subroutine PCAIRGetConstrainZ_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetStrongRThreshold_c(pc_ptr, thresh) bind(C, name='PCAIRGetStrongRThreshold_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscReal, intent(out)        :: thresh
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetStrongRThreshold(pc, thresh, ierr)
+
+   end subroutine PCAIRGetStrongRThreshold_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetInverseType_c(pc_ptr, inv_type) bind(C, name='PCAIRGetInverseType_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PCPFLAREINVType, intent(out)         :: inv_type
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetInverseType(pc, inv_type, ierr)
+
+   end subroutine PCAIRGetInverseType_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetZType_c(pc_ptr, z_type) bind(C, name='PCAIRGetZType_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PCAIRZType, intent(out)         :: z_type
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetZType(pc, z_type, ierr)
+
+   end subroutine PCAIRGetZType_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetPolyOrder_c(pc_ptr, order) bind(C, name='PCAIRGetPolyOrder_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, intent(out)         :: order
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetPolyOrder(pc, order, ierr)
+
+   end subroutine PCAIRGetPolyOrder_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetPolySparsityOrder_c(pc_ptr, order) bind(C, name='PCAIRGetPolySparsityOrder_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, intent(out)         :: order
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetPolySparsityOrder(pc, order, ierr)
+
+   end subroutine PCAIRGetPolySparsityOrder_c
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetCoarsestInverseType_c(pc_ptr, inv_type) bind(C, name='PCAIRGetCoarsestInverseType_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PCPFLAREINVType, intent(out)         :: inv_type
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetCoarsestInverseType(pc, inv_type, ierr)
+
+   end subroutine PCAIRGetCoarsestInverseType_c   
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetCoarsestPolyOrder_c(pc_ptr, order) bind(C, name='PCAIRGetCoarsestPolyOrder_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, intent(out)         :: order
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetCoarsestPolyOrder(pc, order, ierr)
+
+   end subroutine PCAIRGetCoarsestPolyOrder_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetCoarsestPolySparsityOrder_c(pc_ptr, order) bind(C, name='PCAIRGetCoarsestPolySparsityOrder_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, intent(out)         :: order
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetCoarsestPolySparsityOrder(pc, order, ierr)
+
+   end subroutine PCAIRGetCoarsestPolySparsityOrder_c 
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetCoarsestMatrixFreePolys_c(pc_ptr, mf) bind(C, name='PCAIRGetCoarsestMatrixFreePolys_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, intent(out)        :: mf
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetCoarsestMatrixFreePolys(pc, mf, ierr)
+
+   end subroutine PCAIRGetCoarsestMatrixFreePolys_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetCoarsestSubcomm_c(pc_ptr, subcomm) bind(C, name='PCAIRGetCoarsestSubcomm_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, intent(out)        :: subcomm
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetCoarsestSubcomm(pc, subcomm, ierr)
+
+   end subroutine PCAIRGetCoarsestSubcomm_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetRDrop_c(pc_ptr, rdrop) bind(C, name='PCAIRGetRDrop_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscReal, intent(out)        :: rdrop
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetRDrop(pc, rdrop, ierr)
+
+   end subroutine PCAIRGetRDrop_c  
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetADrop_c(pc_ptr, adrop) bind(C, name='PCAIRGetADrop_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscReal, intent(out)        :: adrop
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetADrop(pc, adrop, ierr)
+
+   end subroutine PCAIRGetADrop_c 
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetALump_c(pc_ptr, lump) bind(C, name='PCAIRGetALump_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, intent(out)        :: lump
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetALump(pc, lump, ierr)
+
+   end subroutine PCAIRGetALump_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetReuseSparsity_c(pc_ptr, reuse) bind(C, name='PCAIRGetReuseSparsity_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, intent(out)        :: reuse
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetReuseSparsity(pc, reuse, ierr)
+
+   end subroutine PCAIRGetReuseSparsity_c
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetReusePolyCoeffs_c(pc_ptr, reuse) bind(C, name='PCAIRGetReusePolyCoeffs_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, intent(out)        :: reuse
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetReusePolyCoeffs(pc, reuse, ierr)
+
+   end subroutine PCAIRGetReusePolyCoeffs_c    
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetPolyCoeffs_c(pc_ptr, petsc_level, which_inverse, coeffs_ptr, row_size, col_size) bind(C, name='PCAIRGetPolyCoeffs_c')
+
+      ! The C interface to this differs by sending out a pointer, rather than a copy of the coefficients
+      ! in an allocatable array - hence you will have to take a copy of the values externally if you want 
+      ! to save them
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, value, intent(in)         :: petsc_level, which_inverse 
+      PetscInt, intent(out)               :: row_size, col_size
+      type(c_ptr), intent(out)            :: coeffs_ptr
+
+      type(tPC)                              :: pc
+      PetscErrorCode                         :: ierr
+      integer                                :: our_level, errorcode
+      PetscInt                               :: num_levels
+      type(tPC)                              :: pc_shell
+      type(pc_air_multigrid_data), pointer   :: pc_air_data      
+
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+
+      ! Get the underlying PCShell
+      call PCAIRGetPCShell(pc, pc_shell)
+
+      ! Get the PC shell context
+      call PCShellGetContext(pc_shell, pc_air_data, ierr)
+
+      ! Get the number of levels in our mg
+      call PCAIRGetNumLevels(pc, num_levels, ierr) 
+
+      ! We order our levels from 1 to num_levels
+      our_level = num_levels - int(petsc_level)
+      
+      ! Inverse Aff
+      if (which_inverse == COEFFS_INV_AFF) then
+
+         row_size = size(pc_air_data%air_data%inv_A_ff_poly_data(our_level)%coefficients, 1)
+         col_size = size(pc_air_data%air_data%inv_A_ff_poly_data(our_level)%coefficients, 2)
+
+         coeffs_ptr = c_loc(pc_air_data%air_data%inv_A_ff_poly_data(our_level)%coefficients)
+
+      ! Inverse dropped Aff
+      else if (which_inverse == COEFFS_INV_AFF_DROPPED) then
+
+         row_size = size(pc_air_data%air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients, 1)
+         col_size = size(pc_air_data%air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients, 2)       
+
+         coeffs_ptr = c_loc(pc_air_data%air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients)
+
+      ! Inverse Acc
+      else if (which_inverse == COEFFS_INV_ACC) then
+
+         row_size = size(pc_air_data%air_data%inv_A_cc_poly_data(our_level)%coefficients, 1)
+         col_size = size(pc_air_data%air_data%inv_A_cc_poly_data(our_level)%coefficients, 2)            
+
+         coeffs_ptr = c_loc(pc_air_data%air_data%inv_A_cc_poly_data(our_level)%coefficients)
+
+      ! Coarsest grid matrix
+      else if (which_inverse == COEFFS_INV_COARSE) then
+
+         row_size = size(pc_air_data%air_data%inv_coarsest_poly_data%coefficients, 1)
+         col_size = size(pc_air_data%air_data%inv_coarsest_poly_data%coefficients, 2)         
+
+         coeffs_ptr = c_loc(pc_air_data%air_data%inv_coarsest_poly_data%coefficients)
+
+      else
+         print *, "Unknown which_inverse in PCAIRGetPolyCoeffs_c"
+         call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
+      end if      
+
+
+   end subroutine PCAIRGetPolyCoeffs_c      
+   
+! -------------------------------------------------------------------------------------------------------------------------------   
+
+   ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   ! Set routines - Fortran versions of the C routines in PCAIR
+   ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~    
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetPrintStatsTimings_c(pc_ptr, print_stats) bind(C, name='PCAIRSetPrintStatsTimings_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, value, intent(in)         :: print_stats
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetPrintStatsTimings(pc, print_stats, ierr)
+
+   end subroutine PCAIRSetPrintStatsTimings_c   
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetMaxLevels_c(pc_ptr, max_levels) bind(C, name='PCAIRSetMaxLevels_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, value, intent(in)          :: max_levels
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetMaxLevels(pc, max_levels, ierr)
+
+   end subroutine PCAIRSetMaxLevels_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetProcessorAgglom_c(pc_ptr, processor_agglom) bind(C, name='PCAIRSetProcessorAgglom_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, value, intent(in)         :: processor_agglom
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetProcessorAgglom(pc, processor_agglom, ierr)
+
+   end subroutine PCAIRSetProcessorAgglom_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetProcessorAgglomRatio_c(pc_ptr, ratio) bind(C, name='PCAIRSetProcessorAgglomRatio_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscReal, value, intent(in)         :: ratio
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetProcessorAgglomRatio(pc, ratio, ierr)
+
+   end subroutine PCAIRSetProcessorAgglomRatio_c
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetProcessorAgglomFactor_c(pc_ptr, factor) bind(C, name='PCAIRSetProcessorAgglomFactor_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, value, intent(in)         :: factor
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetProcessorAgglomFactor(pc, factor, ierr)
+
+   end subroutine PCAIRSetProcessorAgglomFactor_c   
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetSubcomm_c(pc_ptr, subcomm) bind(C, name='PCAIRSetSubcomm_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, value, intent(in)         :: subcomm
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetSubcomm(pc, subcomm, ierr)
+
+   end subroutine PCAIRSetSubcomm_c   
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetStrongThreshold_c(pc_ptr, thresh) bind(C, name='PCAIRSetStrongThreshold_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscReal, value, intent(in)         :: thresh
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetStrongThreshold(pc, thresh, ierr)
+
+   end subroutine PCAIRSetStrongThreshold_c   
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetDDCFraction_c(pc_ptr, frac) bind(C, name='PCAIRSetDDCFraction_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscReal, value, intent(in)         :: frac
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetDDCFraction(pc, frac, ierr)
+
+   end subroutine PCAIRSetDDCFraction_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetCFSplittingType_c(pc_ptr, algo) bind(C, name='PCAIRSetCFSplittingType_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      CFSplittingType, value, intent(in)          :: algo
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetCFSplittingType(pc, algo, ierr)
+
+   end subroutine PCAIRSetCFSplittingType_c
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetMaxLubySteps_c(pc_ptr, steps) bind(C, name='PCAIRSetMaxLubySteps_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, value, intent(in)          :: steps
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetMaxLubySteps(pc, steps, ierr)
+
+   end subroutine PCAIRSetMaxLubySteps_c   
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetMaxitsAff_c(pc_ptr, maxits) bind(C, name='PCAIRSetMaxitsAff_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, value, intent(in)          :: maxits
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetMaxitsAff(pc, maxits, ierr)
+
+   end subroutine PCAIRSetMaxitsAff_c
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetOneCSmooth_c(pc_ptr, smooth) bind(C, name='PCAIRSetOneCSmooth_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, value, intent(in)         :: smooth
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetOneCSmooth(pc, smooth, ierr)
+
+   end subroutine PCAIRSetOneCSmooth_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetMatrixFreePolys_c(pc_ptr, mf) bind(C, name='PCAIRSetMatrixFreePolys_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, value, intent(in)         :: mf
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetMatrixFreePolys(pc, mf, ierr)
+
+   end subroutine PCAIRSetMatrixFreePolys_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetOnePointClassicalProlong_c(pc_ptr, onep) bind(C, name='PCAIRSetOnePointClassicalProlong_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, value, intent(in)         :: onep
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetOnePointClassicalProlong(pc, onep, ierr)
+
+   end subroutine PCAIRSetOnePointClassicalProlong_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetFullSmoothingUpAndDown_c(pc_ptr, full) bind(C, name='PCAIRSetFullSmoothingUpAndDown_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, value, intent(in)         :: full
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetFullSmoothingUpAndDown(pc, full, ierr)
+
+   end subroutine PCAIRSetFullSmoothingUpAndDown_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetSymmetric_c(pc_ptr, sym) bind(C, name='PCAIRSetSymmetric_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, value, intent(in)         :: sym
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetSymmetric(pc, sym, ierr)
+
+   end subroutine PCAIRSetSymmetric_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetConstrainW_c(pc_ptr, constrain) bind(C, name='PCAIRSetConstrainW_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, value, intent(in)         :: constrain
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetConstrainW(pc, constrain, ierr)
+
+   end subroutine PCAIRSetConstrainW_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetConstrainZ_c(pc_ptr, constrain) bind(C, name='PCAIRSetConstrainZ_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, value, intent(in)         :: constrain
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetConstrainZ(pc, constrain, ierr)
+
+   end subroutine PCAIRSetConstrainZ_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetStrongRThreshold_c(pc_ptr, thresh) bind(C, name='PCAIRSetStrongRThreshold_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscReal, value, intent(in)         :: thresh
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetStrongRThreshold(pc, thresh, ierr)
+
+   end subroutine PCAIRSetStrongRThreshold_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetInverseType_c(pc_ptr, inv_type) bind(C, name='PCAIRSetInverseType_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PCPFLAREINVType, value, intent(in)          :: inv_type
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetInverseType(pc, inv_type, ierr)
+
+   end subroutine PCAIRSetInverseType_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetZType_c(pc_ptr, z_type) bind(C, name='PCAIRSetZType_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PCAIRZType, value, intent(in)          :: z_type
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetZType(pc, z_type, ierr)
+
+   end subroutine PCAIRSetZType_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetPolyOrder_c(pc_ptr, order) bind(C, name='PCAIRSetPolyOrder_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, value, intent(in)          :: order
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetPolyOrder(pc, order, ierr)
+
+   end subroutine PCAIRSetPolyOrder_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetPolySparsityOrder_c(pc_ptr, order) bind(C, name='PCAIRSetPolySparsityOrder_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, value, intent(in)          :: order
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetPolySparsityOrder(pc, order, ierr)
+
+   end subroutine PCAIRSetPolySparsityOrder_c
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetCoarsestInverseType_c(pc_ptr, inv_type) bind(C, name='PCAIRSetCoarsestInverseType_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PCPFLAREINVType, value, intent(in)          :: inv_type
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetCoarsestInverseType(pc, inv_type, ierr)
+
+   end subroutine PCAIRSetCoarsestInverseType_c   
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetCoarsestPolyOrder_c(pc_ptr, order) bind(C, name='PCAIRSetCoarsestPolyOrder_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, value, intent(in)          :: order
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetCoarsestPolyOrder(pc, order, ierr)
+
+   end subroutine PCAIRSetCoarsestPolyOrder_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetCoarsestPolySparsityOrder_c(pc_ptr, order) bind(C, name='PCAIRSetCoarsestPolySparsityOrder_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, value, intent(in)          :: order
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetCoarsestPolySparsityOrder(pc, order, ierr)
+
+   end subroutine PCAIRSetCoarsestPolySparsityOrder_c 
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetCoarsestMatrixFreePolys_c(pc_ptr, mf) bind(C, name='PCAIRSetCoarsestMatrixFreePolys_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, value, intent(in)         :: mf
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetCoarsestMatrixFreePolys(pc, mf, ierr)
+
+   end subroutine PCAIRSetCoarsestMatrixFreePolys_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetCoarsestSubcomm_c(pc_ptr, subcomm) bind(C, name='PCAIRSetCoarsestSubcomm_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, value, intent(in)         :: subcomm
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetCoarsestSubcomm(pc, subcomm, ierr)
+
+   end subroutine PCAIRSetCoarsestSubcomm_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetRDrop_c(pc_ptr, rdrop) bind(C, name='PCAIRSetRDrop_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscReal, value, intent(in)         :: rdrop
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetRDrop(pc, rdrop, ierr)
+
+   end subroutine PCAIRSetRDrop_c  
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetADrop_c(pc_ptr, adrop) bind(C, name='PCAIRSetADrop_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscReal, value, intent(in)         :: adrop
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetADrop(pc, adrop, ierr)
+
+   end subroutine PCAIRSetADrop_c 
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetALump_c(pc_ptr, lump) bind(C, name='PCAIRSetALump_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, value, intent(in)         :: lump
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetALump(pc, lump, ierr)
+
+   end subroutine PCAIRSetALump_c
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetReuseSparsity_c(pc_ptr, reuse) bind(C, name='PCAIRSetReuseSparsity_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, value, intent(in)         :: reuse
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetReuseSparsity(pc, reuse, ierr)
+
+   end subroutine PCAIRSetReuseSparsity_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetReusePolyCoeffs_c(pc_ptr, reuse) bind(C, name='PCAIRSetReusePolyCoeffs_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscBool, value, intent(in)         :: reuse
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetReusePolyCoeffs(pc, reuse, ierr)
+
+   end subroutine PCAIRSetReusePolyCoeffs_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetPolyCoeffs_c(pc_ptr, petsc_level, which_inverse, coeffs_ptr, row_size, col_size) bind(C, name='PCAIRSetPolyCoeffs_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, value, intent(in)         :: petsc_level, which_inverse 
+      PetscInt, value, intent(in)         :: row_size, col_size
+      type(c_ptr), value, intent(in)      :: coeffs_ptr
+
+      type(tPC)                              :: pc
+      PetscErrorCode                         :: ierr
+      integer                                :: our_level, errorcode, i_loc, j_loc
+      PetscInt                               :: num_levels
+      type(tPC)                              :: pc_shell
+      type(pc_air_multigrid_data), pointer   :: pc_air_data   
+      real, pointer :: coeffs_c(:,:)   
+
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+
+      ! Get the underlying PCShell
+      call PCAIRGetPCShell(pc, pc_shell)
+
+      ! Get the PC shell context
+      call PCShellGetContext(pc_shell, pc_air_data, ierr)
+
+      ! Get the number of levels in our mg
+      call PCAIRGetNumLevels(pc, num_levels, ierr) 
+
+      ! We order our levels from 1 to num_levels
+      our_level = num_levels - int(petsc_level)
+
+      call c_f_pointer(coeffs_ptr, coeffs_c, shape=[row_size, col_size])
+      
+      ! Inverse Aff
+      if (which_inverse == COEFFS_INV_AFF) then
+
+         do i_loc = 1, col_size
+            do j_loc = 1, row_size
+               pc_air_data%air_data%inv_A_ff_poly_data(our_level)%coefficients(j_loc, i_loc) = &
+                     coeffs_c(j_loc, i_loc)
+            end do
+         end do
+
+      ! Inverse dropped Aff
+      else if (which_inverse == COEFFS_INV_AFF_DROPPED) then
+
+         do i_loc = 1, col_size
+            do j_loc = 1, row_size
+               pc_air_data%air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients(j_loc, i_loc) = &
+                     coeffs_c(j_loc, i_loc)
+            end do
+         end do     
+
+      ! Inverse Acc
+      else if (which_inverse == COEFFS_INV_ACC) then
+
+         do i_loc = 1, col_size
+            do j_loc = 1, row_size
+               pc_air_data%air_data%inv_A_cc_poly_data(our_level)%coefficients(j_loc, i_loc) = &
+                     coeffs_c(j_loc, i_loc)
+            end do
+         end do          
+
+      ! Coarsest grid matrix
+      else if (which_inverse == COEFFS_INV_COARSE) then
+
+         do i_loc = 1, col_size
+            do j_loc = 1, row_size
+               pc_air_data%air_data%inv_coarsest_poly_data%coefficients(j_loc, i_loc) = &
+                     coeffs_c(j_loc, i_loc)
+            end do
+         end do        
+
+      else
+         print *, "Unknown which_inverse in PCAIRGetPolyCoeffs_c"
+         call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
+      end if      
+
+
+   end subroutine PCAIRSetPolyCoeffs_c      
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+end module pcair_c_fortran_bindings

@@ -1,0 +1,2066 @@
+module air_mg_setup
+
+   use petsc
+   use constrain_z_or_w
+   use cf_splitting
+   use matshell_data_type
+   use approx_inverse_setup
+   use timers
+   use air_mg_stats
+
+#include "petsc/finclude/petsc.h"
+      
+   implicit none
+
+   public
+
+   contains
+
+   !------------------------------------------------------------------------------------------------------------------------
+   
+   subroutine get_submatrices_start_poly_coeff_comms(input_mat, our_level, air_data)
+
+      ! Gets the submatrices we need for our multigrid and starts off the comms required 
+      ! to compute the approximate inverse of A_ff
+   
+      ! ~~~~~~~~~~
+      ! Input 
+      type(tMat), intent(in)                    :: input_mat
+      integer, intent(in)                       :: our_level
+      type(air_multigrid_data), intent(inout)   :: air_data
+
+      PetscErrorCode :: ierr
+      type(tMat) :: smoothing_mat, atilde
+
+      ! ~~~~~~~~~~   
+
+      ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      ! Pull out each of the sub-matrices
+      ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      call timer_start(TIMER_ID_AIR_EXTRACT)             
+
+      ! Pull out A_ff
+      if (air_data%allocated_matrices_A_ff(our_level)) then
+         call MatCreateSubMatrix(input_mat, &
+               air_data%IS_fine_index(our_level), air_data%IS_fine_index(our_level), MAT_REUSE_MATRIX, &
+               air_data%A_ff(our_level), ierr)         
+      else
+         call MatCreateSubMatrix(input_mat, &
+               air_data%IS_fine_index(our_level), air_data%IS_fine_index(our_level), MAT_INITIAL_MATRIX, &
+               air_data%A_ff(our_level), ierr)
+      end if
+               
+      call timer_finish(TIMER_ID_AIR_EXTRACT)           
+
+      ! ~~~~~~~~~~~~~
+      ! Now to apply a strong R tolerance as lAIR in hypre does, we have to drop entries 
+      ! from A_cf and A_ff according to the strong R tolerance on A 
+      ! ~~~~~~~~~~~~~
+      if (air_data%options%strong_r_threshold == 0.0) then
+
+         ! Copy the original pointer
+         air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP) = air_data%A_ff(our_level)
+
+      ! If we're dropping
+      else
+
+         call timer_start(TIMER_ID_AIR_DROP)  
+
+         ! If we want to reuse, we have to match the original sparsity
+         ! which might be different if the matrix has changed (but the sparsity is the same)
+         ! so we can't just drop with a drop tolerance         
+         if (air_data%reuse(our_level)%reuse_mat(MAT_A_DROP) /= PETSC_NULL_MAT) then
+
+            call remove_from_sparse_match_no_lump(input_mat, air_data%reuse(our_level)%reuse_mat(MAT_A_DROP))     
+
+         else
+         
+            ! Drop entries smaller than the strong R threshold
+            ! but make sure not to drop the diagonal entry!
+            call remove_small_from_sparse(input_mat, air_data%options%strong_r_threshold, &
+                           air_data%reuse(our_level)%reuse_mat(MAT_A_DROP), &
+                           relative_max_row_tolerance= .TRUE., allow_drop_diagonal = .FALSE.)   
+         end if       
+
+         call timer_finish(TIMER_ID_AIR_DROP)                
+
+         call timer_start(TIMER_ID_AIR_EXTRACT)             
+
+         ! Pull out A_ff
+         if (air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP) /= PETSC_NULL_MAT) then
+            call MatCreateSubMatrix(air_data%reuse(our_level)%reuse_mat(MAT_A_DROP), &
+                        air_data%IS_fine_index(our_level), air_data%IS_fine_index(our_level), MAT_REUSE_MATRIX, &
+                        air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP), ierr)              
+         else
+            call MatCreateSubMatrix(air_data%reuse(our_level)%reuse_mat(MAT_A_DROP), &
+                        air_data%IS_fine_index(our_level), air_data%IS_fine_index(our_level), MAT_INITIAL_MATRIX, &
+                        air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP), ierr)  
+         end if
+                     
+         call timer_finish(TIMER_ID_AIR_EXTRACT)                             
+
+      end if          
+      
+      ! ~~~~~~~~~~~~~~
+      ! Start building approximate inverse - A_ff^-1
+      ! ~~~~~~~~~~~~~~       
+      call timer_start(TIMER_ID_AIR_INVERSE)    
+      
+      ! This is for the smoother
+      if (.NOT. air_data%options%full_smoothing_up_and_down) then
+         smoothing_mat = air_data%A_ff(our_level)
+      else
+         smoothing_mat = input_mat
+      end if
+
+      ! Compute the inverse for smoothing
+      ! If we are re-using the polynomial coefficients then we don't have to do this
+      if (.NOT. (air_data%inv_A_ff(our_level) /= PETSC_NULL_MAT .AND. air_data%options%reuse_poly_coeffs)) then
+         call start_approximate_inverse(smoothing_mat, &
+                  air_data%options%inverse_type, air_data%inv_A_ff_poly_data(our_level)%gmres_poly_order, &
+                  air_data%inv_A_ff_poly_data(our_level)%buffers, air_data%inv_A_ff_poly_data(our_level)%coefficients)        
+      end if
+
+      ! If we are doing AIRG
+      ! then we need an A_ff^-1 that we use to build the grid-transfer operators
+      ! but if the strong R threshold is zero we just use the one computed above
+      if (air_data%options%z_type == AIR_Z_PRODUCT .AND. &
+               (air_data%options%strong_r_threshold /= 0.0 .OR. air_data%options%full_smoothing_up_and_down)) then
+
+         if (.NOT. (air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP) /= PETSC_NULL_MAT .AND. air_data%options%reuse_poly_coeffs)) then
+            call start_approximate_inverse(air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP), &
+                  air_data%options%inverse_type, air_data%inv_A_ff_poly_data_dropped(our_level)%gmres_poly_order, &
+                  air_data%inv_A_ff_poly_data_dropped(our_level)%buffers, air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients)          
+         end if
+      end if
+
+      call timer_finish(TIMER_ID_AIR_INVERSE)
+      
+      ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      ! If we are doing C point smoothing then we need to pull out Acc 
+      ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~        
+      if (air_data%options%one_c_smooth .AND. .NOT. air_data%options%full_smoothing_up_and_down) then
+
+         if (air_data%allocated_matrices_A_cc(our_level)) then
+            call MatCreateSubMatrix(input_mat, &
+                  air_data%IS_coarse_index(our_level), air_data%IS_coarse_index(our_level), MAT_REUSE_MATRIX, &
+                  air_data%A_cc(our_level), ierr)             
+         else
+            call MatCreateSubMatrix(input_mat, &
+                  air_data%IS_coarse_index(our_level), air_data%IS_coarse_index(our_level), MAT_INITIAL_MATRIX, &
+                  air_data%A_cc(our_level), ierr)   
+         end if
+
+         call timer_start(TIMER_ID_AIR_INVERSE)    
+
+         ! Compute the inverse for smoothing
+         if (.NOT. (air_data%inv_A_cc(our_level) /= PETSC_NULL_MAT .AND. air_data%options%reuse_poly_coeffs)) then
+            call start_approximate_inverse(air_data%A_cc(our_level), &
+                  air_data%options%inverse_type, air_data%inv_A_cc_poly_data(our_level)%gmres_poly_order, &
+                  air_data%inv_A_cc_poly_data(our_level)%buffers, air_data%inv_A_cc_poly_data(our_level)%coefficients)  
+         end if
+
+         call timer_finish(TIMER_ID_AIR_INVERSE)
+
+      end if        
+         
+      ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      ! Pull out the rest of the sub-matrices
+      ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~     
+      call timer_start(TIMER_ID_AIR_EXTRACT)             
+                        
+      if (air_data%allocated_matrices_A_ff(our_level)) then
+         call MatCreateSubMatrix(input_mat, &
+               air_data%IS_fine_index(our_level), air_data%IS_coarse_index(our_level), MAT_REUSE_MATRIX, &
+               air_data%A_fc(our_level), ierr)   
+      call MatCreateSubMatrix(input_mat, &
+               air_data%IS_coarse_index(our_level), air_data%IS_fine_index(our_level), MAT_REUSE_MATRIX, &
+               air_data%A_cf(our_level), ierr)                     
+      else
+         call MatCreateSubMatrix(input_mat, &
+               air_data%IS_fine_index(our_level), air_data%IS_coarse_index(our_level), MAT_INITIAL_MATRIX, &
+               air_data%A_fc(our_level), ierr) 
+         call MatCreateSubMatrix(input_mat, &
+               air_data%IS_coarse_index(our_level), air_data%IS_fine_index(our_level), MAT_INITIAL_MATRIX, &
+               air_data%A_cf(our_level), ierr)                                                          
+      end if
+
+      call timer_finish(TIMER_ID_AIR_EXTRACT)   
+
+      ! ~~~~~~~~~~~~~~
+      ! Apply the strong R threshold to A_cf
+      ! ~~~~~~~~~~~~~~
+      if (air_data%options%strong_r_threshold == 0.0) then
+
+         ! Copy the original pointer
+         air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP) = air_data%A_cf(our_level)
+         air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP) = air_data%A_fc(our_level)
+         
+      else
+
+         call timer_start(TIMER_ID_AIR_EXTRACT)        
+         
+         ! Drop the entries from A_cf
+         if (air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP) /= PETSC_NULL_MAT) then
+            call MatCreateSubMatrix(air_data%reuse(our_level)%reuse_mat(MAT_A_DROP), &
+                        air_data%IS_coarse_index(our_level), air_data%IS_fine_index(our_level), MAT_REUSE_MATRIX, &
+                        air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP), ierr)              
+         else
+
+            call MatCreateSubMatrix(air_data%reuse(our_level)%reuse_mat(MAT_A_DROP), &
+                        air_data%IS_coarse_index(our_level), air_data%IS_fine_index(our_level), MAT_INITIAL_MATRIX, &
+                        air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP), ierr)  
+         end if
+
+         if (.NOT. air_data%options%one_point_classical_prolong) then
+            ! Drop the entries from A_fc
+            if (air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP) /= PETSC_NULL_MAT) then
+               call MatCreateSubMatrix(air_data%reuse(our_level)%reuse_mat(MAT_A_DROP), &
+                        air_data%IS_fine_index(our_level), air_data%IS_coarse_index(our_level), MAT_REUSE_MATRIX, &
+                        air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP), ierr)
+            else
+               call MatCreateSubMatrix(air_data%reuse(our_level)%reuse_mat(MAT_A_DROP), &
+                        air_data%IS_fine_index(our_level), air_data%IS_coarse_index(our_level), MAT_INITIAL_MATRIX, &
+                        air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP), ierr)  
+            end if
+         end if                  
+         
+         call timer_finish(TIMER_ID_AIR_EXTRACT)    
+      end if               
+
+      ! Delete temporary if not reusing
+      if (.NOT. air_data%options%reuse_sparsity) then
+         call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_A_DROP), ierr)
+         air_data%reuse(our_level)%reuse_mat(MAT_A_DROP) = PETSC_NULL_MAT
+      end if
+                        
+   end subroutine get_submatrices_start_poly_coeff_comms 
+   
+   
+   !------------------------------------------------------------------------------------------------------------------------
+   
+   subroutine finish_comms_compute_restrict_prolong(A, our_level, air_data, &
+                     left_null_vecs, right_null_vecs, &
+                     left_null_vecs_c, right_null_vecs_c)
+
+      ! Finishes off the comms required to compute the A_ff inverse
+      ! then form Z, W and the full R and P
+   
+      ! ~~~~~~~~~~
+      ! Input 
+      type(tMat), intent(inout)                             :: A
+      integer, intent(in)                                   :: our_level
+      type(air_multigrid_data), intent(inout)               :: air_data
+      type(tVec), dimension(:), intent(inout)               :: left_null_vecs, right_null_vecs
+      type(tVec), dimension(:), allocatable, intent(inout)  :: left_null_vecs_c, right_null_vecs_c
+
+      PetscErrorCode :: ierr
+      type(tMat) :: minus_mat, sparsity_mat_cf, A_ff_power, inv_dropped_Aff, smoothing_mat
+      type(tVec), dimension(:), allocatable   :: left_null_vecs_f, right_null_vecs_f
+      real :: sol_start, sol_end, strong_r_tol
+      integer :: comm_size, errorcode, distance, order, i_loc
+      MPI_Comm :: MPI_COMM_MATRIX
+      integer(c_long_long) :: A_array, B_array, C_array
+      PetscInt, dimension(:), allocatable :: nnzs_row, onzs_row, cols
+      real, dimension(:), allocatable :: vals
+      PetscInt :: global_row_start, global_row_end_plus_one, global_col_start, global_col_end_plus_one
+      PetscInt, parameter :: nz_ignore = -1
+      logical :: destroy_mat, reuse_one_point_classical, reuse_grid_transfer
+
+      ! ~~~~~~~~~~
+
+      call PetscObjectGetComm(air_data%A_ff(our_level), MPI_COMM_MATRIX, ierr)    
+      ! Get the comm size 
+      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)
+
+      ! ~~~~~~~~~~~
+      ! Get some sizes
+      ! ~~~~~~~~~~~
+
+      call MatGetOwnershipRange(A, global_row_start, global_row_end_plus_one, ierr)  
+      
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! Calculate one point W if needed
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! ~~~~~~~~~~~~~~~~~~~        
+
+      ! If we're doing a one-point classical prolongator, we can do this before A_ff^-1 is finished
+      if (air_data%options%one_point_classical_prolong .AND. .NOT. air_data%options%symmetric) then
+
+         ! Classical one-point prolongator
+         call timer_start(TIMER_ID_AIR_PROLONG)       
+         
+         ! If we want to reuse, we have to match the original sparsity
+         ! which might be different if the matrix has changed (but the sparsity is the same)
+         ! so we can't just drop with a drop tolerance
+         if (air_data%reuse(our_level)%reuse_mat(MAT_W_DROP) /= PETSC_NULL_MAT) then
+
+            ! The one point classical prolongator will never change if 
+            ! we are reusing
+            
+         ! First time
+         else
+            call generate_one_point_with_one_entry_from_sparse(air_data%A_fc(our_level), air_data%reuse(our_level)%reuse_mat(MAT_W_DROP)) 
+         end if         
+         
+         call timer_finish(TIMER_ID_AIR_PROLONG)                
+
+      end if
+
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! Finish the calculation of the inverse for the smoother 
+      ! and/or the inverse for the grid-transfers (they may be the same)
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! ~~~~~~~~~~~~~~~~~~~        
+      
+      ! This is for the smoother
+      if (.NOT. air_data%options%full_smoothing_up_and_down) then
+         smoothing_mat = air_data%A_ff(our_level)
+      else
+         smoothing_mat = A
+      end if      
+
+      ! Resolve the calculation for the smoother
+      ! This may build a matrix-free version of inv_A_ff
+      call timer_start(TIMER_ID_AIR_INVERSE)   
+
+      ! Regardless of if we are fc smoothing or smoothing all unknowns we store the inverse
+      ! in inv_A_ff
+      call finish_approximate_inverse(smoothing_mat, air_data%options%inverse_type, &
+            air_data%inv_A_ff_poly_data(our_level)%gmres_poly_order, air_data%inv_A_ff_poly_data(our_level)%gmres_poly_sparsity_order, &
+            air_data%inv_A_ff_poly_data(our_level)%buffers, air_data%inv_A_ff_poly_data(our_level)%coefficients, &
+            air_data%options%matrix_free_polys, air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF), air_data%inv_A_ff(our_level)) 
+            
+      ! Delete temporary if not reusing
+      if (.NOT. air_data%options%reuse_sparsity) then
+         call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF), ierr)
+         air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF) = PETSC_NULL_MAT
+      end if              
+      
+      destroy_mat = .FALSE.
+      ! If we are doing AIRG, then we also need an A_ff^-1 for the grid
+      ! transfer operators (may be the same used for the smoother)
+      if (air_data%options%z_type == AIR_Z_PRODUCT) then
+
+         ! If we have applied a strong R tolerance or we are not doing fc smoothing
+         ! then we have also started an inverse for dropped A_ff, let's finish it
+         if (air_data%options%strong_r_threshold /= 0.0 .OR. air_data%options%full_smoothing_up_and_down) then
+
+            inv_dropped_Aff = PETSC_NULL_MAT
+            ! Now we always build an assembled inv_A_ff here as we need it, hence the .false. 
+            ! given to matrix_free_polys
+            ! If we aren't doing matrix-free smooths, then we keep the assembled inv_A_ff
+            call finish_approximate_inverse(air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP), air_data%options%inverse_type, &
+                     air_data%inv_A_ff_poly_data_dropped(our_level)%gmres_poly_order, air_data%inv_A_ff_poly_data_dropped(our_level)%gmres_poly_sparsity_order, &
+                     air_data%inv_A_ff_poly_data_dropped(our_level)%buffers, air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients, &
+                     .FALSE., air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF_DROPPED), inv_dropped_Aff)
+            destroy_mat = .TRUE.
+
+            ! Delete temporary if not reusing
+            if (.NOT. air_data%options%reuse_sparsity) then
+               call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF_DROPPED), ierr)
+               air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF_DROPPED) = PETSC_NULL_MAT
+            end if             
+
+         ! If we have a strong R tolerance of 0, we can re-use the 
+         ! A_ff^-1 we computed for the smoother
+         else             
+            ! If we requested matrix-free smoothing, then we will have called the finish
+            ! and computed the coefficients but inv_A_ff will be a matshell
+            ! and hence we want to build an assembled version of A_ff^-1 to use here
+            ! We can just re-call finish_approximate_inverse, as the requests will have been resolved 
+            ! and hence it will just build an assembled version, which we store in inv_dropped_Aff
+            if (air_data%options%matrix_free_polys) then
+               
+               inv_dropped_Aff = PETSC_NULL_MAT
+               ! Making sure to give it the non dropped A_ff here
+               call finish_approximate_inverse(air_data%A_ff(our_level), air_data%options%inverse_type, &
+                        air_data%inv_A_ff_poly_data(our_level)%gmres_poly_order, air_data%inv_A_ff_poly_data(our_level)%gmres_poly_sparsity_order, &
+                        air_data%inv_A_ff_poly_data(our_level)%buffers, air_data%inv_A_ff_poly_data(our_level)%coefficients, &
+                        .FALSE., air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF_DROPPED), inv_dropped_Aff)
+               destroy_mat = .TRUE.
+
+               ! Delete temporary if not reusing
+               if (.NOT. air_data%options%reuse_sparsity) then
+                  call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF_DROPPED), ierr)
+                  air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF_DROPPED) = PETSC_NULL_MAT
+               end if               
+
+            ! Just re-use the already assembled one            
+            else
+               inv_dropped_Aff = air_data%inv_A_ff(our_level)
+            end if
+         end if
+
+         ! Copy inv_A_ff and multiply by -1
+         call MatConvert(inv_dropped_Aff, MATSAME, MAT_INITIAL_MATRIX, minus_mat, ierr)
+         call MatScale(minus_mat, -1.0, ierr)
+
+         if (destroy_mat) then
+            call MatDestroy(inv_dropped_Aff, ierr)
+            inv_dropped_Aff = PETSC_NULL_MAT
+         end if
+      end if
+
+      call timer_finish(TIMER_ID_AIR_INVERSE)           
+      
+      ! Need a routine to calculate W with lAIR
+      if (air_data%options%z_type /= AIR_Z_PRODUCT .AND. &
+               (.NOT. air_data%options%one_point_classical_prolong .AND. .NOT. air_data%options%symmetric)) then
+         print *, "Fix me - calculation of W with lair"
+         call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
+      end if
+
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! Pull out the constraints on F and C points
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! ~~~~~~~~~~~~~~~~~~~    
+      if (air_data%options%constrain_w) then
+         if (.NOT. allocated(right_null_vecs_c)) allocate(right_null_vecs_c(size(right_null_vecs)))
+         if (.NOT. allocated(right_null_vecs_f)) allocate(right_null_vecs_f(size(right_null_vecs)))
+
+         ! Create space for the C and F constraints
+         call MatCreateVecs(air_data%A_fc(our_level), right_null_vecs_c(1), right_null_vecs_f(1), ierr)       
+         do i_loc = 2, size(right_null_vecs) 
+            call VecDuplicate(right_null_vecs_c(1), right_null_vecs_c(i_loc), ierr)
+            call VecDuplicate(right_null_vecs_f(1), right_null_vecs_f(i_loc), ierr)
+         end do
+         ! Pull out the F and C points
+         do i_loc = 1, size(right_null_vecs) 
+            call VecISCopy(right_null_vecs(i_loc), air_data%IS_fine_index(our_level), SCATTER_REVERSE, right_null_vecs_f(i_loc), ierr)       
+            call VecISCopy(right_null_vecs(i_loc), air_data%IS_coarse_index(our_level), SCATTER_REVERSE, right_null_vecs_c(i_loc), ierr) 
+         end do         
+      end if
+      if (air_data%options%constrain_z) then
+         if (.NOT. allocated(left_null_vecs_c)) allocate(left_null_vecs_c(size(left_null_vecs)))
+         if (.NOT. allocated(left_null_vecs_f)) allocate(left_null_vecs_f(size(left_null_vecs)))
+         
+         ! Create space for the C and F constraints
+         call MatCreateVecs(air_data%A_fc(our_level), left_null_vecs_c(1), left_null_vecs_f(1), ierr)       
+         do i_loc = 2, size(left_null_vecs) 
+            call VecDuplicate(left_null_vecs_c(1), left_null_vecs_c(i_loc), ierr)
+            call VecDuplicate(left_null_vecs_f(1), left_null_vecs_f(i_loc), ierr)
+         end do
+         ! Pull out the F and C points
+         do i_loc = 1, size(left_null_vecs) 
+            call VecISCopy(left_null_vecs(i_loc), air_data%IS_fine_index(our_level), SCATTER_REVERSE, left_null_vecs_f(i_loc), ierr)       
+            call VecISCopy(left_null_vecs(i_loc), air_data%IS_coarse_index(our_level), SCATTER_REVERSE, left_null_vecs_c(i_loc), ierr) 
+         end do         
+      end if      
+
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! Calculate W if needed
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! ~~~~~~~~~~~~~~~~~~~     
+      reuse_grid_transfer = air_data%allocated_matrices_A_ff(our_level)   
+
+      ! We do this a little backwards if symmetric, we build R and then compute P^T, then delete R
+      ! It's just because we have code to do different version of Z, and I haven't rewritten those 
+      ! for W
+      if (.NOT. air_data%options%symmetric) then
+
+         ! Calculate the W component of the prolongator
+         call timer_start(TIMER_ID_AIR_PROLONG)                
+
+         ! If we want an ideal prolongator
+         if (.NOT. air_data%options%one_point_classical_prolong) then
+
+            ! Do the multiplication
+            if (air_data%reuse(our_level)%reuse_mat(MAT_W) /= PETSC_NULL_MAT) then
+               call MatMatMult(minus_mat, air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP), &
+                        MAT_REUSE_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_W), ierr)
+            else
+               call MatMatMult(minus_mat, air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP), &
+                        MAT_INITIAL_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_W), ierr)  
+            end if
+
+            call timer_start(TIMER_ID_AIR_DROP)  
+
+            ! If we want to reuse, we have to match the original sparsity
+            ! which might be different if the matrix has changed (but the sparsity is the same)
+            ! so we can't just drop with a drop tolerance
+            if (air_data%reuse(our_level)%reuse_mat(MAT_W_DROP) /= PETSC_NULL_MAT) then
+   
+               call remove_from_sparse_match_no_lump(air_data%reuse(our_level)%reuse_mat(MAT_W), air_data%reuse(our_level)%reuse_mat(MAT_W_DROP))  
+               
+            ! First time so just drop according to a tolerance 
+            else
+               call remove_small_from_sparse(air_data%reuse(our_level)%reuse_mat(MAT_W), &
+                              air_data%options%r_drop, air_data%reuse(our_level)%reuse_mat(MAT_W_DROP), &
+                              relative_max_row_tolerance= .TRUE.)  
+            end if
+            
+            ! Delete temporary if not reusing
+            if (.NOT. air_data%options%reuse_sparsity) then
+               call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_W), ierr)
+               air_data%reuse(our_level)%reuse_mat(MAT_W) = PETSC_NULL_MAT
+            end if            
+
+            call timer_finish(TIMER_ID_AIR_DROP)                    
+         end if      
+         
+         ! ~~~~~~~~~
+         ! Apply constraints to W if needed
+         ! ~~~~~~~~~
+         if (air_data%options%constrain_w) then
+            call timer_start(TIMER_ID_AIR_CONSTRAIN)
+            call constrain_grid_transfer(air_data%reuse(our_level)%reuse_mat(MAT_W_DROP), .FALSE., &
+                     right_null_vecs_f, right_null_vecs_c)
+            call timer_finish(TIMER_ID_AIR_CONSTRAIN)
+
+            do i_loc = 1, size(right_null_vecs_f) 
+               call VecDestroy(right_null_vecs_f(i_loc), ierr)       
+            end do             
+            deallocate(right_null_vecs_f)
+         end if      
+
+         ! Now we have W
+         ! Build a copy of P with the identity block in it
+         ! This is to save having to do Z A_ff W + A_cf W + Z A_fc + A_cc
+
+         ! ~~~~~~~~~~~~~~~~~~~
+         ! ~~~~~~~~~~~~~~~~~~~
+         ! Calculate the prolongator
+         ! ~~~~~~~~~~~~~~~~~~~
+         ! ~~~~~~~~~~~~~~~~~~~
+         reuse_one_point_classical = air_data%options%one_point_classical_prolong .AND. &
+               .NOT. air_data%options%symmetric .AND. &
+               .NOT. air_data%options%constrain_w .AND. &
+               air_data%allocated_matrices_A_ff(our_level)
+
+         ! If we are doing reuse and processor agglomeration on this level, 
+         ! then we can't reuse the sparsity of R or P as it gets repartitioned during the setup               
+         if (air_data%allocated_matrices_A_ff(our_level) .AND. air_data%reuse(our_level)%reuse_is(IS_REPARTITION) /= PETSC_NULL_IS) then
+            ! Destroy the grid transfer operators and rebuild them
+            call MatDestroy(air_data%restrictors(our_level), ierr)
+            if (.NOT. reuse_one_point_classical) call MatDestroy(air_data%prolongators(our_level), ierr)
+            reuse_grid_transfer = .FALSE.
+         end if
+
+         ! If we've got a one point classical prolongator computed already we can just reuse the prolongator
+         ! without change
+         if (.NOT. reuse_one_point_classical) then
+            call compute_P_from_W(air_data%reuse(our_level)%reuse_mat(MAT_W_DROP), global_row_start, &
+                     air_data%IS_fine_index(our_level), air_data%IS_coarse_index(our_level), &
+                     .TRUE., &
+                     reuse_grid_transfer, &
+                     air_data%prolongators(our_level))
+         end if
+
+         ! Delete temporary if not reusing
+         if (.NOT. air_data%options%reuse_sparsity) then
+            call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_W_DROP), ierr)
+            air_data%reuse(our_level)%reuse_mat(MAT_W_DROP) = PETSC_NULL_MAT
+         end if          
+
+         call timer_finish(TIMER_ID_AIR_PROLONG)   
+         
+      end if
+
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! Calculate Z
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! ~~~~~~~~~~~~~~~~~~~
+
+      ! Calculate the Z component of the restrictor  
+      call timer_start(TIMER_ID_AIR_RESTRICT)        
+
+      ! For lAIR
+      if (air_data%options%z_type /= AIR_Z_PRODUCT) then
+
+         ! Calculate z directly with sai or isai/lair
+         distance = air_data%inv_A_ff_poly_data(our_level)%gmres_poly_sparsity_order + 1
+
+         ! Compute the strongly connected F neighbourhood that each C point
+         ! is going to use in lAIR
+         ! We use the dropped A_ff, A_cf here as they have had the strong R tolerance applied
+         ! to them
+         if (distance == 1) then
+
+            sparsity_mat_cf = air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP)
+         
+         ! Distance 2 is sparsity_mat = A_cf * A_ff
+         ! Distance 3 is sparsity_mat = A_cf * A_ff^2         
+         ! etc
+         else
+
+            ! If we are doing reuse, we already know the sparsity we want
+            if (air_data%reuse(our_level)%reuse_mat(MAT_Z) /= PETSC_NULL_MAT) then
+
+               ! We should just be able to use the pointer to air_data%reuse(our_level)%reuse_mat(MAT_Z)
+               ! as sparsity_mat_cf, but it gives me errors about unassembled matrices
+               ! I think that has to do with the old interface for MatMPIAIJGetSeqAIJ that we are using
+               ! in calculate_and_build_sai_z (and the fact it doesn't have a restore)
+               ! If we enforce a minimum of petsc 3.19 we could use the new MatMPIAIJGetSeqAIJF90
+               ! For now we just take an extra copy
+               call MatDuplicate(air_data%reuse(our_level)%reuse_mat(MAT_Z), MAT_DO_NOT_COPY_VALUES, sparsity_mat_cf, ierr)
+               !sparsity_mat_cf = air_data%reuse(our_level)%reuse_mat(MAT_Z)
+
+            else
+   
+               ! Copy the pointer
+               A_ff_power = air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP)
+               destroy_mat = .FALSE.
+      
+               ! Compute A_ff^(distance - 1)
+               do order = 3, distance
+                  
+                  ! Call a symbolic mult as we don't need the values, just the resulting sparsity  
+                  A_array = air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP)%v
+                  B_array = A_ff_power%v
+                  call mat_mat_symbolic_c(A_array, B_array, C_array)
+                  ! Don't delete the original power - ie A_ff
+                  if (destroy_mat) call MatDestroy(A_ff_power, ierr)
+                  A_ff_power%v = C_array  
+                  destroy_mat = .TRUE.
+      
+               end do
+      
+               ! Call a symbolic mult as we don't need the values, just the resulting sparsity  
+               ! A_cf * A_ff^(distance - 1)
+               A_array = air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP)%v
+               B_array = A_ff_power%v
+               call mat_mat_symbolic_c(A_array, B_array, C_array)
+               if (destroy_mat) call MatDestroy(A_ff_power, ierr)
+
+               sparsity_mat_cf%v = C_array    
+
+            end if
+         end if
+   
+         ! lAIR
+         ! We delibrately have to give it A_ff and A_cf as input, not the dropped versions
+         ! The sparsity is controlled by sparsity_mat_cf which has used the dropped versions
+         if (air_data%options%z_type == AIR_Z_LAIR) then
+            call calculate_and_build_sai_z(air_data%A_ff(our_level), air_data%A_cf(our_level), &
+                        sparsity_mat_cf, .TRUE., &
+                        air_data%reuse(our_level)%reuse_mat(MAT_SAI_SUB), &
+                        air_data%reuse(our_level)%reuse_mat(MAT_Z))
+         ! SAI Z
+         else
+            call calculate_and_build_sai_z(air_data%A_ff(our_level), air_data%A_cf(our_level), &
+                        sparsity_mat_cf, .FALSE., &
+                        air_data%reuse(our_level)%reuse_mat(MAT_SAI_SUB), &
+                        air_data%reuse(our_level)%reuse_mat(MAT_Z))
+         end if        
+         ! Delete temporary if not reusing
+         if (.NOT. air_data%options%reuse_sparsity) then
+            call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_SAI_SUB), ierr)
+            air_data%reuse(our_level)%reuse_mat(MAT_SAI_SUB) = PETSC_NULL_MAT
+         end if 
+         if (distance .ge. 2) then
+            call MatDestroy(sparsity_mat_cf, ierr)        
+         end if
+
+      ! For AIRG - we do a matmatmult with our approximate A_ff inverse
+      else         
+         if (air_data%reuse(our_level)%reuse_mat(MAT_Z) /= PETSC_NULL_MAT) then
+            call MatMatMult(air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP), minus_mat, &
+                  MAT_REUSE_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_Z), ierr)            
+         else
+            call MatMatMult(air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP), minus_mat, &
+                  MAT_INITIAL_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_Z), ierr) 
+         end if
+      end if
+
+      ! Delete temporary if not reusing
+      if (air_data%options%strong_r_threshold /= 0.0 .AND. .NOT. air_data%options%reuse_sparsity) then
+         call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP), ierr)         
+         call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP), ierr)
+         if (.NOT. air_data%options%one_point_classical_prolong) then
+            call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP), ierr)
+         end if
+      end if
+      ! If strong_r_threshold is zero, these are just pointers to existing matrices
+      ! so we also have to reset them
+      if (.NOT. air_data%options%reuse_sparsity) then
+         air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP) = PETSC_NULL_MAT
+         air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP) = PETSC_NULL_MAT
+         air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP) = PETSC_NULL_MAT
+      end if        
+      
+      ! ~~~~~~~~~~~~
+      ! ~~~~~~~~~~~~
+
+      call timer_start(TIMER_ID_AIR_DROP)    
+
+      ! If we want to reuse, we have to match the original sparsity
+      ! which might be different if the matrix has changed (but the sparsity is the same)
+      ! so we can't just drop with a drop tolerance
+      if (air_data%reuse(our_level)%reuse_mat(MAT_Z_DROP) /= PETSC_NULL_MAT) then
+
+         call remove_from_sparse_match_no_lump(air_data%reuse(our_level)%reuse_mat(MAT_Z), &
+                  air_data%reuse(our_level)%reuse_mat(MAT_Z_DROP))     
+         
+      ! First time so just drop according to a tolerance 
+      else
+         call remove_small_from_sparse(air_data%reuse(our_level)%reuse_mat(MAT_Z), &
+                     air_data%options%r_drop, air_data%reuse(our_level)%reuse_mat(MAT_Z_DROP), &
+                     relative_max_row_tolerance= .TRUE.)  
+      end if
+
+      call timer_finish(TIMER_ID_AIR_DROP)   
+      ! Delete temporary if not reusing
+      if (.NOT. air_data%options%reuse_sparsity) then
+         call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_Z), ierr)
+         air_data%reuse(our_level)%reuse_mat(MAT_Z) = PETSC_NULL_MAT
+      end if       
+      if (air_data%options%z_type == AIR_Z_PRODUCT) then
+         call MatDestroy(minus_mat, ierr)
+      end if
+
+      ! ~~~~~~~~~
+      ! Apply constraints to Z if needed
+      ! ~~~~~~~~~
+      if (air_data%options%constrain_z) then
+
+         call timer_start(TIMER_ID_AIR_CONSTRAIN)
+         call constrain_grid_transfer(air_data%reuse(our_level)%reuse_mat(MAT_Z_DROP), .TRUE., &
+                     left_null_vecs_f, left_null_vecs_c)
+         call timer_finish(TIMER_ID_AIR_CONSTRAIN)
+
+         do i_loc = 1, size(left_null_vecs_f) 
+            call VecDestroy(left_null_vecs_f(i_loc), ierr)       
+         end do             
+         deallocate(left_null_vecs_f)
+      end if   
+
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! Calculate R
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! ~~~~~~~~~~~~~~~~~~~    
+      call compute_R_from_Z(air_data%reuse(our_level)%reuse_mat(MAT_Z_DROP), global_row_start, &
+               air_data%IS_fine_index(our_level), air_data%IS_coarse_index(our_level), &
+               air_data%reuse(our_level)%reuse_is(IS_R_Z_COLS), &
+               .TRUE., &
+               reuse_grid_transfer, &
+               air_data%restrictors(our_level))
+
+      call timer_finish(TIMER_ID_AIR_RESTRICT)     
+      
+      ! Delete temporary if not reusing
+      if (.NOT. air_data%options%reuse_sparsity) then
+         call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_Z_DROP), ierr)
+         air_data%reuse(our_level)%reuse_mat(MAT_Z_DROP) = PETSC_NULL_MAT
+
+         call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_R_Z_COLS), ierr)
+         air_data%reuse(our_level)%reuse_is(IS_R_Z_COLS) = PETSC_NULL_IS
+      end if      
+      
+      ! Delete temporary if not reusing
+      if (.NOT. air_data%options%one_c_smooth .AND. .NOT. air_data%options%reuse_sparsity) then      
+         call MatDestroy(air_data%A_cf(our_level), ierr)
+         air_data%A_cf(our_level) = PETSC_NULL_MAT
+      end if
+            
+      ! Transpose the restrictor if needed
+      if (air_data%options%symmetric) then
+         call MatTranspose(air_data%restrictors(our_level), MAT_INITIAL_MATRIX, air_data%prolongators(our_level), ierr)
+         call MatDestroy(air_data%restrictors(our_level), ierr)
+      end if
+
+      ! ~~~~~~~~~~~
+      ! If we are doing C-point smoothing, finish the comms
+      ! ~~~~~~~~~~~
+      if (air_data%options%one_c_smooth .AND. &
+               .NOT. air_data%options%full_smoothing_up_and_down) then      
+
+         call timer_start(TIMER_ID_AIR_INVERSE)           
+                  
+         call finish_approximate_inverse(air_data%A_cc(our_level), air_data%options%inverse_type, &
+                  air_data%inv_A_cc_poly_data(our_level)%gmres_poly_order, air_data%inv_A_cc_poly_data(our_level)%gmres_poly_sparsity_order, &
+                  air_data%inv_A_cc_poly_data(our_level)%buffers, air_data%inv_A_cc_poly_data(our_level)%coefficients, &
+                  air_data%options%matrix_free_polys, air_data%reuse(our_level)%reuse_mat(MAT_INV_ACC), air_data%inv_A_cc(our_level))
+                  
+         call timer_finish(TIMER_ID_AIR_INVERSE) 
+         
+         ! Delete temporary if not reusing
+         if (.NOT. air_data%options%reuse_sparsity) then
+            call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_INV_ACC), ierr)
+            air_data%reuse(our_level)%reuse_mat(MAT_INV_ACC) = PETSC_NULL_MAT
+         end if         
+
+      end if
+         
+   end subroutine finish_comms_compute_restrict_prolong  
+
+       
+   !------------------------------------------------------------------------------------------------------------------------
+   
+   subroutine compute_coarse_matrix(A, our_level, air_data, &
+                     coarse_matrix)
+
+      ! Computes the coarse grid matrix with dropping
+   
+      ! ~~~~~~~~~~
+      ! Input 
+      type(tMat), intent(inout)                 :: A
+      integer, intent(in)                       :: our_level
+      type(air_multigrid_data), intent(inout)   :: air_data      
+      type(tMat), intent(inout)                 :: coarse_matrix
+
+      PetscErrorCode :: ierr
+
+      ! ~~~~~~~~~~
+
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! Now build our coarse grid matrix
+      ! Can be computed from either RAP, or the smaller
+      ! Z A_ff W + A_cf W + Z A_fc + A_cc
+      ! ~~~~~~~~~~~~~~~~~~~
+      ! ~~~~~~~~~~~~~~~~~~~
+      call timer_start(TIMER_ID_AIR_RAP)                          
+
+      ! Can just do PtAP
+      if (air_data%options%symmetric) then  
+
+         ! If we've done this before we can reuse
+         if (air_data%reuse(our_level)%reuse_mat(MAT_RAP) /= PETSC_NULL_MAT) then
+
+            call MatPtap(A, air_data%prolongators(our_level), &
+                     MAT_REUSE_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_RAP), ierr)             
+
+         ! First time
+         else
+
+            call MatPtap(A, air_data%prolongators(our_level), &
+                     MAT_INITIAL_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_RAP), ierr)          
+         end if
+
+      ! ~~~~~~~~~~~
+      ! Do two matmatmults rather than the triple product
+      ! ~~~~~~~~~~~            
+      else
+
+         ! If we've done this before we can reuse
+         if (air_data%reuse(our_level)%reuse_mat(MAT_AP) /= PETSC_NULL_MAT) then
+
+            call MatMatMult(A, air_data%prolongators(our_level), &
+                     MAT_REUSE_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_AP), ierr)     
+                     
+            call MatMatMult(air_data%restrictors(our_level), air_data%reuse(our_level)%reuse_mat(MAT_AP), &
+                     MAT_REUSE_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_RAP), ierr)             
+         
+         ! First time
+         else
+
+            call MatMatMult(A, air_data%prolongators(our_level), &
+                     MAT_INITIAL_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_AP), ierr)     
+                     
+            call MatMatMult(air_data%restrictors(our_level), air_data%reuse(our_level)%reuse_mat(MAT_AP), &
+                     MAT_INITIAL_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_RAP), ierr) 
+         end if
+         
+         ! Delete temporary if not reusing
+         if (.NOT. air_data%options%reuse_sparsity) then
+            call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_AP), ierr)
+            air_data%reuse(our_level)%reuse_mat(MAT_AP) = PETSC_NULL_MAT
+         end if          
+      end if
+
+      call timer_finish(TIMER_ID_AIR_RAP)        
+               
+      ! Drop relative small entries         
+      call timer_start(TIMER_ID_AIR_DROP)   
+
+      ! If we want to reuse, we have to match the original sparsity
+      ! which might be different if the matrix has changed (but the sparsity is the same)
+      ! so we can't just drop with a drop tolerance
+      if (air_data%reuse(our_level)%reuse_mat(MAT_RAP_DROP) /= PETSC_NULL_MAT) then
+
+         call remove_from_sparse_match(air_data%reuse(our_level)%reuse_mat(MAT_RAP), &
+                  air_data%reuse(our_level)%reuse_mat(MAT_RAP_DROP), coarse_matrix, &
+                  lump=air_data%options%a_lump)
+
+      ! First time so just drop according to a tolerance 
+      else
+         call remove_small_from_sparse(air_data%reuse(our_level)%reuse_mat(MAT_RAP), &
+                  air_data%options%a_drop, air_data%reuse(our_level)%reuse_mat(MAT_RAP_DROP), &
+                  relative_max_row_tolerance = .TRUE., lump=air_data%options%a_lump)
+
+         call MatDuplicate(air_data%reuse(our_level)%reuse_mat(MAT_RAP_DROP), MAT_COPY_VALUES, coarse_matrix, ierr)
+      end if
+
+      ! Delete temporary if not reusing
+      if (.NOT. air_data%options%reuse_sparsity) then
+         call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_RAP), ierr)
+         air_data%reuse(our_level)%reuse_mat(MAT_RAP) = PETSC_NULL_MAT
+
+         call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_RAP_DROP), ierr)
+         air_data%reuse(our_level)%reuse_mat(MAT_RAP_DROP) = PETSC_NULL_MAT
+      end if       
+
+      call timer_finish(TIMER_ID_AIR_DROP)    
+
+         
+   end subroutine compute_coarse_matrix    
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine mg_FC_point_richardson(pc, b, x, r, rtol, abstol, dtol, maxits, guess_zero, its, conv_reason, ierr)
+
+      ! This applies an FC point richardson. This saves computing full residuals on each level
+      ! This is automatically disabled if you run with -mg_levels_ksp_monitor fyi!
+
+      ! ~~~~~~
+      type(tPC) :: pc
+      type(tVec) :: b, x, r
+      real :: rtol, abstol, dtol
+      PetscInt :: maxits, its
+      PetscBool :: guess_zero
+      PCRichardsonConvergedReason :: conv_reason
+      PetscErrorCode :: ierr
+
+      type(tMat) :: mat, pmat
+      integer :: our_level, f_its, errorcode
+      type(mat_ctxtype), pointer :: mat_ctx  
+      type(air_multigrid_data), pointer :: air_data
+
+      ! ~~~~~~
+
+      ! Set these for output
+      its = maxits
+      conv_reason = PCRICHARDSON_CONVERGED_ITS;
+
+      ! Can come in here with zero maxits, have to do nothing
+      if (maxits == 0) return
+      if (maxits /= 1) then
+         print *, "To change the number of F point smooths adjust maxits_a_ff"
+         call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
+      end if
+
+      ! Get the level 
+      call PCGetOperators(pc, mat, pmat, ierr)
+      ! Get what level we are on
+      call MatShellGetContext(mat, mat_ctx, ierr)
+      our_level = mat_ctx%our_level
+      air_data => mat_ctx%air_data
+
+      ! This is our b_f
+      call VecISCopy(b, air_data%is_fine_index(our_level), SCATTER_REVERSE, air_data%temp_vecs_fine(4)%array(our_level), ierr)         
+
+      if (.NOT. guess_zero) then 
+
+         ! Get out just the fine points from x - this is x_f^0
+         call VecISCopy(x, air_data%is_fine_index(our_level), SCATTER_REVERSE, air_data%temp_vecs_fine(1)%array(our_level), ierr)
+         ! ! Get the coarse points from x - this is x_c^0
+         call VecISCopy(x, air_data%is_coarse_index(our_level), SCATTER_REVERSE, air_data%temp_vecs_coarse(1)%array(our_level), ierr)         
+         
+         ! Compute Afc * x_c^0 - this never changes
+         call MatMult(air_data%A_fc(our_level), air_data%temp_vecs_coarse(1)%array(our_level), &
+                     air_data%temp_vecs_fine(2)%array(our_level), ierr)
+         ! This is b_f - A_fc * x_c^0 - this never changes
+         call VecAXPY(air_data%temp_vecs_fine(4)%array(our_level), -1.0, air_data%temp_vecs_fine(2)%array(our_level), ierr)                      
+
+      else
+         ! x_f^0 and x_c^0 are zero
+         ! So don't have to do the multiply by Afc x_c^0 or the first Aff x_f^0
+         ! temp_vecs_fine(4)%array just has b_f in it
+         call VecSet(air_data%temp_vecs_fine(3)%array(our_level), 0.0, ierr)
+       
+      end if
+
+      do f_its = 1, air_data%options%maxits_a_ff
+
+         ! If we're on the first iteration and we have zero initial guess (ie a down smooth),
+         ! we know x_f^0 is zero, hence we don't have to do Aff * x_f^0
+         if (.NOT. (f_its == 1 .AND. guess_zero)) then
+
+            ! Then A_ff * x_f^n - this changes at each richardson iteration
+            call MatMult(air_data%A_ff(our_level), air_data%temp_vecs_fine(1)%array(our_level), &
+                        air_data%temp_vecs_fine(3)%array(our_level), ierr)          
+         end if
+
+         ! This is b_f - A_fc * x_c - A_ff * x_f^n
+         call VecAYPX(air_data%temp_vecs_fine(3)%array(our_level), -1.0, air_data%temp_vecs_fine(4)%array(our_level), ierr)           
+
+         ! ! Compute A_ff^{-1} ( b_f - A_fc * x_c - A_ff * x_f^n)
+         call MatMult(air_data%inv_A_ff(our_level), air_data%temp_vecs_fine(3)%array(our_level), &
+                     air_data%temp_vecs_fine(2)%array(our_level), ierr)    
+
+         ! Compute x_f^n + A_ff^{-1} ( b_f - A_fc * x_c - A_ff * x_f^n)
+         call VecAXPY(air_data%temp_vecs_fine(1)%array(our_level), 1.0, air_data%temp_vecs_fine(2)%array(our_level), ierr)                      
+
+      end do
+
+      ! ! Reverse put fine x_f back into x
+      ! If we're just doing F point smoothing, don't change the coarse points    
+      call VecISCopy(x, air_data%is_fine_index(our_level), SCATTER_FORWARD, air_data%temp_vecs_fine(1)%array(our_level), ierr)      
+
+      ! ~~~~~~~~~~~~~~~~
+      ! If we want to let's do a single C-point smooth
+      ! ~~~~~~~~~~~~~~~~
+      if (air_data%options%one_c_smooth) then
+
+         ! this is b_c
+         call VecISCopy(b, air_data%is_coarse_index(our_level), SCATTER_REVERSE, air_data%temp_vecs_coarse(4)%array(our_level), ierr)    
+
+         ! Compute Acf * x_f^0 - this never changes
+         call MatMult(air_data%A_cf(our_level), air_data%temp_vecs_fine(1)%array(our_level), &
+                     air_data%temp_vecs_coarse(2)%array(our_level), ierr)
+         ! This is b_c - A_cf * x_f^0 - this never changes
+         call VecAXPY(air_data%temp_vecs_coarse(4)%array(our_level), -1.0, air_data%temp_vecs_coarse(2)%array(our_level), ierr)  
+
+         ! Then A_cc * x_c^n - this changes at each richardson iteration
+         call MatMult(air_data%A_cc(our_level), air_data%temp_vecs_coarse(1)%array(our_level), &
+                     air_data%temp_vecs_coarse(3)%array(our_level), ierr)  
+
+         ! This is b_c - A_cf * x_f^0 - A_cc * x_c^n
+         call VecAYPX(air_data%temp_vecs_coarse(3)%array(our_level), -1.0, air_data%temp_vecs_coarse(4)%array(our_level), ierr)          
+
+         ! ! Compute A_cc^{-1} (b_c - A_cf * x_f^0 - A_cc * x_c^n)
+         call MatMult(air_data%inv_A_cc(our_level), air_data%temp_vecs_coarse(3)%array(our_level), &
+                     air_data%temp_vecs_coarse(2)%array(our_level), ierr)    
+
+         ! Compute x_c^n + A_cc^{-1} (b_c - A_cf * x_f^0 - A_cc * x_c^n)
+         call VecAXPY(air_data%temp_vecs_coarse(1)%array(our_level), 1.0, air_data%temp_vecs_coarse(2)%array(our_level), ierr)         
+
+         ! ! Reverse put fine x_c back into x
+         call VecISCopy(x, air_data%is_coarse_index(our_level), SCATTER_FORWARD, air_data%temp_vecs_coarse(1)%array(our_level), ierr)        
+
+      end if 
+      
+      ! Now technically there should be a new residual that we put into r after this is done
+      ! but I don't think it matters, as it is the solution that is interpolated up 
+      ! and the richardson on the next level up computes its own F-point residual 
+      ! and the norm type is none on the mg levels, as we just do maxits        
+
+      ! have to return zero here!
+      ierr = 0
+      
+   end subroutine mg_FC_point_richardson   
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine setup_air_pcmg(amat, pmat, air_data, pcmg)
+
+      ! Setup AIR by computing the hierarchy and returning a PETSC PCMG object 
+      ! Have to have called create_air_data before this routine
+      ! The options for AIR are stored in air_data%options
+
+      ! ~~~~~~
+      type(tMat), target, intent(in)                     :: amat, pmat
+      type(air_multigrid_data), target, intent(inout)    :: air_data
+      type(tPC), intent(inout)                           :: pcmg
+
+      ! Local
+      PetscInt            :: local_rows, local_cols, global_rows, global_cols, local_fine_is_size, local_coarse_is_size
+      PetscInt            :: global_coarse_is_size, global_fine_is_size, global_row_start, global_row_end_plus_one
+      PetscInt            :: prolongator_start, prolongator_end_plus_one, number_splits, petsc_level, no_levels_petsc_int
+      integer             :: no_active_cores, min_size_coarse, i_loc
+      integer             :: no_levels, our_level, our_level_coarse, errorcode, comm_rank, comm_size
+      PetscErrorCode      :: ierr
+      MPI_Comm            :: MPI_COMM_MATRIX
+      real                :: ratio_local_nnzs_off_proc
+      logical             :: big_enough, trigger_proc_agglom, proc_agglom_exists
+      type(tMat)          :: coarse_matrix_temp
+      type(tKSP)          :: ksp_smoother_up, ksp_smoother_down, ksp_coarse_solver
+      type(tPC)           :: pc_smoother_up, pc_smoother_down, pc_coarse_solver
+      type(tVec)          :: result
+      type(tIS)           :: is_unchanged
+      type(mat_ctxtype), pointer :: mat_ctx
+      PetscInt, parameter :: one=1, zero=0
+      type(tVec), dimension(:), allocatable :: left_null_vecs, right_null_vecs
+      type(tVec), dimension(:), allocatable :: left_null_vecs_c, right_null_vecs_c
+      logical :: cst_nullspace
+
+      ! ~~~~~~     
+
+      ! Start timing the setup
+      call timer_start(TIMER_ID_AIR_SETUP)    
+      
+      ! Get the communicator the input matrix is on, we build everything on that
+      call PetscObjectGetComm(pmat, MPI_COMM_MATRIX, ierr)
+      ! Get the comm size 
+      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)        
+      ! Get the comm rank
+      call MPI_Comm_rank(MPI_COMM_MATRIX, comm_rank, errorcode)      
+      
+      ! The max number of levels
+      no_levels = air_data%options%max_levels
+      ! This is the minimum size coarse matrix we allow
+      min_size_coarse = air_data%options%poly_order + 1      
+      ! Keep track of how many times we've done processor agglomeration
+      number_splits = 1
+      ! Copy the top grid matrix pointer
+      air_data%coarse_matrix(1) = pmat
+
+      ! ~~~~~~~~~~~~~~~~~~~~~
+      ! Check if the user has provided a near nullspace before we do anything
+      ! ~~~~~~~~~~~~~~~~~~~~~
+      call get_near_nullspace(amat, air_data%options%constrain_z, air_data%options%constrain_w, &
+               cst_nullspace, left_null_vecs, right_null_vecs)
+
+      ! ~~~~~~~~~~~~~~~~~~~~~
+
+      if (air_data%options%print_stats_timings .AND. comm_rank == 0) print *, "Timers are cumulative"
+
+      ! Loop over the number of levels
+      ! We will exit this loop once we coarsen far enough
+      level_loop: do our_level = 1, no_levels-1
+
+         ! This is our coarse level
+         our_level_coarse = our_level + 1
+
+         ! Get matrix sizes
+         call MatGetSize(air_data%coarse_matrix(our_level), global_rows, global_cols, ierr)
+         call MatGetLocalSize(air_data%coarse_matrix(our_level), local_rows, local_cols, ierr)
+         ! This returns the global index of the local portion of the matrix
+         call MatGetOwnershipRange(air_data%coarse_matrix(our_level), global_row_start, global_row_end_plus_one, ierr)           
+
+         ! ~~~~~~~~~~~~
+         ! Compute the coarsening
+         ! ~~~~~~~~~~~~     
+         ! Do we have enough DOFs to need another coarse level    
+         big_enough = .TRUE.
+         
+         ! If we have an exact IS, we know Aff is diagonal and our inverse is exact
+         if (air_data%options%strong_threshold == 0.0) then   
+            ! Only have to do one "smooth" to apply the exact inverse
+            air_data%options%maxits_a_ff = 1        
+         end if  
+
+         call timer_start(TIMER_ID_AIR_COARSEN)     
+         
+         ! Are we reusing our CF splitting
+         if (.NOT. air_data%allocated_is(our_level)) then
+
+            ! Do the CF splitting
+            call compute_cf_splitting(air_data%coarse_matrix(our_level), &
+                  air_data%options%symmetric, &
+                  air_data%options%strong_threshold, &
+                  air_data%options%max_luby_steps, &
+                  air_data%options%cf_splitting_type, &
+                  air_data%options%ddc_fraction, &
+                  air_data%IS_fine_index(our_level), air_data%IS_coarse_index(our_level))      
+            air_data%allocated_is(our_level) = .TRUE.
+         end if
+         
+         call timer_finish(TIMER_ID_AIR_COARSEN)   
+
+         ! ~~~~~~~~~~~~~~
+         ! Get the resulting sizes of C and F points
+         ! ~~~~~~~~~~~~~~
+         call ISGetSize(air_data%IS_fine_index(our_level), global_fine_is_size, ierr)
+         call ISGetLocalSize(air_data%IS_fine_index(our_level), local_fine_is_size, ierr)
+         call ISGetSize(air_data%IS_coarse_index(our_level), global_coarse_is_size, ierr)
+         call ISGetLocalSize(air_data%IS_coarse_index(our_level), local_coarse_is_size, ierr)               
+
+         ! Test if the problem is still big enough
+         ! Don't allow a global size smaller than the polynomial order - if we hit that then 
+         ! the grid before that is the coarse grid
+         ! Also have to double check that the coarsening resulted in any fine points, sometimes
+         ! you can have it such that no fine points are selected                  
+         big_enough = global_coarse_is_size > min_size_coarse .AND. global_fine_is_size /= 0       
+
+         ! Did we end up with a coarse grid that is still big enough to continue coarsening?
+         if (big_enough) then
+
+            ! Output stats on the coarsening
+            if (air_data%options%print_stats_timings .AND. comm_rank == 0) print *, "~~~~~~~~~~~~ Level ", our_level
+            if (air_data%options%print_stats_timings  .AND. comm_rank == 0) print *, "Global rows", global_rows, "Global F-points", global_fine_is_size, "Global C-points", global_coarse_is_size   
+
+            ! ~~~~~~~
+            ! Temporary vecs we use in the smoother
+            ! ~~~~~~~
+            ! If we haven't built them already
+            if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then
+               if (comm_size /= 1) then
+                  call VecCreateMPI(MPI_COMM_MATRIX, local_fine_is_size, &
+                           global_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)     
+                  call VecCreateMPI(MPI_COMM_MATRIX, local_coarse_is_size, &
+                           global_coarse_is_size, air_data%temp_vecs_coarse(1)%array(our_level), ierr)                                                                      
+                  ! We need this to trigger the coarse solver
+                  if (our_level == no_levels - 1) then
+                     call VecCreateMPI(MPI_COMM_MATRIX, local_coarse_is_size, &
+                              global_coarse_is_size, air_data%temp_vecs_fine(1)%array(our_level+1), ierr)                      
+                  end if                  
+               else
+                  call VecCreateSeq(PETSC_COMM_SELF, local_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)          
+                  call VecCreateSeq(PETSC_COMM_SELF, local_coarse_is_size, air_data%temp_vecs_coarse(1)%array(our_level), ierr) 
+                  ! We need this to trigger the coarse solver
+                  if (our_level == no_levels - 1) then
+                     call VecCreateSeq(PETSC_COMM_SELF, local_coarse_is_size, air_data%temp_vecs_fine(1)%array(our_level+1), ierr)          
+                  end if
+               end if
+            end if
+               
+         ! If this coarse grid is smaller than our minimum, then we are done coarsening
+         else
+
+            ! Get the size of the previous coarse grid as that is now our bottom grid
+            if (comm_size /= 1) then
+
+               ! If we're on the top grid and we have coarsened fast enough to not have a second level
+               ! should only happen on very small problems               
+               if (our_level == 1) then
+                  global_fine_is_size = global_rows
+                  local_fine_is_size = local_rows
+               else
+                  call ISGetSize(air_data%IS_coarse_index(our_level-1), global_fine_is_size, ierr)
+                  call ISGetLocalSize(air_data%IS_coarse_index(our_level-1), local_fine_is_size, ierr)
+               end if
+               call VecCreateMPI(MPI_COMM_MATRIX, local_fine_is_size, &
+                        global_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)  
+            else
+               if (our_level == 1) then
+                  global_fine_is_size = global_rows
+               else
+                  call ISGetSize(air_data%IS_coarse_index(our_level-1), global_fine_is_size, ierr)
+               end if
+               call VecCreateSeq(PETSC_COMM_SELF, global_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)    
+            end if
+
+            if (air_data%options%constrain_z) then
+               ! Only destroy the constant nullspace which we created on the top grid
+               if (cst_nullspace .AND. our_level == 1) then
+                  call VecDestroy(left_null_vecs(size(left_null_vecs)), ierr)
+               else if (our_level /= 1) then
+                  ! On every other grid destroy everything
+                  do i_loc = 1, size(left_null_vecs)
+                     call VecDestroy(left_null_vecs(i_loc), ierr)
+                  end do
+               end if
+               deallocate(left_null_vecs)
+               deallocate(left_null_vecs_c)
+            end if
+            if (air_data%options%constrain_w) then
+               if (cst_nullspace .AND. our_level == 1) then
+                  call VecDestroy(right_null_vecs(size(right_null_vecs)), ierr)
+               else if (our_level /= 1) then
+                  ! On every other grid destroy everything
+                  do i_loc = 1, size(right_null_vecs)
+                     call VecDestroy(right_null_vecs(i_loc), ierr)
+                  end do
+               end if
+               deallocate(right_null_vecs)
+               deallocate(right_null_vecs_c)
+            end if            
+
+            no_levels = our_level
+
+            ! Exit out of the coarsening loop
+            exit level_loop
+
+         end if    
+
+         ! ~~~~~~~~~~~~~~
+         ! If we got here then we want to generate a new coarse matrix
+         ! ~~~~~~~~~~~~~~
+
+         ! Generate the temporary vectors we use to smooth with
+         ! If we haven't built them already
+         if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then         
+            call VecDuplicate(air_data%temp_vecs_fine(1)%array(our_level), air_data%temp_vecs_fine(2)%array(our_level), ierr)
+            call VecDuplicate(air_data%temp_vecs_fine(1)%array(our_level), air_data%temp_vecs_fine(3)%array(our_level), ierr)
+            call VecDuplicate(air_data%temp_vecs_fine(1)%array(our_level), air_data%temp_vecs_fine(4)%array(our_level), ierr)        
+
+            ! If we're doing C point smoothing we need some extra temporaries
+            if (air_data%options%one_c_smooth .AND. &
+                     .NOT. air_data%options%full_smoothing_up_and_down) then
+               call VecDuplicate(air_data%temp_vecs_coarse(1)%array(our_level), air_data%temp_vecs_coarse(2)%array(our_level), ierr)
+               call VecDuplicate(air_data%temp_vecs_coarse(1)%array(our_level), air_data%temp_vecs_coarse(3)%array(our_level), ierr)
+               call VecDuplicate(air_data%temp_vecs_coarse(1)%array(our_level), air_data%temp_vecs_coarse(4)%array(our_level), ierr)         
+            end if
+         end if
+
+         ! ~~~~~~~~~~~~~~     
+         ! Now let's go and build all our operators
+         ! ~~~~~~~~~~~~~~                         
+
+         ! ~~~~~~~~~
+         ! Let's smooth near null-space vectors if needed
+         ! ~~~~~~~~~
+         call timer_start(TIMER_ID_AIR_CONSTRAIN)
+
+         call smooth_near_nullspace(air_data%coarse_matrix(our_level), &
+            air_data%options%constrain_z, &
+            air_data%options%constrain_w, &
+            left_null_vecs, right_null_vecs)
+
+         call timer_finish(TIMER_ID_AIR_CONSTRAIN)
+
+         ! ~~~~~~~~~
+         ! Setup the details of our gmres polynomials
+         ! ~~~~~~~~~         
+
+         call setup_gmres_poly_data(global_fine_is_size, &
+                  air_data%options%inverse_type, &
+                  air_data%options%poly_order, &
+                  air_data%options%poly_sparsity_order, &
+                  air_data%options%subcomm, &
+                  number_splits, &
+                  air_data%inv_A_ff_poly_data(our_level))
+
+         ! Setup the same structure for the inv_A_ff made from dropped Aff 
+         call setup_gmres_poly_data(global_fine_is_size, &
+                  air_data%options%inverse_type, &
+                  air_data%options%poly_order, &
+                  air_data%options%poly_sparsity_order, &
+                  air_data%options%subcomm, &
+                  number_splits, &
+                  air_data%inv_A_ff_poly_data_dropped(our_level)) 
+
+         ! ~~~~~~~~~
+         ! If we're doing C-point smoothing we may have a gmres polynomial on C points
+         ! ~~~~~~~~~
+         if (air_data%options%one_c_smooth .AND. &
+                  .NOT. air_data%options%full_smoothing_up_and_down) then                  
+                  
+            call setup_gmres_poly_data(global_coarse_is_size, &
+                     air_data%options%inverse_type, &
+                     air_data%options%poly_order, &
+                     air_data%options%poly_sparsity_order, &
+                     air_data%options%subcomm, &
+                     number_splits, &
+                     air_data%inv_A_cc_poly_data(our_level))   
+         end if            
+
+         ! ~~~~~~~~~
+         ! Extract the submatrices and start the comms to compute the approximate inverses
+         ! ~~~~~~~~~         
+         call get_submatrices_start_poly_coeff_comms(air_data%coarse_matrix(our_level), &
+               our_level, air_data)          
+
+         ! ~~~~~~~~~
+         ! Finish the non-blocking comms and build the approximate inverse, then the 
+         ! restrictor and prolongator
+         ! ~~~~~~~~~
+         call finish_comms_compute_restrict_prolong(air_data%coarse_matrix(our_level), &
+               our_level, air_data, &
+               left_null_vecs, right_null_vecs, &
+               left_null_vecs_c, right_null_vecs_c)
+
+         if (air_data%options%constrain_z) then
+            ! Only destroy the constant nullspace which we created on the top grid
+            if (cst_nullspace .AND. our_level == 1) then
+               call VecDestroy(left_null_vecs(size(left_null_vecs)), ierr)
+            else if (our_level /= 1) then
+               ! On every other grid destroy everything
+               do i_loc = 1, size(left_null_vecs)
+                  call VecDestroy(left_null_vecs(i_loc), ierr)
+               end do
+            end if
+            left_null_vecs = left_null_vecs_c
+         end if
+         if (air_data%options%constrain_w) then
+            if (cst_nullspace .AND. our_level == 1) then
+               call VecDestroy(right_null_vecs(size(right_null_vecs)), ierr)
+            else if (our_level /= 1) then
+               ! On every other grid destroy everything
+               do i_loc = 1, size(right_null_vecs)
+                  call VecDestroy(right_null_vecs(i_loc), ierr)
+               end do
+            end if
+            right_null_vecs = right_null_vecs_c
+         end if
+
+         ! ~~~~~~~~~~~~~~
+         ! Build the coarse matrix
+         ! ~~~~~~~~~~~~~~
+
+         call compute_coarse_matrix(air_data%coarse_matrix(our_level), our_level, air_data, &
+                  air_data%coarse_matrix(our_level_coarse))  
+
+         ! ~~~~~~~~~~~
+         ! ~~~~~~~~~~~            
+
+         ! ~~~~~~~~~~~~
+         ! Do processor agglomeration if desired
+         ! We stay on the existing communicator with some cores just having zero dofs
+         ! ~~~~~~~~~~~~
+         if (air_data%options%processor_agglom) then
+
+            ! If we're in parallel and we haven't already agglomerated down to one processor
+            if (comm_size /= 1 .AND. number_splits /= comm_size) then
+
+               ! Number of cores we have dofs on
+               no_active_cores = ceiling(real(comm_size)/real(number_splits))
+               ratio_local_nnzs_off_proc = 0.0
+
+               ! If we have already setup our hierarchy, then we know what levels need to be repartitioned
+               ! If not, then we have to compute the ratio on each level to check if they need to be 
+               if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then
+                  call compute_mat_ratio_local_nonlocal_nnzs(air_data%coarse_matrix(our_level_coarse), no_active_cores, ratio_local_nnzs_off_proc)
+               end if
+
+               ! If we are reusing and we know we have to repartition this level, or 
+               ! if we get a local to off-processor ratio of less than processor_agglom_ratio
+               trigger_proc_agglom = air_data%reuse(our_level)%reuse_is(IS_REPARTITION) /= PETSC_NULL_IS .OR. &
+                           (ratio_local_nnzs_off_proc .le. air_data%options%processor_agglom_ratio &
+                           .AND. ratio_local_nnzs_off_proc /= 0.0)
+                                 
+               ! Start the process agglomeration 
+               if (trigger_proc_agglom) then
+
+                  call timer_start(TIMER_ID_AIR_PROC_AGGLOM)
+                  ! air_data%options%processor_agglom_factor tells us how much we're reducing the number 
+                  ! of active mpi ranks by each time
+                  
+                  ! number_splits is fed into the polynomial inverse assembly to tell it how many
+                  ! idle ranks we have, so we can use them as threads in omp if it is enabled
+                  number_splits = number_splits * air_data%options%processor_agglom_factor
+                  ! If we agglomerate down to one processor
+                  if (number_splits > comm_size) number_splits = comm_size
+                  ! Number of cores we want dofs on
+                  no_active_cores = ceiling(real(comm_size)/real(number_splits))
+
+                  if (air_data%options%print_stats_timings .AND. comm_rank == 0) print *, "Doing processor agglomeration onto no cores:", no_active_cores
+
+                  ! Calculate the IS with the repartitioning if we haven't already
+                  ! This is expensive as it calls the graph partitioner (e.g., parmetis)
+                  if (air_data%reuse(our_level)%reuse_is(IS_REPARTITION) == PETSC_NULL_IS) then
+
+                     call calculate_repartition(air_data%coarse_matrix(our_level_coarse), &
+                                 number_splits, .FALSE., air_data%reuse(our_level)%reuse_is(IS_REPARTITION))
+                  end if
+
+                  ! Repartition the coarse matrix
+                  if (air_data%reuse(our_level)%reuse_mat(MAT_COARSE_REPARTITIONED) /= PETSC_NULL_MAT) then
+
+                     call MatCreateSubMatrix(air_data%coarse_matrix(our_level_coarse), &
+                                 air_data%reuse(our_level)%reuse_is(IS_REPARTITION), air_data%reuse(our_level)%reuse_is(IS_REPARTITION), &
+                                 MAT_REUSE_MATRIX, air_data%reuse(our_level)%reuse_mat(MAT_COARSE_REPARTITIONED), ierr)                     
+                  else
+                     call MatCreateSubMatrix(air_data%coarse_matrix(our_level_coarse), &
+                                 air_data%reuse(our_level)%reuse_is(IS_REPARTITION), air_data%reuse(our_level)%reuse_is(IS_REPARTITION), &
+                                 MAT_INITIAL_MATRIX, air_data%reuse(our_level)%reuse_mat(MAT_COARSE_REPARTITIONED), ierr)
+                  end if
+
+                  call MatDestroy(air_data%coarse_matrix(our_level_coarse), ierr)
+                  call MatDuplicate(air_data%reuse(our_level)%reuse_mat(MAT_COARSE_REPARTITIONED), MAT_COPY_VALUES, air_data%coarse_matrix(our_level_coarse), ierr)
+
+                  ! Delete temporary if not reusing
+                  if (.NOT. air_data%options%reuse_sparsity) then
+                     call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_COARSE_REPARTITIONED), ierr)
+                     air_data%reuse(our_level)%reuse_mat(MAT_COARSE_REPARTITIONED) = PETSC_NULL_MAT
+                  end if                   
+
+                  ! Create an IS to represent the row indices of the prolongator 
+                  ! as we are only repartitioning the coarse matrix not the matrix on this level
+                  ! ie the columns of the prolongator 
+                  call MatGetOwnershipRange(air_data%prolongators(our_level), prolongator_start, prolongator_end_plus_one, ierr)                     
+                  call ISCreateStride(MPI_COMM_MATRIX, prolongator_end_plus_one - prolongator_start, prolongator_start, one, is_unchanged, ierr)
+
+                  ! Repartition the prolongator matrix
+                  if (air_data%reuse(our_level)%reuse_mat(MAT_P_REPARTITIONED) /= PETSC_NULL_MAT) then
+
+                     ! If we've got a one point classical prolongator then we just use the existing repartitioned
+                     ! one so we don't need to repartition
+                     if (.NOT. (air_data%options%one_point_classical_prolong .AND. &
+                                 .NOT. air_data%options%symmetric .AND. &
+                                 .NOT. air_data%options%constrain_w)) then
+
+                        call MatCreateSubMatrix(air_data%prolongators(our_level), &
+                                    is_unchanged, air_data%reuse(our_level)%reuse_is(IS_REPARTITION), MAT_REUSE_MATRIX, &
+                                    air_data%reuse(our_level)%reuse_mat(MAT_P_REPARTITIONED), ierr)                     
+
+                        call MatDestroy(air_data%prolongators(our_level), ierr)
+                        call MatDuplicate(air_data%reuse(our_level)%reuse_mat(MAT_P_REPARTITIONED), MAT_COPY_VALUES, air_data%prolongators(our_level), ierr)                                 
+                     end if
+                  else
+                     call MatCreateSubMatrix(air_data%prolongators(our_level), &
+                                 is_unchanged, air_data%reuse(our_level)%reuse_is(IS_REPARTITION), MAT_INITIAL_MATRIX, &
+                                 air_data%reuse(our_level)%reuse_mat(MAT_P_REPARTITIONED), ierr)
+
+                     call MatDestroy(air_data%prolongators(our_level), ierr)
+                     call MatDuplicate(air_data%reuse(our_level)%reuse_mat(MAT_P_REPARTITIONED), MAT_COPY_VALUES, air_data%prolongators(our_level), ierr)                                 
+                  end if
+
+                  ! Delete temporary if not reusing
+                  if (.NOT. air_data%options%reuse_sparsity) then
+                     call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_P_REPARTITIONED), ierr)
+                     air_data%reuse(our_level)%reuse_mat(MAT_P_REPARTITIONED) = PETSC_NULL_MAT
+                  end if                   
+                  
+                  ! If need to repartition a restrictor
+                  if (.NOT. air_data%options%symmetric) then
+
+                     ! Repartition the restrictor matrix
+                     if (air_data%reuse(our_level)%reuse_mat(MAT_R_REPARTITIONED) /= PETSC_NULL_MAT) then
+
+                        call MatCreateSubMatrix(air_data%restrictors(our_level), &
+                                    air_data%reuse(our_level)%reuse_is(IS_REPARTITION), is_unchanged, MAT_REUSE_MATRIX, &
+                                    air_data%reuse(our_level)%reuse_mat(MAT_R_REPARTITIONED), ierr)                        
+                     else
+                        call MatCreateSubMatrix(air_data%restrictors(our_level), &
+                                    air_data%reuse(our_level)%reuse_is(IS_REPARTITION), is_unchanged, MAT_INITIAL_MATRIX, &
+                                    air_data%reuse(our_level)%reuse_mat(MAT_R_REPARTITIONED), ierr)
+                     end if
+
+                     call MatDestroy(air_data%restrictors(our_level), ierr)
+                     call MatDuplicate(air_data%reuse(our_level)%reuse_mat(MAT_R_REPARTITIONED), MAT_COPY_VALUES, air_data%restrictors(our_level), ierr)
+
+                     ! Delete temporary if not reusing
+                     if (.NOT. air_data%options%reuse_sparsity) then
+                        call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_R_REPARTITIONED), ierr)
+                        air_data%reuse(our_level)%reuse_mat(MAT_R_REPARTITIONED) = PETSC_NULL_MAT
+                     end if                     
+                  end if
+
+                  call ISDestroy(is_unchanged, ierr)
+                  ! Delete temporary if not reusing
+                  if (.NOT. air_data%options%reuse_sparsity) then
+                     call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_REPARTITION), ierr)
+                     air_data%reuse(our_level)%reuse_is(IS_REPARTITION) = PETSC_NULL_IS
+                  end if                  
+
+                  call timer_finish(TIMER_ID_AIR_PROC_AGGLOM)
+
+               end if             
+            end if
+         end if
+
+         air_data%allocated_matrices_A_ff(our_level) = .TRUE.
+         if (air_data%options%one_c_smooth .AND. &
+                  .NOT. air_data%options%full_smoothing_up_and_down) then          
+            air_data%allocated_matrices_A_cc(our_level) = .TRUE.
+         end if         
+
+         ! ~~~~~~~~~~~~ 
+
+         ! Get the nnzs for these matrices here, in case we destroy them below
+         if (air_data%options%print_stats_timings) then
+            call get_nnzs_petsc_sparse(air_data%coarse_matrix(our_level), air_data%coarse_matrix_nnzs(our_level))
+         end if
+
+         ! On every level but the top and the bottom we can destroy the full operator matrix
+         if (our_level /= 1) then
+            if (.NOT. air_data%options%full_smoothing_up_and_down) then
+               call MatDestroy(air_data%coarse_matrix(our_level), ierr)
+            end if
+         end if         
+         
+         ! If we are just doing F point smoothing, we no longer have our coarse matrix
+         ! But we use the mat_ctx in our F-point smoother to tell what level 
+         ! we're on, so let's just create an empty matshell to pass in that has the right sizes         
+         allocate(mat_ctx)
+         mat_ctx%our_level = our_level
+         mat_ctx%air_data => air_data
+
+         if (.NOT. air_data%options%full_smoothing_up_and_down) then
+            call MatCreateShell(MPI_COMM_MATRIX, local_rows, local_cols, global_rows, global_cols, &
+                        mat_ctx, air_data%coarse_matrix(our_level), ierr)
+            call MatAssemblyBegin(air_data%coarse_matrix(our_level), MAT_FINAL_ASSEMBLY, ierr)
+            call MatAssemblyEnd(air_data%coarse_matrix(our_level), MAT_FINAL_ASSEMBLY, ierr)          
+         end if
+         
+         air_data%allocated_coarse_matrix(our_level_coarse) = .TRUE.
+
+         ! ~~~~~~~~~~~~
+         ! Output some timing results
+         ! ~~~~~~~~~~~~
+
+         if (air_data%options%print_stats_timings .AND. comm_rank == 0) call print_timers()
+
+      end do level_loop
+
+      ! Record how many levels we have
+      air_data%no_levels = no_levels
+
+      ! ~~~~~~~~~~~
+      ! We can now start the comms for the coarse grid solver
+      ! ~~~~~~~~~~~
+
+      call timer_start(TIMER_ID_AIR_INVERSE)   
+      call MatGetSize(air_data%coarse_matrix(no_levels), global_rows, global_cols, ierr)
+
+      ! Set up a GMRES polynomial inverse data for the coarse grid solve
+      call setup_gmres_poly_data(global_rows, &
+               air_data%options%coarsest_inverse_type, &
+               air_data%options%coarsest_poly_order, &
+               air_data%options%coarsest_poly_sparsity_order, &
+               air_data%options%coarsest_subcomm, &
+               number_splits, &
+               air_data%inv_coarsest_poly_data)      
+               
+      ! Start the inverse for the coarse grid
+      ! These comms will be finished below
+      if (.NOT. (air_data%inv_A_ff(air_data%no_levels) /= PETSC_NULL_MAT .AND. air_data%options%reuse_poly_coeffs)) then
+         call start_approximate_inverse(air_data%coarse_matrix(no_levels), &
+               air_data%options%coarsest_inverse_type, &
+               air_data%inv_coarsest_poly_data%gmres_poly_order, &
+               air_data%inv_coarsest_poly_data%buffers, air_data%inv_coarsest_poly_data%coefficients)                   
+      end if
+      call timer_finish(TIMER_ID_AIR_INVERSE)  
+
+      ! ~~~~~~~~~~~~~~~
+      ! Let's setup the PETSc pc we need
+      ! ~~~~~~~~~~~~~~~
+      call PCSetOperators(pcmg, amat, pmat, ierr)
+
+      if (no_levels > 1) then
+         call PCSetType(pcmg, PCMG, ierr)
+         no_levels_petsc_int = no_levels
+#if PETSC_VERSION_MINOR >= 15
+         call PCMGSetLevels(pcmg, no_levels_petsc_int, PETSC_NULL_MPI_COMM, ierr)
+#else
+         call PCMGSetLevels(pcmg, no_levels_petsc_int, PETSC_NULL_KSP, ierr)
+#endif      
+
+         ! If we're doing fc smoothing always have zero down smooths, which petsc calls kaskade
+         ! This prevents any unnecessary residual calculations on the way down
+         ! Annoyingly kaskade calls the "down" smoother on the way up, so 
+         ! we have to set the options carefully for the down smoother
+         if (.NOT. air_data%options%full_smoothing_up_and_down) then
+            call PCMGSetType(pcmg, PC_MG_KASKADE, ierr)
+         end if
+
+         ! PETSc MG levels work in the opposite order to those in our code. If there are N levels:
+         !           PETSc   our_level
+         ! Fine     N - 1      1
+         !          N - 2      2
+         !            .        .
+         !            1      N - 1
+         ! Coarse     0        N
+
+         ! Therefore  ---  petsc_level = N - our_level
+
+         ! Set up the petsc objects on each level
+         ! Loop over all levels except the bottom
+         do petsc_level = no_levels_petsc_int - 1, 1, -1
+
+            ! Level is reverse ordering
+            our_level = no_levels - int(petsc_level)
+            our_level_coarse = our_level + 1
+
+            ! Set the restrictor/prolongator
+            if (.NOT. air_data%options%symmetric) then
+               ! If restrictor is not set petsc will use transpose of prolongator
+               call PCMGSetRestriction(pcmg, petsc_level, air_data%restrictors(our_level), ierr)
+            end if
+            call PCMGSetInterpolation(pcmg, petsc_level, air_data%prolongators(our_level), ierr)
+
+            ! Get smoother for this level
+            ! The up smoother is never used or called when doing kaskade, but we set it as a richardson so that petsc doesn't default
+            ! to chebychev and hence try and calculate eigenvalues on each grid
+            call PCMGGetSmootherUp(pcmg, petsc_level, ksp_smoother_up, ierr)
+            call PCMGGetSmootherDown(pcmg, petsc_level, ksp_smoother_down, ierr)                                
+            
+            ! Set the operators for smoothing on this level
+            if (.NOT. air_data%options%full_smoothing_up_and_down) then
+               call KSPSetOperators(ksp_smoother_up, air_data%coarse_matrix(our_level), &
+                           air_data%coarse_matrix(our_level), ierr)
+               call KSPSetOperators(ksp_smoother_down, air_data%coarse_matrix(our_level), &
+                           air_data%coarse_matrix(our_level), ierr)
+            ! The smoother for all the unknowns is stored in inv_A_ff
+            else
+               call KSPSetOperators(ksp_smoother_up, air_data%coarse_matrix(our_level), &
+                           air_data%inv_A_ff(our_level), ierr)
+               call KSPSetOperators(ksp_smoother_down, air_data%coarse_matrix(our_level), &
+                           air_data%inv_A_ff(our_level), ierr)               
+            end if
+            
+            ! Set no norm
+            call KSPSetNormType(ksp_smoother_up, KSP_NORM_NONE, ierr)
+            call KSPSetNormType(ksp_smoother_down, KSP_NORM_NONE, ierr)  
+            
+            ! Now here is where we have to be careful as we are calling kaskade mg type
+            ! It uses the down smoother as the up smoother (with no calls to the up)
+            ! And on the way up we have a nonzero initial guess 
+            if (.NOT. air_data%options%full_smoothing_up_and_down) then
+               call KSPSetInitialGuessNonzero(ksp_smoother_down, PETSC_TRUE, ierr)         
+            end if
+
+            ! Get the PC for each smoother
+            call KSPGetPC(ksp_smoother_up, pc_smoother_up, ierr)
+            call KSPGetPC(ksp_smoother_down, pc_smoother_down, ierr)
+
+            ! Set the smoother
+            if (.NOT. air_data%options%full_smoothing_up_and_down) then
+               call PCSetType(pc_smoother_up, PCSHELL, ierr)      
+               call PCSetType(pc_smoother_down, PCSHELL, ierr)      
+            else
+               call PCSetType(pc_smoother_up, PCMAT, ierr)
+               call PCSetType(pc_smoother_down, PCMAT, ierr)    
+            end if
+
+            ! Set richardson
+            call KSPSetType(ksp_smoother_up, KSPRICHARDSON, ierr)
+            call KSPSetType(ksp_smoother_down, KSPRICHARDSON, ierr)               
+
+            ! We're overwriting the richardson for the fc smoothing
+            ! This is automatically disabled if you run with -mg_levels_ksp_monitor fyi!
+            if (.NOT. air_data%options%full_smoothing_up_and_down) then
+               call PCShellSetApplyRichardson(pc_smoother_up, mg_FC_point_richardson, ierr)
+               call PCShellSetApplyRichardson(pc_smoother_down, mg_FC_point_richardson, ierr)
+            end if
+
+            ! Zero up smooths for kaskade
+            if (.NOT. air_data%options%full_smoothing_up_and_down) then
+               ! This is never called anyway with kaskade
+               call KSPSetTolerances(ksp_smoother_up, 1e-10, &
+                     & 1e-10, &
+                     & PETSC_DEFAULT_REAL, &
+                     & zero, ierr)                 
+            else
+               call KSPSetTolerances(ksp_smoother_up, 1e-10, &
+                     & 1e-10, &
+                     & PETSC_DEFAULT_REAL, &
+                     & one, ierr)  
+            end if
+
+            ! One up smooth (but we have to set it as the down given kaskade)
+            call KSPSetTolerances(ksp_smoother_down, 1e-10, &
+                  & 1e-10, &
+                  & PETSC_DEFAULT_REAL, &
+                  & one, ierr)   
+                  
+            ! Set up the smoothers on this level
+            call PCSetUp(pc_smoother_up, ierr)
+            call PCSetUp(pc_smoother_down, ierr)               
+            call KSPSetUp(ksp_smoother_up, ierr)
+            call KSPSetUp(ksp_smoother_down, ierr)               
+            
+         end do  
+
+         ! ~~~~~~~~~~~
+         ! Then at the bottom of the PCMG we need to build the coarse grid solve
+         ! ~~~~~~~~~~~    
+
+         ! Let's do a Richardson
+         call PCMGGetCoarseSolve(pcmg, ksp_coarse_solver, ierr)
+         ! If you want to apply more iterations of the coarse solver, change this to 
+         ! a richardson (can do via command line -mg_coarse_ksp_type richardson)
+         call KSPSetType(ksp_coarse_solver, KSPPREONLY, ierr)
+         ! Apply one iteration of the coarse solver by default
+         call KSPSetTolerances(ksp_coarse_solver, 1.0e-3, 1.0e-13, PETSC_DEFAULT_REAL, one, ierr)
+
+         ! Set no norm
+         call KSPSetNormType(ksp_coarse_solver, KSP_NORM_NONE, ierr)
+         call KSPGetPC(ksp_coarse_solver, pc_coarse_solver, ierr)
+
+         ! ~~~~~~~~~~~~~~~
+         ! Finish the comms for the coarse grid solver
+         ! ~~~~~~~~~~~~~~~
+         ! Coarse grid polynomial coefficients
+         call timer_start(TIMER_ID_AIR_INVERSE) 
+
+         call finish_approximate_inverse(air_data%coarse_matrix(no_levels), &
+               air_data%options%coarsest_inverse_type, &
+               air_data%inv_coarsest_poly_data%gmres_poly_order, air_data%inv_coarsest_poly_data%gmres_poly_sparsity_order, &
+               air_data%inv_coarsest_poly_data%buffers, air_data%inv_coarsest_poly_data%coefficients, &
+               air_data%options%coarsest_matrix_free_polys, &
+               air_data%reuse(air_data%no_levels)%reuse_mat(MAT_INV_AFF), &
+               air_data%inv_A_ff(air_data%no_levels))             
+
+         ! Use the mf coarse grid solver or not
+         ! Let's store the coarse grid solver in inv_A_ff(no_levels)
+         if (.NOT. air_data%options%coarsest_matrix_free_polys) then
+            if (air_data%options%print_stats_timings) call get_nnzs_petsc_sparse(air_data%inv_A_ff(air_data%no_levels), air_data%inv_A_ff_nnzs(air_data%no_levels))
+         end if
+
+         ! Delete temporary if not reusing
+         if (.NOT. air_data%options%reuse_sparsity) then
+            call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF), ierr)
+            air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF) = PETSC_NULL_MAT
+         end if          
+
+         ! Now we've finished the coarse grid solver, output the time
+         call timer_finish(TIMER_ID_AIR_INVERSE)               
+
+         ! This has to be called after we've built the coarse grid inverse
+         call KSPSetOperators(ksp_coarse_solver, air_data%coarse_matrix(no_levels), &
+                     air_data%inv_A_ff(no_levels), ierr)
+
+         ! ~~~~~~~~~~~~
+         ! Set our coarse grid solver
+         ! ~~~~~~~~~~~~
+         ! Just apply the approximate inverse matrix
+         call PCSetType(pc_coarse_solver, PCMAT, ierr)      
+         call PCSetUp(pc_coarse_solver, ierr)
+         call KSPSetUp(ksp_coarse_solver, ierr)   
+
+      ! If we've only got one level just precondition with jacobi
+      else
+         call PCSetType(pcmg, PCJACOBI, ierr)
+         if (comm_rank == 0) print *, "Only a single level, defaulting to Jacobi PC"
+      end if      
+
+      ! Call the setup on our PC
+      call PCSetUp(pcmg, ierr)
+
+      call timer_finish(TIMER_ID_AIR_SETUP)                
+      ! Print out the coarse grid info
+      if (air_data%options%print_stats_timings .AND. comm_rank == 0) print *, "~~~~~~~~~~~~ Coarse grid ", no_levels
+      if (air_data%options%print_stats_timings .AND. comm_rank == 0) print *, "Global rows", global_rows
+      if (air_data%options%print_stats_timings .AND. comm_rank == 0) call print_timers()
+      if (air_data%options%print_stats_timings .AND. comm_rank == 0) print *, "~~~~~~~~~~~~ "      
+      if (air_data%options%print_stats_timings .AND. comm_rank == 0) print *,  "Total cumulative setup time :", timer_time(TIMER_ID_AIR_SETUP)
+      if (air_data%options%print_stats_timings .AND. comm_rank == 0) print *, "~~~~~~~~~~~~ "      
+      ! Print out stats on the hierarchy - collective so make sure to call 
+      ! this on all ranks      
+      if (air_data%options%print_stats_timings) call print_stats(air_data, pcmg)   
+
+   end subroutine setup_air_pcmg       
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine reset_air_data(air_data, keep_reuse)
+
+      ! Resets the data structures for air
+
+      ! ~~~~~~
+      type(air_multigrid_data), intent(inout) :: air_data
+      logical, optional :: keep_reuse
+
+      integer :: our_level
+      PetscErrorCode :: ierr
+      MatType:: mat_type
+      type(mat_ctxtype), pointer :: mat_ctx
+      integer :: i_loc
+      logical :: reuse
+      ! ~~~~~~    
+
+      reuse = .FALSE.
+      if (present(keep_reuse)) reuse = keep_reuse
+
+      ! Use if this data structure is allocated to determine if we setup anything
+      if (allocated(air_data%allocated_matrices_A_ff)) then
+
+         ! Loop over the levels
+         do our_level = 1, size(air_data%allocated_matrices_A_ff)
+
+            ! If we setup Aff
+            if (air_data%allocated_matrices_A_ff(our_level)) then
+
+               if (.NOT. reuse) then
+                  call MatDestroy(air_data%A_ff(our_level), ierr)
+                  call MatDestroy(air_data%A_fc(our_level), ierr)
+                  call MatDestroy(air_data%A_cf(our_level), ierr)
+                  ! If the strong threshold is zero we just copy the pointers for 
+                  ! aff, afc and acf so we wouldn't want to destroy them below
+                  if (air_data%options%strong_r_threshold == 0.0) then
+                     air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP) = PETSC_NULL_MAT
+                     air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP) = PETSC_NULL_MAT
+                     air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP) = PETSC_NULL_MAT
+                  end if                    
+                  call MatDestroy(air_data%prolongators(our_level), ierr)
+                  if (.NOT. air_data%options%symmetric) then
+                     call MatDestroy(air_data%restrictors(our_level), ierr)
+                  end if                  
+                  air_data%allocated_matrices_A_ff(our_level) = .FALSE.
+                  call reset_inverse_mat(air_data%inv_A_ff(our_level))
+                  if (allocated(air_data%inv_A_ff_poly_data(our_level)%coefficients)) then
+                     deallocate(air_data%inv_A_ff_poly_data(our_level)%coefficients)
+                  end if         
+                  if (allocated(air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients)) then
+                     deallocate(air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients)
+                  end if                            
+
+                  call VecDestroy(air_data%temp_vecs_fine(1)%array(our_level), ierr)
+                  call VecDestroy(air_data%temp_vecs_fine(2)%array(our_level), ierr)
+                  call VecDestroy(air_data%temp_vecs_fine(3)%array(our_level), ierr)
+                  call VecDestroy(air_data%temp_vecs_fine(4)%array(our_level), ierr)             
+                  call VecDestroy(air_data%temp_vecs_coarse(1)%array(our_level), ierr)
+                  if (air_data%options%one_c_smooth .AND. &
+                        .NOT. air_data%options%full_smoothing_up_and_down) then               
+   
+                     call VecDestroy(air_data%temp_vecs_coarse(2)%array(our_level), ierr)
+                     call VecDestroy(air_data%temp_vecs_coarse(3)%array(our_level), ierr)
+                     call VecDestroy(air_data%temp_vecs_coarse(4)%array(our_level), ierr) 
+                  end if                   
+               end if                                       
+            end if  
+
+            if (air_data%allocated_is(our_level)) then
+               if (.NOT. reuse) then
+                  call ISDestroy(air_data%IS_fine_index(our_level), ierr)
+                  call ISDestroy(air_data%IS_coarse_index(our_level), ierr)
+                  air_data%allocated_is(our_level) = .FALSE.
+               end if
+            end if            
+            
+            ! Did we do C point smoothing?
+            if (air_data%allocated_matrices_A_cc(our_level)) then
+               if (.NOT. reuse) then
+                  call MatDestroy(air_data%A_cc(our_level), ierr)
+                  call reset_inverse_mat(air_data%inv_A_cc(our_level))
+                  if (allocated(air_data%inv_A_cc_poly_data(our_level)%coefficients)) then
+                     deallocate(air_data%inv_A_cc_poly_data(our_level)%coefficients)
+                  end if
+                  air_data%allocated_matrices_A_cc(our_level) = .FALSE.
+               end if
+            end if            
+            ! Did we create a coarse grid on this level
+            if (air_data%allocated_coarse_matrix(our_level)) then
+               call reset_inverse_mat(air_data%coarse_matrix(our_level))
+            end if
+
+            ! Destroy the reuse data if needed
+            if (.NOT. reuse) then
+               do i_loc = 1, size(air_data%reuse(our_level)%reuse_mat)
+                  if (air_data%reuse(our_level)%reuse_mat(i_loc) /= PETSC_NULL_MAT) then
+                     call MatDestroy(air_data%reuse(our_level)%reuse_mat(i_loc), ierr)
+                     air_data%reuse(our_level)%reuse_mat(i_loc) = PETSC_NULL_MAT
+                  end if
+               end do
+
+               do i_loc = 1, size(air_data%reuse(our_level)%reuse_is)
+                  if (air_data%reuse(our_level)%reuse_is(i_loc) /= PETSC_NULL_IS) then
+                     call ISDestroy(air_data%reuse(our_level)%reuse_is(i_loc), ierr)
+                     air_data%reuse(our_level)%reuse_is(i_loc) = PETSC_NULL_IS
+                  end if
+               end do
+            end if
+         end do
+
+         if (air_data%no_levels /= -1) then
+            ! We also build some things on the coarse grid that must be destroyed
+            call VecDestroy(air_data%temp_vecs_fine(1)%array(air_data%no_levels), ierr)
+            ! Coarse grid solver
+            if (.NOT. reuse) then
+               call reset_inverse_mat(air_data%inv_A_ff(air_data%no_levels))
+               if (allocated(air_data%inv_coarsest_poly_data%coefficients)) then
+                  deallocate(air_data%inv_coarsest_poly_data%coefficients)
+               end if         
+            end if
+            ! If we're not doing full smoothing, we have built a matshell on the top grid
+            ! we use in the fc smoothing that needs to be destroyed
+            if (.NOT. air_data%options%full_smoothing_up_and_down) then
+               call reset_inverse_mat(air_data%coarse_matrix(1))
+            end if
+         end if
+      end if 
+
+      ! Reset data
+      air_data%no_levels = -1
+      air_data%restrictor_nnzs      = 0
+      air_data%prolongator_nnzs     = 0
+      air_data%inv_A_ff_nnzs        = 0
+      air_data%A_fc_nnzs            = 0
+      air_data%A_ff_nnzs            = 0
+      air_data%A_cf_nnzs            = 0     
+      air_data%A_cc_nnzs            = 0       
+      air_data%inv_A_cc_nnzs        = 0  
+      air_data%coarse_matrix_nnzs   = 0   
+      air_data%allocated_coarse_matrix = .FALSE.       
+
+   end subroutine reset_air_data     
+
+   ! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine destroy_air_data(air_data)
+
+      ! Destroys the data structures for air
+
+      ! ~~~~~~
+      type(air_multigrid_data), intent(inout) :: air_data
+
+      integer :: our_level
+      MatType:: mat_type
+      type(mat_ctxtype), pointer :: mat_ctx
+      ! ~~~~~~    
+
+      call reset_air_data(air_data)
+
+      ! Now set the options back to the default
+      air_data%options%print_stats_timings = .FALSE.
+
+      air_data%options%max_levels = 300
+      air_data%options%processor_agglom = .TRUE.
+      air_data%options%processor_agglom_ratio = 2
+      air_data%options%processor_agglom_factor = 2
+      air_data%options%subcomm = .FALSE.
+
+      air_data%options%strong_threshold = 0.5
+      air_data%options%ddc_fraction = 0.1
+      air_data%options%cf_splitting_type = 0
+      air_data%options%max_luby_steps = 3
+
+      air_data%options%maxits_a_ff = 2
+      air_data%options%one_c_smooth = .FALSE.
+      air_data%options%matrix_free_polys = .FALSE.
+      air_data%options%one_point_classical_prolong = .TRUE.
+      air_data%options%full_smoothing_up_and_down = .FALSE.
+      air_data%options%symmetric = .FALSE.
+      air_data%options%constrain_w = .FALSE.
+      air_data%options%constrain_z = .FALSE.       
+
+      air_data%options%strong_r_threshold = 0.0
+
+      air_data%options%inverse_type = PFLAREINV_POWER
+
+      air_data%options%z_type = AIR_Z_PRODUCT
+
+      air_data%options%poly_order = 6
+      air_data%options%poly_sparsity_order = 1
+      
+      air_data%options%coarsest_inverse_type = PFLAREINV_POWER
+      air_data%options%coarsest_poly_order = 6
+      air_data%options%coarsest_poly_sparsity_order = 1
+      air_data%options%coarsest_matrix_free_polys = .FALSE.
+      air_data%options%coarsest_subcomm = .FALSE.
+
+      air_data%options%r_drop = 0.01
+      air_data%options%a_drop = 0.001
+      air_data%options%a_lump = .FALSE.    
+
+      air_data%options%reuse_sparsity = .FALSE.     
+      air_data%options%reuse_poly_coeffs = .FALSE.           
+
+      ! Use if this data structure is allocated to determine if we setup anything
+      if (allocated(air_data%allocated_matrices_A_ff)) then
+         
+         ! Deallocate the allocated structures
+         deallocate(air_data%IS_fine_index)
+         deallocate(air_data%IS_coarse_index) 
+
+         deallocate(air_data%restrictors)
+         deallocate(air_data%prolongators)  
+
+         deallocate(air_data%coarse_matrix)
+         deallocate(air_data%A_ff)
+         deallocate(air_data%inv_A_ff)
+         deallocate(air_data%inv_A_ff_poly_data)
+         deallocate(air_data%inv_A_ff_poly_data_dropped)         
+         deallocate(air_data%inv_A_cc)
+         deallocate(air_data%inv_A_cc_poly_data)
+         deallocate(air_data%A_fc)
+         deallocate(air_data%A_cf)
+         deallocate(air_data%A_cc) 
+
+         deallocate(air_data%allocated_matrices_A_ff)
+         deallocate(air_data%allocated_matrices_A_cc)      
+         deallocate(air_data%allocated_is)
+         deallocate(air_data%allocated_coarse_matrix)         
+    
+         deallocate(air_data%temp_vecs_fine(1)%array)
+         deallocate(air_data%temp_vecs_fine(2)%array)
+         deallocate(air_data%temp_vecs_fine(3)%array)
+         deallocate(air_data%temp_vecs_fine(4)%array)
+         deallocate(air_data%temp_vecs_coarse(1)%array)
+         deallocate(air_data%temp_vecs_coarse(2)%array)
+         deallocate(air_data%temp_vecs_coarse(3)%array)
+         deallocate(air_data%temp_vecs_coarse(4)%array)
+         
+         deallocate(air_data%reuse)
+         
+         ! Delete the nnzs
+         if (allocated(air_data%restrictor_nnzs)) deallocate(air_data%restrictor_nnzs)          
+         if (allocated(air_data%prolongator_nnzs)) deallocate(air_data%prolongator_nnzs)        
+         if (allocated(air_data%A_ff_nnzs)) deallocate(air_data%A_ff_nnzs) 
+         if (allocated(air_data%A_fc_nnzs)) deallocate(air_data%A_fc_nnzs) 
+         if (allocated(air_data%A_cf_nnzs)) deallocate(air_data%A_cf_nnzs) 
+         if (allocated(air_data%A_cc_nnzs)) deallocate(air_data%A_cc_nnzs) 
+         if (allocated(air_data%inv_A_ff_nnzs)) deallocate(air_data%inv_A_ff_nnzs)
+         if (allocated(air_data%inv_A_cc_nnzs)) deallocate(air_data%inv_A_cc_nnzs) 
+         if (allocated(air_data%coarse_matrix_nnzs)) deallocate(air_data%coarse_matrix_nnzs)         
+
+      end if 
+      
+      air_data%no_levels = -1
+
+   end subroutine destroy_air_data   
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+end module air_mg_setup
+

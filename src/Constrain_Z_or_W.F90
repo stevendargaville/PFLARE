@@ -1,0 +1,491 @@
+module constrain_z_or_w
+
+   use iso_c_binding
+   use petsc
+   use c_petsc_interfaces
+
+#include "petsc/finclude/petsc.h"
+
+   implicit none
+
+   public     
+   
+   contains
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine get_near_nullspace(input_mat, left, right, cst_nullspace, left_null_vecs, right_null_vecs)
+
+      ! Gets left and/or right near nullspace vectors set by the user with 
+      ! matsetnearnullspace
+      ! If cst_nullspace returns true, then the last vector in the left/right_null_vecs
+      ! needs to be destroyed once done, the rest should not be
+
+      ! ~~~~~~
+      type(tMat), intent(in)                                :: input_mat
+      logical, intent(in)                                   :: left, right
+      logical, intent(out)                                  :: cst_nullspace
+      type(tVec), dimension(:), allocatable, intent(inout)  :: left_null_vecs, right_null_vecs
+
+      integer :: comm_size, errorcode, i_loc, no_nullspace_vecs
+      MatNullSpace :: nullspace
+      PetscInt :: local_rows, global_rows, local_cols, global_cols
+      PetscErrorCode :: ierr
+      MPI_Comm :: MPI_COMM_MATRIX
+      PetscBool :: has_constant
+      PetscInt :: no_nullspace
+      ! Has to be big enough to hold all nullspace vectors, but there is no way to check 
+      ! how many have been set
+      type(tVec), dimension(20) :: null_vecs      
+
+      ! ~~~~~
+
+      ! Get the communicator the input matrix is on, we build everything on that
+      call PetscObjectGetComm(input_mat, MPI_COMM_MATRIX, ierr)      
+
+      ! Get the near nullspace if the user has set one 
+      call MatGetNearNullSpace(input_mat, nullspace, ierr)
+      ! If the user hasn't set a near nullspace and still wants constraints
+      ! we use the constant as a default
+      cst_nullspace = .FALSE.
+      no_nullspace_vecs = 0
+      no_nullspace = 0
+      if (nullspace == PETSC_NULL_MATNULLSPACE .AND. &
+            (left .OR. right)) then
+
+         cst_nullspace = .TRUE.
+         no_nullspace_vecs = 1
+         
+      ! If the user has provided a near null-space
+      else if (nullspace /= PETSC_NULL_MATNULLSPACE .AND. &
+                  (left .OR. right)) then     
+
+         ! Get the nullspace vectors
+         call MatNullSpaceGetVecs(nullspace, has_constant, no_nullspace, null_vecs, ierr)       
+         no_nullspace_vecs = no_nullspace
+         
+         ! If has_constant is true, then null_vecs won't contain the constant vector
+         ! but it is still part of the nullspace - we explicitly create it below
+         if (has_constant .eqv. PETSC_TRUE) then
+            cst_nullspace = .TRUE.
+            no_nullspace_vecs = no_nullspace_vecs + 1
+         end if
+      end if
+
+      ! Create some storage for all the near nullspace vectors
+      ! constant included
+      if (left) allocate(left_null_vecs(no_nullspace_vecs))
+      if (right) allocate(right_null_vecs(no_nullspace_vecs))
+      ! Copy over pointers to the user input vecs
+      do i_loc = 1, no_nullspace
+         if (left) left_null_vecs(i_loc) = null_vecs(i_loc)
+         if (right) right_null_vecs(i_loc) = null_vecs(i_loc)
+      end do
+
+      ! If we want to create a constant nullspace vector on the end of left_null_vecs or right_null_vecs
+      if (cst_nullspace) then      
+         call MatGetSize(input_mat, global_rows, global_cols, ierr)    
+         call MatGetLocalSize(input_mat, local_rows, local_cols, ierr)      
+
+         if (left) then
+            if (comm_size /= 1) then
+               call VecCreateMPI(MPI_COMM_MATRIX, local_rows, &
+                        global_rows, left_null_vecs(no_nullspace_vecs), ierr)                                                                                         
+            else
+               call VecCreateSeq(PETSC_COMM_SELF, local_rows, left_null_vecs(no_nullspace_vecs), ierr)          
+            end if     
+            ! Set to the constant     
+            call VecSet(left_null_vecs(no_nullspace_vecs), 1.0, ierr)
+         end if
+
+         if (right) then
+            if (comm_size /= 1) then
+               call VecCreateMPI(MPI_COMM_MATRIX, local_rows, &
+                        global_rows, right_null_vecs(no_nullspace_vecs), ierr)                                                                                         
+            else
+               call VecCreateSeq(PETSC_COMM_SELF, local_rows, right_null_vecs(no_nullspace_vecs), ierr)          
+            end if          
+            ! Set to the constant
+            call VecSet(right_null_vecs(no_nullspace_vecs), 1.0, ierr)
+         end if         
+      end if      
+      
+   end subroutine get_near_nullspace
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine smooth_near_nullspace(input_mat, left, right, left_null_vecs, right_null_vecs)
+
+      ! Smooths left and/or right near nullspace vectors
+
+      ! ~~~~~~
+      type(tMat), intent(in)                            :: input_mat
+      logical, intent(in)                               :: left, right
+      type(tVec), dimension(:), intent(inout)           :: left_null_vecs, right_null_vecs
+
+      integer :: comm_size, errorcode, i_loc
+      PetscInt :: local_rows, global_rows, local_cols, global_cols
+      PetscErrorCode :: ierr
+      MPI_Comm :: MPI_COMM_MATRIX
+      type(tVec) :: vec_rhs
+      type(tKSP) :: ksp
+      type(tPC) :: pc
+      PetscInt, parameter :: maxits=15
+
+      ! ~~~~~~
+      ! Just return if we don't want either left or right (or both)
+      if (.NOT. (left .OR. right)) then
+         return
+      end if
+
+      call PetscObjectGetComm(input_mat, MPI_COMM_MATRIX, ierr)    
+      ! Get the comm size 
+      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)
+      call MatGetSize(input_mat, global_rows, global_cols, ierr)    
+      call MatGetLocalSize(input_mat, local_rows, local_cols, ierr)
+      
+      ! Create the vecs
+      if (comm_size /= 1) then
+         call VecCreateMPI(MPI_COMM_MATRIX, local_rows, &
+                  global_rows, vec_rhs, ierr)                                                                                         
+      else
+         call VecCreateSeq(PETSC_COMM_SELF, local_rows, vec_rhs, ierr)          
+      end if 
+
+      ! ~~~~~~~~~~~~
+      ! Setup a petsc ksp to solve Ax = 0
+      ! ~~~~~~~~~~~~
+
+      ! We want the nullspace so solve homog problem
+      call VecSet(vec_rhs, 0.0, ierr)     
+
+      call KSPCreate(MPI_COMM_MATRIX, ksp, ierr)
+      !call KSPSetType(ksp, KSPGMRES, ierr)
+      call KSPSetType(ksp, KSPRICHARDSON, ierr)
+      ! Scale the richardson with a dampening parameter
+      call KSPRichardsonSetSelfScale(ksp, PETSC_TRUE, ierr)
+
+      call KSPGetPC(ksp, pc, ierr)
+      call PCSetType(pc, PCJACOBI, ierr)    
+      ! Use the L1 Jacobi
+      !call PCJacobiSetType(pc, 1, ierr)   
+
+      ! Do 15 iterations
+      call KSPSetTolerances(ksp, 1e-14, &
+               & 1e-50, &
+               & PETSC_DEFAULT_REAL, &
+               & maxits, ierr) 
+
+      call KSPSetOperators(ksp, input_mat, input_mat, ierr)             
+      !call KSPSetFromOptions(ksp_coarse_solver, ierr)    
+      call KSPSetInitialGuessNonzero(ksp, PETSC_TRUE, ierr)
+      call KSPSetNormType(ksp, KSP_NORM_NONE, ierr)
+      call KSPSetUp(ksp, ierr)    
+      
+      ! ~~~~~~~
+      ! Compute the left near nullspace vec
+      ! ~~~~~~~
+      if (left) then    
+         
+         ! Smooth each vector
+         do i_loc = 1, size(left_null_vecs)           
+
+            ! To get at the left near nullspace vectors we solve the transposed problem
+            call KSPSolveTranspose(ksp, vec_rhs, left_null_vecs(i_loc), ierr)
+
+         end do
+      end if
+
+      ! ~~~~~~~
+      ! Compute the right near nullspace vec
+      ! ~~~~~~~
+      if (right) then     
+         
+         ! Smooth each vector
+         do i_loc = 1, size(right_null_vecs)           
+
+            ! To get at the right near nullspace vectors we solve the untransposed problem
+            call KSPSolve(ksp, vec_rhs, right_null_vecs(i_loc), ierr)         
+         end do
+      end if      
+
+      call VecDestroy(vec_rhs, ierr)
+      call KSPDestroy(ksp, ierr)          
+      
+      
+   end subroutine smooth_near_nullspace
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine constrain_grid_transfer(z_or_w, is_z, null_vecs_f, null_vecs_c)
+
+      ! Applies constraints based on near nullspace vectors to Z or W passed in
+      ! For Z, we need to apply constraints to the columns, so is_z should be passed in true
+      ! so that we can take a transpose to make things easy
+      ! For W, we need to apply constraints to the rows
+
+      ! ~~~~~~
+      type(tMat), intent(inout)                         :: z_or_w
+      logical, intent(in)                               :: is_z
+      type(tVec), dimension(:), intent(inout)           :: null_vecs_f, null_vecs_c
+
+      ! Local variables
+      PetscInt :: local_rows, local_cols, global_row_start, global_row_end_plus_one, global_col_end_plus_one
+      PetscInt :: global_rows, global_cols, i_loc
+      PetscInt :: rows_ao, cols_ao, global_col_start, max_nnzs, ncols
+      PetscInt :: cols_ad, rows_ad, ncols_ad, ncols_ao, ncols_temp
+      integer :: errorcode, comm_size
+      PetscErrorCode :: ierr      
+      MPI_Comm :: MPI_COMM_MATRIX
+      type(tMat) :: row_mat
+      PetscInt, dimension(:), allocatable :: cols, col_indices_off_proc_array
+      real, dimension(:), allocatable :: vals, row_vals, sols, b_c_vals
+      logical :: approx_solve
+      type(tMat) :: new_z_or_w
+      real, dimension(:), pointer :: b_f_vals
+      real :: diff, dot
+      type(c_ptr) :: colmap_c_ptr, b_c_nonlocal_c_ptr
+      integer(c_long_long) :: A_array, vec_long
+      PetscInt, pointer :: colmap_c(:)
+      type(tMat) :: Ad, Ao
+      PetscOffset :: iicol
+      PetscInt :: icol(1)
+      real(c_double), pointer :: b_c_nonlocal(:), b_c_local(:)
+      PetscInt, parameter :: one = 1, zero = 0
+
+      ! ~~~~~~
+
+      call PetscObjectGetComm(z_or_w, MPI_COMM_MATRIX, ierr)    
+      ! Get the comm size 
+      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)
+
+      ! For now only allow the imposition of one vector of constraints
+      if (size(null_vecs_f) > 1 .OR. size(null_vecs_c) > 1) then
+         print *, "Fix me - more than one constraint vector provided"
+         call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
+      end if      
+
+      ! Have to do an explicit transpose if applying constraints to columns of Z
+      if (is_z) then
+         call MatTranspose(z_or_w, MAT_INITIAL_MATRIX, row_mat, ierr)
+      else
+         row_mat = z_or_w
+      end if
+
+      ! Duplicate the sparsity pattern for our new Z or W
+      call MatDuplicate(row_mat, MAT_COPY_VALUES, new_z_or_w, ierr)
+
+      ! We know we will never have non-zero locations outside of the sparsity power 
+      call MatSetOption(new_z_or_w, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_TRUE,  ierr)     
+      call MatSetOption(new_z_or_w, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr) 
+      ! We know we are only going to insert local vals
+      ! These options should turn off any reductions in the assembly
+      call MatSetOption(new_z_or_w, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)  
+      
+      ! ~~~~~~~~~
+
+      ! Get the local sizes
+      call MatGetLocalSize(row_mat, local_rows, local_cols, ierr)
+      call MatGetSize(row_mat, global_rows, global_cols, ierr)
+
+      max_nnzs = 0
+      ! Get the nnzs in row_mat
+      call MatGetOwnershipRange(row_mat, global_row_start, global_row_end_plus_one, ierr) 
+      call MatGetOwnershipRangeColumn(row_mat, global_col_start, global_col_end_plus_one, ierr)    
+      do i_loc = global_row_start, global_row_end_plus_one-1                  
+         call MatGetRow(row_mat, i_loc, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         if (ncols > max_nnzs) max_nnzs = ncols
+         call MatRestoreRow(row_mat, i_loc, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+      end do   
+
+      allocate(cols(max_nnzs))
+      allocate(vals(max_nnzs))
+
+      ! ~~~~~
+      ! What we are doing, with W for example:
+      ! The constraints we need to enforce are P B_c^R = B^R
+      ! ie preservation of the right near nullspace vectors
+      ! which given our ideal prolongator is equivalent to 
+      ! W B_c^R = B_f^R     - (1)
+      ! This is enforced by computing an orthgonal projector and just doing 
+      ! a one step method
+      ! W = W - (W * B_c^R - B_f^R ) * inv((B_c^R)^T * B_c^R) * (B_c^R)^T
+      ! which we can do one row at a time
+      ! See Eq 3.2 in Olson 2011 or 
+      ! filter_operators in utils.py in PyAMG
+      ! If we wanted we could modify this to be done iteratively like clAIR, but 
+      ! our approx Aff inverses are so good we don't really need to
+      ! If B is a vector of 1 for example, all the constraint does is scales by a row sum
+      ! We take a transpose of Z at the start so it is easy to access the columns
+      ! via the rows in petsc, we then just transpose at the end  
+      ! ~~~~~
+
+      ! ~~~~
+      ! Now for each row, we need to get the values of B_c for both the local and nonlocal col indices
+      ! The nonlocal col indices are colmap in petsc
+      ! We can do the comms for this once by using the VecScatter built into the mat
+      ! ~~~~
+
+      ! Nonlocal if needed
+      if (comm_size /= 1) then
+
+         ! Much more annoying in older petsc
+         call MatMPIAIJGetSeqAIJ(row_mat, Ad, Ao, icol, iicol, ierr)
+         call MatGetSize(Ad, rows_ad, cols_ad, ierr)             
+         ! We know the col size of Ao is the size of colmap, the number of non-zero offprocessor columns
+         call MatGetSize(Ao, rows_ao, cols_ao, ierr)         
+
+         ! For the column indices we need to take all the columns of row_mat
+         A_array = row_mat%v
+         call get_colmap_c(A_array, colmap_c_ptr)
+         call c_f_pointer(colmap_c_ptr, colmap_c, shape=[cols_ao])
+         
+         ! We want the nonlocal values in B_c
+         vec_long = null_vecs_c(1)%v
+
+         ! Do the comms
+         ! Have to call restore after we're done with lvec (ie null_vecs_c(1))
+         call vecscatter_mat_begin_c(A_array, vec_long, b_c_nonlocal_c_ptr)
+         call vecscatter_mat_end_c(A_array, vec_long, b_c_nonlocal_c_ptr)
+         ! Nonlocal vals only pointer
+         ! b_c_nonlocal now contains all the nonlocal values of B_c we need for all the nonlocal columns
+         ! in every local row
+         call c_f_pointer(b_c_nonlocal_c_ptr, b_c_nonlocal, shape=[cols_ao])
+         
+      ! In serial this is simple
+      else
+
+         Ad = row_mat
+
+      end if
+
+      ! Now go through each of the rows
+      ! GetRow has to happen over the global indices
+      do i_loc = global_row_start, global_row_end_plus_one-1                  
+
+         ! Get how many non-zero columsn we have for this row
+         ! Convenience given we are going to interact with Ad and Ao separately
+         call MatGetRow(row_mat, i_loc, ncols_temp, &
+                  cols, PETSC_NULL_SCALAR, ierr) 
+         ncols = ncols_temp
+         ! We're done with this row
+         call MatRestoreRow(row_mat, i_loc, ncols_temp, &
+            cols, PETSC_NULL_SCALAR, ierr)                   
+
+         ! This is the rhs
+         allocate(row_vals(ncols))
+         allocate(b_c_vals(ncols))
+         ! This stores the global indices, with local indices first then global
+         allocate(col_indices_off_proc_array(ncols))
+
+         ! ~~~~~~~~~~~
+         ! Let's pull out existing entries in W and the coarse nullspace components
+         ! We have the local values first then the nonlocal
+         ! This is so the ordering is easy with colmap and b_c_nonlocal above
+         ! ~~~~~~~~~~~
+         ! We do the local values first - remember Ad and Ao need sequential indices
+         call MatGetRow(Ad, i_loc - global_row_start, ncols_temp, &
+                  cols, vals, ierr) 
+         ncols_ad = ncols_temp
+
+         ! this is the local values of W
+         row_vals(1:ncols_ad) = vals(1:ncols_ad) 
+         ! Global indices of our local cols - be careful here to use col_start not row_start
+         col_indices_off_proc_array(1:ncols_ad) = cols(1:ncols_ad) + global_col_start
+
+         ! Get the local b_c values
+         call VecGetArrayF90(null_vecs_c(1), b_c_local, ierr)
+         ! cols are local indices
+         b_c_vals(1:ncols_ad) = b_c_local(cols(1:ncols_ad)+1)
+         call VecRestoreArrayF90(null_vecs_c(1), b_c_local, ierr)
+
+         call MatRestoreRow(Ad, i_loc - global_row_start, ncols_temp, &
+                  cols, vals, ierr) 
+
+         ! ~~~~~~~~~
+         ! Nonlocal if needed
+         if (comm_size /= 1) then
+
+            ! Now the nonlocal
+            call MatGetRow(Ao, i_loc - global_row_start, ncols_temp, &
+                     cols, vals, ierr) 
+            
+            ncols_ao = ncols_temp
+            ! this is the nonlocal values of W
+            ! after the local values in row_vals
+            row_vals(ncols_ad+1:ncols_ad + ncols_ao) = vals(1:ncols_ao) 
+            ! Global indices of our nonlocal cols
+            col_indices_off_proc_array(ncols_ad+1:ncols_ad + ncols_ao) = colmap_c(cols(1:ncols_ao)+1) 
+
+            ! Get the nonlocal b_c values
+            ! Remembering cols are the local indices into colmap (or equivalently b_c_nonlocal)
+            b_c_vals(ncols_ad+1:ncols_ad + ncols_ao) =  b_c_nonlocal(cols(1:ncols_ao)+1) 
+
+            call MatRestoreRow(Ao, i_loc - global_row_start, ncols_temp, &
+                     cols, vals, ierr)  
+                     
+         end if
+
+         ! ~~~~~~~~~
+         ! Now we pull out the fine near nullspace component
+         ! We are then going to compute the residual for this row
+         ! ie W B_c^R - B_f^R
+         ! For more than one constraint vector this needs to be modified
+         ! We don't have scalar inv((B_c^R)^T * B_c^R) and we need a pseudo-inverse         
+         ! ~~~~~~~~~
+         ! row_vals has the local and non-local values of W for this row
+         ! and b_c_vals has the local and nonlocal values of B_c
+         diff = dot_product(row_vals, b_c_vals)
+
+         call VecGetArrayF90(null_vecs_f(1), b_f_vals, ierr)
+         ! b_f_vals is local (we want b_f for this row) but so is the value we want
+         diff = diff - b_f_vals(i_loc - global_row_start + 1)    
+         call VecRestoreArrayF90(null_vecs_f(1), b_f_vals, ierr)
+
+         ! Now let's compute inv((B_c^R)^T * B_c^R)
+         dot = dot_product(b_c_vals, b_c_vals)
+         ! Then multiply the inverse of this by b_c_vals and include in diff
+         ! to give -(W * B_c^R - B_f^R ) * inv((B_c^R)^T * B_c^R) * (B_c^R)^T
+         b_c_vals = -diff * b_c_vals / dot
+
+         ! ~~~~~~~~~~~~~
+         ! Set all the row values, same sparsity pattern
+         ! ~~~~~~~~~~~~~
+         call MatSetValues(new_z_or_w, one, i_loc, ncols, col_indices_off_proc_array(1:ncols), b_c_vals, ADD_VALUES, ierr)            
+         deallocate(row_vals, col_indices_off_proc_array, b_c_vals)
+
+      end do
+
+      call MatAssemblyBegin(new_z_or_w, MAT_FINAL_ASSEMBLY, ierr)
+      call MatAssemblyEnd(new_z_or_w, MAT_FINAL_ASSEMBLY, ierr)     
+      
+      ! Don't forget to restore
+      if (comm_size /= 1) then
+         call vecscatter_mat_restore_c(A_array, b_c_nonlocal_c_ptr)
+      end if
+
+      deallocate(cols, vals)
+      ! Destroy the old input matrix
+      call MatDestroy(z_or_w, ierr)      
+
+      if (is_z) then
+         ! Destroy the transposed original matrix 
+         call MatDestroy(row_mat, ierr)
+         ! Now go and transpose the new one back to the original sizes
+         call MatTranspose(new_z_or_w, MAT_INITIAL_MATRIX, row_mat, ierr)
+         ! And set the output to the newly constrained mat
+         z_or_w = row_mat
+         call MatDestroy(new_z_or_w, ierr)
+
+      else
+         ! And set the output to the newly constrained mat
+         z_or_w = new_z_or_w
+      end if
+
+
+   end subroutine constrain_grid_transfer
+
+   ! -------------------------------------------------------------------------------------------------------------------------------
+
+end module constrain_z_or_w
+
