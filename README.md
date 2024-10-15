@@ -3,7 +3,7 @@
 # PFLARE library
 ### Author: Steven Dargaville
 
-This library contains methods which can be used to solve linear systems in parallel with PETSc, featuring interfaces in C/Fortran/Python.
+This library contains methods which can be used to solve linear systems in parallel with PETSc, with interfaces in C/Fortran/Python.
    
 PFLARE can be used on problems with structured or unstructured grids and does not rely on Gauss-Seidel methods. PFLARE can scalably solve:
 1) Hyperbolic problems such as time independent advection equations.
