@@ -37,13 +37,13 @@ RUN git clone --depth=1 --branch=$PETSC_GIT_BRANCH https://gitlab.com/petsc/pets
 # If you want to debug inside the container
 # RUN apt-get install -y valgrind 
 
-# put git clone of PFLARE here
-#RUN cd PFLARE && make && make tests && make python && make tests_python
+# Clone PFLARE and run all the tests
+RUN git clone https://github.com/stevendargaville/PFLARE.git
+RUN cd PFLARE && make && make tests && make python && make tests_python
 
 RUN useradd -ms /bin/bash pflare
 USER pflare
-WORKDIR /home
-#WORKDIR /home/pflare
+WORKDIR /home/pflare
 
 LABEL maintainer='Steven Dargaville'
 LABEL description='PFLARE'
