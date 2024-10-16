@@ -27,8 +27,15 @@ module tsqr
       real, dimension(:), allocatable  :: R_buffer_send, R_buffer_receive
       ! In case this comms request is done on a matrix on a subcomm, we 
       ! need to keep a pointer to it
-      type(tMat)                       :: matrix = PETSC_NULL_MAT
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
+      type(tMat)                       :: matrix=PETSC_NULL_MAT
+#else
+      type(tMat)                       :: matrix
+#endif      
+      ! Has the user asked us to be on a subcomm
       logical                          :: subcomm = .FALSE.
+      ! Did we actually end up on a subcomm
+      logical                          :: on_subcomm = .FALSE.
       integer                          :: number_splits = 1
    end type tsqr_buffers   
 
@@ -236,7 +243,7 @@ module tsqr
                   reduction_op_tsqr, MPI_COMM_MATRIX, buffers%request, errorcode)
          if (errorcode /= MPI_SUCCESS) then
             print *, "MPI_IAllreduce failed"
-            call MPI_Abort(MPI_COMM_MATRIX, MPI_ERR_OTHER, errorcode)
+            call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
          end if 
 
          ! ~~~~~

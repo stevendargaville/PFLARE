@@ -6,6 +6,8 @@ module aggregation
 
    implicit none
 
+#include "petsc_legacy.h"
+
    public   
    
    contains
@@ -75,10 +77,10 @@ module aggregation
       ! Add the number of connections in S to the randomly seeded measure
       max_nnzs = 0
       do ifree = a_global_row_start, a_global_row_end_plus_one-1                  
-         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          measure(ifree - a_global_row_start + 1) = measure(ifree - a_global_row_start + 1) + real(ncols)
          if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
       end do        
 
       allocate(cols(max_nnzs))    
@@ -96,12 +98,12 @@ module aggregation
       do ifree = local_rows, 1, -1
 
          ! Get S_i
-         call MatGetRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR, ierr)
+         call MatGetRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
          ! Store the distance 1 neighbours
          ncols_store = ncols
          allocate(neighbours(ncols_store))
          neighbours = cols(1:ncols)
-         call MatRestoreRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR, ierr)
+         call MatRestoreRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
 
          if (ncols_store == 0) then
 
@@ -151,12 +153,12 @@ module aggregation
          if (cf_markers(indices(ifree)) /= 0) cycle
 
          ! Get S_i
-         call MatGetRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR, ierr)
+         call MatGetRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
          ! Store the distance 1 neighbours
          ncols_store = ncols
          allocate(neighbours(ncols_store))
          neighbours = cols(1:ncols)
-         call MatRestoreRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR, ierr)
+         call MatRestoreRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
 
          max_neighbour_index = -1
          max_neighbour_value = 0
@@ -220,12 +222,12 @@ module aggregation
          if (cf_markers(indices(ifree)) /= 0) cycle
 
          ! Get S_i
-         call MatGetRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR, ierr)
+         call MatGetRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
          ! Store the distance 1 neighbours
          ncols_store = ncols
          allocate(neighbours(ncols_store))
          neighbours = cols(1:ncols)
-         call MatRestoreRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR, ierr)
+         call MatRestoreRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
 
          ! This is the root node
          cf_markers(indices(ifree)) = 1

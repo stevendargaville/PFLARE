@@ -8,6 +8,8 @@ module constrain_z_or_w
 
    implicit none
 
+#include "petsc_legacy.h"
+
    public     
    
    contains
@@ -50,15 +52,15 @@ module constrain_z_or_w
       cst_nullspace = .FALSE.
       no_nullspace_vecs = 0
       no_nullspace = 0
-      if (nullspace == PETSC_NULL_MATNULLSPACE .AND. &
+      if (PetscNullspaceIsNull(nullspace) .AND. &
             (left .OR. right)) then
 
          cst_nullspace = .TRUE.
          no_nullspace_vecs = 1
          
       ! If the user has provided a near null-space
-      else if (nullspace /= PETSC_NULL_MATNULLSPACE .AND. &
-                  (left .OR. right)) then     
+      else if (.NOT. PetscNullspaceIsNull(nullspace) .AND. &
+                  (left .OR. right)) then    
 
          ! Get the nullspace vectors
          call MatNullSpaceGetVecs(nullspace, has_constant, no_nullspace, null_vecs, ierr)       
@@ -293,9 +295,9 @@ module constrain_z_or_w
       call MatGetOwnershipRange(row_mat, global_row_start, global_row_end_plus_one, ierr) 
       call MatGetOwnershipRangeColumn(row_mat, global_col_start, global_col_end_plus_one, ierr)    
       do i_loc = global_row_start, global_row_end_plus_one-1                  
-         call MatGetRow(row_mat, i_loc, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatGetRow(row_mat, i_loc, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(row_mat, i_loc, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatRestoreRow(row_mat, i_loc, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
       end do   
 
       allocate(cols(max_nnzs))
@@ -366,11 +368,11 @@ module constrain_z_or_w
          ! Get how many non-zero columsn we have for this row
          ! Convenience given we are going to interact with Ad and Ao separately
          call MatGetRow(row_mat, i_loc, ncols_temp, &
-                  cols, PETSC_NULL_SCALAR, ierr) 
+                  cols, PETSC_NULL_SCALAR_ARRAY, ierr) 
          ncols = ncols_temp
          ! We're done with this row
          call MatRestoreRow(row_mat, i_loc, ncols_temp, &
-            cols, PETSC_NULL_SCALAR, ierr)                   
+            cols, PETSC_NULL_SCALAR_ARRAY, ierr)                   
 
          ! This is the rhs
          allocate(row_vals(ncols))
@@ -451,7 +453,7 @@ module constrain_z_or_w
          ! ~~~~~~~~~~~~~
          ! Set all the row values, same sparsity pattern
          ! ~~~~~~~~~~~~~
-         call MatSetValues(new_z_or_w, one, i_loc, ncols, col_indices_off_proc_array(1:ncols), b_c_vals, ADD_VALUES, ierr)            
+         call MatSetValues(new_z_or_w, one, [i_loc], ncols, col_indices_off_proc_array(1:ncols), b_c_vals, ADD_VALUES, ierr)            
          deallocate(row_vals, col_indices_off_proc_array, b_c_vals)
 
       end do

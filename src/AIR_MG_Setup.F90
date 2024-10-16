@@ -12,6 +12,8 @@ module air_mg_setup
       
    implicit none
 
+#include "petsc_legacy.h"   
+
    public
 
    contains
@@ -60,7 +62,9 @@ module air_mg_setup
 
          ! Copy the original pointer
          air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP) = air_data%A_ff(our_level)
-
+         ! Increase the reference counter
+         call PetscObjectReference(air_data%A_ff(our_level), ierr) 
+         
       ! If we're dropping
       else
 
@@ -69,7 +73,7 @@ module air_mg_setup
          ! If we want to reuse, we have to match the original sparsity
          ! which might be different if the matrix has changed (but the sparsity is the same)
          ! so we can't just drop with a drop tolerance         
-         if (air_data%reuse(our_level)%reuse_mat(MAT_A_DROP) /= PETSC_NULL_MAT) then
+         if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_A_DROP))) then
 
             call remove_from_sparse_match_no_lump(input_mat, air_data%reuse(our_level)%reuse_mat(MAT_A_DROP))     
 
@@ -87,7 +91,7 @@ module air_mg_setup
          call timer_start(TIMER_ID_AIR_EXTRACT)             
 
          ! Pull out A_ff
-         if (air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP) /= PETSC_NULL_MAT) then
+         if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP))) then
             call MatCreateSubMatrix(air_data%reuse(our_level)%reuse_mat(MAT_A_DROP), &
                         air_data%IS_fine_index(our_level), air_data%IS_fine_index(our_level), MAT_REUSE_MATRIX, &
                         air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP), ierr)              
@@ -115,7 +119,7 @@ module air_mg_setup
 
       ! Compute the inverse for smoothing
       ! If we are re-using the polynomial coefficients then we don't have to do this
-      if (.NOT. (air_data%inv_A_ff(our_level) /= PETSC_NULL_MAT .AND. air_data%options%reuse_poly_coeffs)) then
+      if (.NOT. (.NOT. PetscMatIsNull(air_data%inv_A_ff(our_level)) .AND. air_data%options%reuse_poly_coeffs)) then
          call start_approximate_inverse(smoothing_mat, &
                   air_data%options%inverse_type, air_data%inv_A_ff_poly_data(our_level)%gmres_poly_order, &
                   air_data%inv_A_ff_poly_data(our_level)%buffers, air_data%inv_A_ff_poly_data(our_level)%coefficients)        
@@ -127,7 +131,7 @@ module air_mg_setup
       if (air_data%options%z_type == AIR_Z_PRODUCT .AND. &
                (air_data%options%strong_r_threshold /= 0.0 .OR. air_data%options%full_smoothing_up_and_down)) then
 
-         if (.NOT. (air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP) /= PETSC_NULL_MAT .AND. air_data%options%reuse_poly_coeffs)) then
+         if (.NOT. (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP)) .AND. air_data%options%reuse_poly_coeffs)) then
             call start_approximate_inverse(air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP), &
                   air_data%options%inverse_type, air_data%inv_A_ff_poly_data_dropped(our_level)%gmres_poly_order, &
                   air_data%inv_A_ff_poly_data_dropped(our_level)%buffers, air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients)          
@@ -154,7 +158,7 @@ module air_mg_setup
          call timer_start(TIMER_ID_AIR_INVERSE)    
 
          ! Compute the inverse for smoothing
-         if (.NOT. (air_data%inv_A_cc(our_level) /= PETSC_NULL_MAT .AND. air_data%options%reuse_poly_coeffs)) then
+         if (.NOT. (.NOT. PetscMatIsNull(air_data%inv_A_cc(our_level)) .AND. air_data%options%reuse_poly_coeffs)) then
             call start_approximate_inverse(air_data%A_cc(our_level), &
                   air_data%options%inverse_type, air_data%inv_A_cc_poly_data(our_level)%gmres_poly_order, &
                   air_data%inv_A_cc_poly_data(our_level)%buffers, air_data%inv_A_cc_poly_data(our_level)%coefficients)  
@@ -194,14 +198,18 @@ module air_mg_setup
 
          ! Copy the original pointer
          air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP) = air_data%A_cf(our_level)
+         ! Increase the reference counter
+         call PetscObjectReference(air_data%A_cf(our_level), ierr)
          air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP) = air_data%A_fc(our_level)
+         ! Increase the reference counter
+         call PetscObjectReference(air_data%A_fc(our_level), ierr)        
          
       else
 
          call timer_start(TIMER_ID_AIR_EXTRACT)        
          
          ! Drop the entries from A_cf
-         if (air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP) /= PETSC_NULL_MAT) then
+         if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP))) then
             call MatCreateSubMatrix(air_data%reuse(our_level)%reuse_mat(MAT_A_DROP), &
                         air_data%IS_coarse_index(our_level), air_data%IS_fine_index(our_level), MAT_REUSE_MATRIX, &
                         air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP), ierr)              
@@ -214,7 +222,7 @@ module air_mg_setup
 
          if (.NOT. air_data%options%one_point_classical_prolong) then
             ! Drop the entries from A_fc
-            if (air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP) /= PETSC_NULL_MAT) then
+            if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP))) then
                call MatCreateSubMatrix(air_data%reuse(our_level)%reuse_mat(MAT_A_DROP), &
                         air_data%IS_fine_index(our_level), air_data%IS_coarse_index(our_level), MAT_REUSE_MATRIX, &
                         air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP), ierr)
@@ -231,7 +239,9 @@ module air_mg_setup
       ! Delete temporary if not reusing
       if (.NOT. air_data%options%reuse_sparsity) then
          call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_A_DROP), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
          air_data%reuse(our_level)%reuse_mat(MAT_A_DROP) = PETSC_NULL_MAT
+#endif
       end if
                         
    end subroutine get_submatrices_start_poly_coeff_comms 
@@ -294,7 +304,7 @@ module air_mg_setup
          ! If we want to reuse, we have to match the original sparsity
          ! which might be different if the matrix has changed (but the sparsity is the same)
          ! so we can't just drop with a drop tolerance
-         if (air_data%reuse(our_level)%reuse_mat(MAT_W_DROP) /= PETSC_NULL_MAT) then
+         if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_W_DROP))) then
 
             ! The one point classical prolongator will never change if 
             ! we are reusing
@@ -336,7 +346,9 @@ module air_mg_setup
       ! Delete temporary if not reusing
       if (.NOT. air_data%options%reuse_sparsity) then
          call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
          air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF) = PETSC_NULL_MAT
+#endif
       end if              
       
       destroy_mat = .FALSE.
@@ -348,7 +360,9 @@ module air_mg_setup
          ! then we have also started an inverse for dropped A_ff, let's finish it
          if (air_data%options%strong_r_threshold /= 0.0 .OR. air_data%options%full_smoothing_up_and_down) then
 
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
             inv_dropped_Aff = PETSC_NULL_MAT
+#endif
             ! Now we always build an assembled inv_A_ff here as we need it, hence the .false. 
             ! given to matrix_free_polys
             ! If we aren't doing matrix-free smooths, then we keep the assembled inv_A_ff
@@ -361,7 +375,9 @@ module air_mg_setup
             ! Delete temporary if not reusing
             if (.NOT. air_data%options%reuse_sparsity) then
                call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF_DROPPED), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
                air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF_DROPPED) = PETSC_NULL_MAT
+#endif               
             end if             
 
          ! If we have a strong R tolerance of 0, we can re-use the 
@@ -373,8 +389,9 @@ module air_mg_setup
             ! We can just re-call finish_approximate_inverse, as the requests will have been resolved 
             ! and hence it will just build an assembled version, which we store in inv_dropped_Aff
             if (air_data%options%matrix_free_polys) then
-               
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)                     
                inv_dropped_Aff = PETSC_NULL_MAT
+#endif               
                ! Making sure to give it the non dropped A_ff here
                call finish_approximate_inverse(air_data%A_ff(our_level), air_data%options%inverse_type, &
                         air_data%inv_A_ff_poly_data(our_level)%gmres_poly_order, air_data%inv_A_ff_poly_data(our_level)%gmres_poly_sparsity_order, &
@@ -385,7 +402,9 @@ module air_mg_setup
                ! Delete temporary if not reusing
                if (.NOT. air_data%options%reuse_sparsity) then
                   call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF_DROPPED), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
                   air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF_DROPPED) = PETSC_NULL_MAT
+#endif                  
                end if               
 
             ! Just re-use the already assembled one            
@@ -400,7 +419,9 @@ module air_mg_setup
 
          if (destroy_mat) then
             call MatDestroy(inv_dropped_Aff, ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
             inv_dropped_Aff = PETSC_NULL_MAT
+#endif            
          end if
       end if
 
@@ -470,7 +491,7 @@ module air_mg_setup
          if (.NOT. air_data%options%one_point_classical_prolong) then
 
             ! Do the multiplication
-            if (air_data%reuse(our_level)%reuse_mat(MAT_W) /= PETSC_NULL_MAT) then
+            if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_W))) then
                call MatMatMult(minus_mat, air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP), &
                         MAT_REUSE_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_W), ierr)
             else
@@ -483,7 +504,7 @@ module air_mg_setup
             ! If we want to reuse, we have to match the original sparsity
             ! which might be different if the matrix has changed (but the sparsity is the same)
             ! so we can't just drop with a drop tolerance
-            if (air_data%reuse(our_level)%reuse_mat(MAT_W_DROP) /= PETSC_NULL_MAT) then
+            if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_W_DROP))) then
    
                call remove_from_sparse_match_no_lump(air_data%reuse(our_level)%reuse_mat(MAT_W), air_data%reuse(our_level)%reuse_mat(MAT_W_DROP))  
                
@@ -497,7 +518,9 @@ module air_mg_setup
             ! Delete temporary if not reusing
             if (.NOT. air_data%options%reuse_sparsity) then
                call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_W), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
                air_data%reuse(our_level)%reuse_mat(MAT_W) = PETSC_NULL_MAT
+#endif               
             end if            
 
             call timer_finish(TIMER_ID_AIR_DROP)                    
@@ -534,7 +557,7 @@ module air_mg_setup
 
          ! If we are doing reuse and processor agglomeration on this level, 
          ! then we can't reuse the sparsity of R or P as it gets repartitioned during the setup               
-         if (air_data%allocated_matrices_A_ff(our_level) .AND. air_data%reuse(our_level)%reuse_is(IS_REPARTITION) /= PETSC_NULL_IS) then
+         if (air_data%allocated_matrices_A_ff(our_level) .AND. .NOT. PetscISIsNull(air_data%reuse(our_level)%reuse_is(IS_REPARTITION))) then
             ! Destroy the grid transfer operators and rebuild them
             call MatDestroy(air_data%restrictors(our_level), ierr)
             if (.NOT. reuse_one_point_classical) call MatDestroy(air_data%prolongators(our_level), ierr)
@@ -554,7 +577,9 @@ module air_mg_setup
          ! Delete temporary if not reusing
          if (.NOT. air_data%options%reuse_sparsity) then
             call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_W_DROP), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
             air_data%reuse(our_level)%reuse_mat(MAT_W_DROP) = PETSC_NULL_MAT
+#endif            
          end if          
 
          call timer_finish(TIMER_ID_AIR_PROLONG)   
@@ -590,7 +615,7 @@ module air_mg_setup
          else
 
             ! If we are doing reuse, we already know the sparsity we want
-            if (air_data%reuse(our_level)%reuse_mat(MAT_Z) /= PETSC_NULL_MAT) then
+            if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_Z))) then
 
                ! We should just be able to use the pointer to air_data%reuse(our_level)%reuse_mat(MAT_Z)
                ! as sparsity_mat_cf, but it gives me errors about unassembled matrices
@@ -651,7 +676,9 @@ module air_mg_setup
          ! Delete temporary if not reusing
          if (.NOT. air_data%options%reuse_sparsity) then
             call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_SAI_SUB), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
             air_data%reuse(our_level)%reuse_mat(MAT_SAI_SUB) = PETSC_NULL_MAT
+#endif            
          end if 
          if (distance .ge. 2) then
             call MatDestroy(sparsity_mat_cf, ierr)        
@@ -659,7 +686,7 @@ module air_mg_setup
 
       ! For AIRG - we do a matmatmult with our approximate A_ff inverse
       else         
-         if (air_data%reuse(our_level)%reuse_mat(MAT_Z) /= PETSC_NULL_MAT) then
+         if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_Z))) then
             call MatMatMult(air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP), minus_mat, &
                   MAT_REUSE_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_Z), ierr)            
          else
@@ -668,20 +695,30 @@ module air_mg_setup
          end if
       end if
 
-      ! Delete temporary if not reusing
-      if (air_data%options%strong_r_threshold /= 0.0 .AND. .NOT. air_data%options%reuse_sparsity) then
-         call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP), ierr)         
+      ! Destroy the copies, this only decrements the reference counter
+      if (air_data%options%strong_r_threshold == 0.0) then
+         call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP), ierr)      
          call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP), ierr)
-         if (.NOT. air_data%options%one_point_classical_prolong) then
-            call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP), ierr)
-         end if
-      end if
-      ! If strong_r_threshold is zero, these are just pointers to existing matrices
-      ! so we also have to reset them
-      if (.NOT. air_data%options%reuse_sparsity) then
+         call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP), ierr)         
+
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
          air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP) = PETSC_NULL_MAT
          air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP) = PETSC_NULL_MAT
          air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP) = PETSC_NULL_MAT
+#endif         
+      end if
+
+      ! Delete temporaries if not reusing
+      if (.NOT. air_data%options%reuse_sparsity) then
+         call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP), ierr)      
+         call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP), ierr)
+         call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP), ierr)
+
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
+         air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP) = PETSC_NULL_MAT
+         air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP) = PETSC_NULL_MAT
+         air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP) = PETSC_NULL_MAT
+#endif
       end if        
       
       ! ~~~~~~~~~~~~
@@ -692,7 +729,7 @@ module air_mg_setup
       ! If we want to reuse, we have to match the original sparsity
       ! which might be different if the matrix has changed (but the sparsity is the same)
       ! so we can't just drop with a drop tolerance
-      if (air_data%reuse(our_level)%reuse_mat(MAT_Z_DROP) /= PETSC_NULL_MAT) then
+      if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_Z_DROP))) then
 
          call remove_from_sparse_match_no_lump(air_data%reuse(our_level)%reuse_mat(MAT_Z), &
                   air_data%reuse(our_level)%reuse_mat(MAT_Z_DROP))     
@@ -708,7 +745,9 @@ module air_mg_setup
       ! Delete temporary if not reusing
       if (.NOT. air_data%options%reuse_sparsity) then
          call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_Z), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
          air_data%reuse(our_level)%reuse_mat(MAT_Z) = PETSC_NULL_MAT
+#endif         
       end if       
       if (air_data%options%z_type == AIR_Z_PRODUCT) then
          call MatDestroy(minus_mat, ierr)
@@ -747,16 +786,22 @@ module air_mg_setup
       ! Delete temporary if not reusing
       if (.NOT. air_data%options%reuse_sparsity) then
          call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_Z_DROP), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
          air_data%reuse(our_level)%reuse_mat(MAT_Z_DROP) = PETSC_NULL_MAT
+#endif         
 
          call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_R_Z_COLS), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)         
          air_data%reuse(our_level)%reuse_is(IS_R_Z_COLS) = PETSC_NULL_IS
+#endif
       end if      
       
       ! Delete temporary if not reusing
       if (.NOT. air_data%options%one_c_smooth .AND. .NOT. air_data%options%reuse_sparsity) then      
          call MatDestroy(air_data%A_cf(our_level), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
          air_data%A_cf(our_level) = PETSC_NULL_MAT
+#endif         
       end if
             
       ! Transpose the restrictor if needed
@@ -783,7 +828,9 @@ module air_mg_setup
          ! Delete temporary if not reusing
          if (.NOT. air_data%options%reuse_sparsity) then
             call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_INV_ACC), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
             air_data%reuse(our_level)%reuse_mat(MAT_INV_ACC) = PETSC_NULL_MAT
+#endif            
          end if         
 
       end if
@@ -822,7 +869,7 @@ module air_mg_setup
       if (air_data%options%symmetric) then  
 
          ! If we've done this before we can reuse
-         if (air_data%reuse(our_level)%reuse_mat(MAT_RAP) /= PETSC_NULL_MAT) then
+         if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_RAP))) then
 
             call MatPtap(A, air_data%prolongators(our_level), &
                      MAT_REUSE_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_RAP), ierr)             
@@ -840,7 +887,7 @@ module air_mg_setup
       else
 
          ! If we've done this before we can reuse
-         if (air_data%reuse(our_level)%reuse_mat(MAT_AP) /= PETSC_NULL_MAT) then
+         if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_AP))) then
 
             call MatMatMult(A, air_data%prolongators(our_level), &
                      MAT_REUSE_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_AP), ierr)     
@@ -861,7 +908,9 @@ module air_mg_setup
          ! Delete temporary if not reusing
          if (.NOT. air_data%options%reuse_sparsity) then
             call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_AP), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
             air_data%reuse(our_level)%reuse_mat(MAT_AP) = PETSC_NULL_MAT
+#endif            
          end if          
       end if
 
@@ -873,7 +922,7 @@ module air_mg_setup
       ! If we want to reuse, we have to match the original sparsity
       ! which might be different if the matrix has changed (but the sparsity is the same)
       ! so we can't just drop with a drop tolerance
-      if (air_data%reuse(our_level)%reuse_mat(MAT_RAP_DROP) /= PETSC_NULL_MAT) then
+      if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_RAP_DROP))) then
 
          call remove_from_sparse_match(air_data%reuse(our_level)%reuse_mat(MAT_RAP), &
                   air_data%reuse(our_level)%reuse_mat(MAT_RAP_DROP), coarse_matrix, &
@@ -891,10 +940,12 @@ module air_mg_setup
       ! Delete temporary if not reusing
       if (.NOT. air_data%options%reuse_sparsity) then
          call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_RAP), ierr)
-         air_data%reuse(our_level)%reuse_mat(MAT_RAP) = PETSC_NULL_MAT
-
          call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_RAP_DROP), ierr)
+
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
+         air_data%reuse(our_level)%reuse_mat(MAT_RAP) = PETSC_NULL_MAT
          air_data%reuse(our_level)%reuse_mat(MAT_RAP_DROP) = PETSC_NULL_MAT
+#endif
       end if       
 
       call timer_finish(TIMER_ID_AIR_DROP)    
@@ -1280,10 +1331,12 @@ module air_mg_setup
          ! ~~~~~~~~~
          call timer_start(TIMER_ID_AIR_CONSTRAIN)
 
-         call smooth_near_nullspace(air_data%coarse_matrix(our_level), &
-            air_data%options%constrain_z, &
-            air_data%options%constrain_w, &
-            left_null_vecs, right_null_vecs)
+         if (air_data%options%constrain_z .OR. air_data%options%constrain_w) then
+            call smooth_near_nullspace(air_data%coarse_matrix(our_level), &
+               air_data%options%constrain_z, &
+               air_data%options%constrain_w, &
+               left_null_vecs, right_null_vecs)
+         end if
 
          call timer_finish(TIMER_ID_AIR_CONSTRAIN)
 
@@ -1393,7 +1446,7 @@ module air_mg_setup
 
                ! If we are reusing and we know we have to repartition this level, or 
                ! if we get a local to off-processor ratio of less than processor_agglom_ratio
-               trigger_proc_agglom = air_data%reuse(our_level)%reuse_is(IS_REPARTITION) /= PETSC_NULL_IS .OR. &
+               trigger_proc_agglom = .NOT. PetscISIsNull(air_data%reuse(our_level)%reuse_is(IS_REPARTITION)) .OR. &
                            (ratio_local_nnzs_off_proc .le. air_data%options%processor_agglom_ratio &
                            .AND. ratio_local_nnzs_off_proc /= 0.0)
                                  
@@ -1416,14 +1469,14 @@ module air_mg_setup
 
                   ! Calculate the IS with the repartitioning if we haven't already
                   ! This is expensive as it calls the graph partitioner (e.g., parmetis)
-                  if (air_data%reuse(our_level)%reuse_is(IS_REPARTITION) == PETSC_NULL_IS) then
+                  if (PetscISIsNull(air_data%reuse(our_level)%reuse_is(IS_REPARTITION))) then
 
                      call calculate_repartition(air_data%coarse_matrix(our_level_coarse), &
                                  number_splits, .FALSE., air_data%reuse(our_level)%reuse_is(IS_REPARTITION))
                   end if
 
                   ! Repartition the coarse matrix
-                  if (air_data%reuse(our_level)%reuse_mat(MAT_COARSE_REPARTITIONED) /= PETSC_NULL_MAT) then
+                  if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_COARSE_REPARTITIONED))) then
 
                      call MatCreateSubMatrix(air_data%coarse_matrix(our_level_coarse), &
                                  air_data%reuse(our_level)%reuse_is(IS_REPARTITION), air_data%reuse(our_level)%reuse_is(IS_REPARTITION), &
@@ -1440,7 +1493,9 @@ module air_mg_setup
                   ! Delete temporary if not reusing
                   if (.NOT. air_data%options%reuse_sparsity) then
                      call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_COARSE_REPARTITIONED), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
                      air_data%reuse(our_level)%reuse_mat(MAT_COARSE_REPARTITIONED) = PETSC_NULL_MAT
+#endif                     
                   end if                   
 
                   ! Create an IS to represent the row indices of the prolongator 
@@ -1450,7 +1505,7 @@ module air_mg_setup
                   call ISCreateStride(MPI_COMM_MATRIX, prolongator_end_plus_one - prolongator_start, prolongator_start, one, is_unchanged, ierr)
 
                   ! Repartition the prolongator matrix
-                  if (air_data%reuse(our_level)%reuse_mat(MAT_P_REPARTITIONED) /= PETSC_NULL_MAT) then
+                  if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_P_REPARTITIONED))) then
 
                      ! If we've got a one point classical prolongator then we just use the existing repartitioned
                      ! one so we don't need to repartition
@@ -1477,14 +1532,16 @@ module air_mg_setup
                   ! Delete temporary if not reusing
                   if (.NOT. air_data%options%reuse_sparsity) then
                      call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_P_REPARTITIONED), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
                      air_data%reuse(our_level)%reuse_mat(MAT_P_REPARTITIONED) = PETSC_NULL_MAT
+#endif                     
                   end if                   
                   
                   ! If need to repartition a restrictor
                   if (.NOT. air_data%options%symmetric) then
 
                      ! Repartition the restrictor matrix
-                     if (air_data%reuse(our_level)%reuse_mat(MAT_R_REPARTITIONED) /= PETSC_NULL_MAT) then
+                     if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_R_REPARTITIONED))) then
 
                         call MatCreateSubMatrix(air_data%restrictors(our_level), &
                                     air_data%reuse(our_level)%reuse_is(IS_REPARTITION), is_unchanged, MAT_REUSE_MATRIX, &
@@ -1501,7 +1558,9 @@ module air_mg_setup
                      ! Delete temporary if not reusing
                      if (.NOT. air_data%options%reuse_sparsity) then
                         call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_R_REPARTITIONED), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
                         air_data%reuse(our_level)%reuse_mat(MAT_R_REPARTITIONED) = PETSC_NULL_MAT
+#endif                        
                      end if                     
                   end if
 
@@ -1509,7 +1568,9 @@ module air_mg_setup
                   ! Delete temporary if not reusing
                   if (.NOT. air_data%options%reuse_sparsity) then
                      call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_REPARTITION), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)                     
                      air_data%reuse(our_level)%reuse_is(IS_REPARTITION) = PETSC_NULL_IS
+#endif                     
                   end if                  
 
                   call timer_finish(TIMER_ID_AIR_PROC_AGGLOM)
@@ -1583,7 +1644,7 @@ module air_mg_setup
                
       ! Start the inverse for the coarse grid
       ! These comms will be finished below
-      if (.NOT. (air_data%inv_A_ff(air_data%no_levels) /= PETSC_NULL_MAT .AND. air_data%options%reuse_poly_coeffs)) then
+      if (.NOT. (.NOT. PetscMatIsNull(air_data%inv_A_ff(air_data%no_levels)) .AND. air_data%options%reuse_poly_coeffs)) then
          call start_approximate_inverse(air_data%coarse_matrix(no_levels), &
                air_data%options%coarsest_inverse_type, &
                air_data%inv_coarsest_poly_data%gmres_poly_order, &
@@ -1599,7 +1660,7 @@ module air_mg_setup
       if (no_levels > 1) then
          call PCSetType(pcmg, PCMG, ierr)
          no_levels_petsc_int = no_levels
-#if PETSC_VERSION_MINOR >= 15
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 15)
          call PCMGSetLevels(pcmg, no_levels_petsc_int, PETSC_NULL_MPI_COMM, ierr)
 #else
          call PCMGSetLevels(pcmg, no_levels_petsc_int, PETSC_NULL_KSP, ierr)
@@ -1759,8 +1820,10 @@ module air_mg_setup
 
          ! Delete temporary if not reusing
          if (.NOT. air_data%options%reuse_sparsity) then
-            call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF), ierr)
-            air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF) = PETSC_NULL_MAT
+            call MatDestroy(air_data%reuse(air_data%no_levels)%reuse_mat(MAT_INV_AFF), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
+            air_data%reuse(air_data%no_levels)%reuse_mat(MAT_INV_AFF) = PETSC_NULL_MAT
+#endif            
          end if          
 
          ! Now we've finished the coarse grid solver, output the time
@@ -1838,9 +1901,11 @@ module air_mg_setup
                   ! If the strong threshold is zero we just copy the pointers for 
                   ! aff, afc and acf so we wouldn't want to destroy them below
                   if (air_data%options%strong_r_threshold == 0.0) then
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
                      air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP) = PETSC_NULL_MAT
                      air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP) = PETSC_NULL_MAT
                      air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP) = PETSC_NULL_MAT
+#endif                     
                   end if                    
                   call MatDestroy(air_data%prolongators(our_level), ierr)
                   if (.NOT. air_data%options%symmetric) then
@@ -1897,16 +1962,20 @@ module air_mg_setup
             ! Destroy the reuse data if needed
             if (.NOT. reuse) then
                do i_loc = 1, size(air_data%reuse(our_level)%reuse_mat)
-                  if (air_data%reuse(our_level)%reuse_mat(i_loc) /= PETSC_NULL_MAT) then
+                  if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(i_loc))) then
                      call MatDestroy(air_data%reuse(our_level)%reuse_mat(i_loc), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
                      air_data%reuse(our_level)%reuse_mat(i_loc) = PETSC_NULL_MAT
+#endif                     
                   end if
                end do
 
                do i_loc = 1, size(air_data%reuse(our_level)%reuse_is)
-                  if (air_data%reuse(our_level)%reuse_is(i_loc) /= PETSC_NULL_IS) then
+                  if (.NOT. PetscISIsNull(air_data%reuse(our_level)%reuse_is(i_loc))) then
                      call ISDestroy(air_data%reuse(our_level)%reuse_is(i_loc), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)                     
                      air_data%reuse(our_level)%reuse_is(i_loc) = PETSC_NULL_IS
+#endif                     
                   end if
                end do
             end if

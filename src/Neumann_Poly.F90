@@ -8,6 +8,8 @@ module neumann_poly
 
    implicit none
 
+#include "petsc_legacy.h"   
+
    public
 
    PetscEnum, parameter :: PFLAREINV_NEUMANN=3
@@ -190,7 +192,7 @@ module neumann_poly
          call MatGetSize(matrix, global_rows, global_cols, ierr)      
          
          ! If not re-using
-         if (inv_matrix == PETSC_NULL_MAT) then
+         if (PetscMatIsNull(inv_matrix)) then
 
             allocate(coefficients(poly_order + 1))
             coefficients = 1.0 

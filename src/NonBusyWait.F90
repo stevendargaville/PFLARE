@@ -55,7 +55,7 @@ subroutine non_busy_wait(comm, local_rows)
                MPI_MAX, comm, request(1), errorcode)
    if (errorcode /= MPI_SUCCESS) then
       print *, "MPI_IAllreduce failed"
-      call MPI_Abort(comm, MPI_ERR_OTHER, errorcode)
+      call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
    end if                
 
    allreduce_finished = .FALSE.

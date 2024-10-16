@@ -6,6 +6,8 @@ module weighted_jacobi
 
    implicit none
 
+#include "petsc_legacy.h"
+
    public
    
    PetscEnum, parameter :: PFLAREINV_WJACOBI=6
@@ -90,17 +92,17 @@ module weighted_jacobi
       ! and don't want to have to define how that is done
       
       ! If not re-using
-      if (inv_matrix == PETSC_NULL_MAT) then      
+      if (PetscMatIsNull(inv_matrix)) then      
 
          if (comm_size/=1) then
             call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
                      global_rows, global_cols, &
-                     one, PETSC_NULL_INTEGER, &
-                     zero, PETSC_NULL_INTEGER, &
+                     one, PETSC_NULL_INTEGER_ARRAY, &
+                     zero, PETSC_NULL_INTEGER_ARRAY, &
                      inv_matrix, ierr)   
          else
             call MatCreateSeqAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                     one, PETSC_NULL_INTEGER, &
+                     one, PETSC_NULL_INTEGER_ARRAY, &
                      inv_matrix, ierr)            
          end if 
       end if

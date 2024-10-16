@@ -9,6 +9,8 @@ module pmisr_ddc
 
    implicit none
 
+#include "petsc_legacy.h"
+
    ! Define C and F points in the CF marker 
    integer, parameter :: C_POINT = 1
    integer, parameter :: F_POINT = -1
@@ -616,9 +618,9 @@ module pmisr_ddc
 
          max_nnzs = 0
          do ifree = a_global_row_start, a_global_row_end_plus_one-1                  
-            call MatGetRow(Aff, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+            call MatGetRow(Aff, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
             if (ncols > max_nnzs) max_nnzs = ncols
-            call MatRestoreRow(Aff, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+            call MatRestoreRow(Aff, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          end do         
          
          allocate(cols(max_nnzs))

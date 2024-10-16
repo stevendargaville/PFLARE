@@ -167,7 +167,8 @@ run_tests:
 #
 	@echo ""
 	@echo "Test AIRG with GMRES polynomials for hyperbolic streaming problem with coefficients calculated on subcomms"
-	$(MPIEXEC) -n 2 ./ex12f.o -f data/mat_stream_2364 -pc_air_subcomm -pc_air_coarsest_subcomm
+	$(MPIEXEC) -n 2 ./ex12f.o -f data/mat_stream_2364 -pc_air_subcomm -pc_air_inverse_type arnoldi -pc_air_coarsest_subcomm \
+	 -pc_air_coarsest_inverse_type arnoldi
 # 
 	@echo ""
 	@echo "Test AIRG with GMRES polynomials with PC reused with no sparsity change"

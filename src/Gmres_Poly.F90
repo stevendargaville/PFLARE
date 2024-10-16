@@ -17,6 +17,8 @@ module gmres_poly
 
    implicit none
 
+#include "petsc_legacy.h"
+
    ! Just define pi
    real, parameter, private :: pi = 3.141592653589793
    type int_vec
@@ -53,7 +55,9 @@ module gmres_poly
       if (inverse_type == PFLAREINV_POWER .OR. inverse_type == PFLAREINV_ARNOLDI .OR. inverse_type == PFLAREINV_NEWTON) then
          poly_data%buffers%subcomm = subcomm
       end if
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
       poly_data%buffers%matrix = PETSC_NULL_MAT
+#endif      
       poly_data%buffers%number_splits = number_splits
 
       ! For matrices with size smaller than the subspace size (ie polynomial order + 1)
@@ -703,18 +707,18 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          end do
 
          ! If not re-using
-         if (cmat == PETSC_NULL_MAT) then
+         if (PetscMatIsNull(cmat)) then
 
             ! Now rhs_copy should have our diagonal polynomial approximation
             if (comm_size/=1) then
                call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
                         global_rows, global_cols, &
-                        one, PETSC_NULL_INTEGER, &
-                        zero, PETSC_NULL_INTEGER, &
+                        one, PETSC_NULL_INTEGER_ARRAY, &
+                        zero, PETSC_NULL_INTEGER_ARRAY, &
                         cmat, ierr)   
             else
                call MatCreateSeqAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                        one, PETSC_NULL_INTEGER, &
+                        one, PETSC_NULL_INTEGER_ARRAY, &
                         cmat, ierr)            
             end if 
          end if
@@ -768,7 +772,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
 
       ! Copy in the highest unconstrained power
       ! If not re-using
-      if (cmat == PETSC_NULL_MAT) then      
+      if (PetscMatIsNull(cmat)) then    
          call MatDuplicate(matrix_powers(poly_sparsity_order), MAT_COPY_VALUES, cmat, ierr)
       else
          call MatCopy(matrix_powers(poly_sparsity_order), cmat, SAME_NONZERO_PATTERN, ierr)
@@ -849,7 +853,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          ! We could just request the non-local rows, but it's easier to just get the whole slab
          ! as then the row indices match colmap
          ! This returns a sequential matrix
-         if (reuse_mat /= PETSC_NULL_MAT) then
+         if (.NOT. PetscMatIsNull(reuse_mat)) then
             submatrices(1) = reuse_mat
             call MatCreateSubMatrices(matrix, one, col_indices, col_indices, MAT_REUSE_MATRIX, submatrices, ierr)
          else
@@ -879,15 +883,15 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       max_nnzs = 0
       ! Check the nnzs of the serial copy of matrix
       do ifree = 1, row_size            
-         call MatGetRow(submatrices(1), ifree-1, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatGetRow(submatrices(1), ifree-1, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(submatrices(1), ifree-1, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatRestoreRow(submatrices(1), ifree-1, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
       end do
       ! and also the sparsity power
       do ifree = global_row_start, global_row_end_plus_one-1     
-         call MatGetRow(mat_sparsity_match, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatGetRow(mat_sparsity_match, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(mat_sparsity_match, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatRestoreRow(mat_sparsity_match, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
       end do 
       
       ! ~~~~~~~~
@@ -1139,7 +1143,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
             ! ~~~~~~~~~~~
             ! Has to be critical as can't add to the matrix from multiple threads at once
             !$omp critical
-            call MatSetValues(cmat, one, global_row_start + i_loc-1, ncols, cols(1:ncols), &
+            call MatSetValues(cmat, one, [global_row_start + i_loc-1], ncols, cols(1:ncols), &
                      coefficients(term) * vals_temp, ADD_VALUES, ierr)   
             !$omp end critical
 
@@ -1369,7 +1373,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          call finish_gmres_polynomial_coefficients_power(poly_order, buffers, coefficients)
 
          ! If not re-using
-         if (inv_matrix == PETSC_NULL_MAT) then
+         if (PetscMatIsNull(inv_matrix)) then
 
             ! Have to dynamically allocate this
             allocate(mat_ctx)
@@ -1405,17 +1409,17 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       if (poly_order == 0) then
 
          ! If not re-using
-         if (inv_matrix == PETSC_NULL_MAT) then
+         if (PetscMatIsNull(inv_matrix)) then
 
             if (comm_size/=1) then
                call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
                         global_rows, global_cols, &
-                        one, PETSC_NULL_INTEGER, &
-                        zero, PETSC_NULL_INTEGER, &
+                        one, PETSC_NULL_INTEGER_ARRAY, &
+                        zero, PETSC_NULL_INTEGER_ARRAY, &
                         inv_matrix, ierr)   
             else
                call MatCreateSeqAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                        one, PETSC_NULL_INTEGER, &
+                        one, PETSC_NULL_INTEGER_ARRAY, &
                         inv_matrix, ierr)            
             end if 
          end if        
@@ -1442,7 +1446,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       else if (poly_order == 1 .AND. poly_sparsity_order == 1) then
 
          ! If not re-using
-         if (inv_matrix == PETSC_NULL_MAT) then
+         if (PetscMatIsNull(inv_matrix)) then
             call MatDuplicate(matrix, MAT_COPY_VALUES, inv_matrix, ierr)
          else
             call MatCopy(matrix, inv_matrix, SAME_NONZERO_PATTERN, ierr)
@@ -1487,7 +1491,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       ! If not re-using
       ! Copy in the initial matrix
       reuse_triggered = .FALSE.
-      if (inv_matrix == PETSC_NULL_MAT) then
+      if (PetscMatIsNull(inv_matrix)) then
          call MatDuplicate(matrix, MAT_COPY_VALUES, inv_matrix, ierr)
       else
          ! For the powers > 1 the pattern of the original matrix will be different

@@ -107,22 +107,22 @@
         j = II - i*n
         if (i.gt.0) then
           JJ = II - n
-          call MatSetValues(A,ione,II,ione,JJ,v,ADD_VALUES,ierr)
+          call MatSetValues(A,ione,[II],ione,[JJ],[v],ADD_VALUES,ierr)
         endif
         if (i.lt.m-1) then
           JJ = II + n
-          call MatSetValues(A,ione,II,ione,JJ,v,ADD_VALUES,ierr)
+          call MatSetValues(A,ione,[II],ione,[JJ],[v],ADD_VALUES,ierr)
         endif
         if (j.gt.0) then
           JJ = II - 1
-          call MatSetValues(A,ione,II,ione,JJ,v,ADD_VALUES,ierr)
+          call MatSetValues(A,ione,[II],ione,[JJ],[v],ADD_VALUES,ierr)
         endif
         if (j.lt.n-1) then
           JJ = II + 1
-          call MatSetValues(A,ione,II,ione,JJ,v,ADD_VALUES,ierr)
+          call MatSetValues(A,ione,[II],ione,[JJ],[v],ADD_VALUES,ierr)
         endif
         v = 4.0
-        call  MatSetValues(A,ione,II,ione,II,v,ADD_VALUES,ierr)
+        call  MatSetValues(A,ione,[II],ione,[II],[v],ADD_VALUES,ierr)
  10   continue
 
 !  Assemble matrix, using the 2-step process:

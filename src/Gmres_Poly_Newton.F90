@@ -7,6 +7,8 @@ module gmres_poly_newton
 
    implicit none
 
+#include "petsc_legacy.h"   
+
    public 
    
    contains
@@ -411,7 +413,7 @@ module gmres_poly_newton
       ! ~~~~~~~
 
       ! If not re-using
-      if (inv_matrix == PETSC_NULL_MAT) then
+      if (PetscMatIsNull(inv_matrix)) then
 
          ! Have to dynamically allocate this
          allocate(mat_ctx)

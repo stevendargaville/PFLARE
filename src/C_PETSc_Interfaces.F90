@@ -137,10 +137,11 @@ module c_petsc_interfaces
    
    interface   
       
-      subroutine MatMPICreateNonemptySubcomm_c(A_array, B_array) &
+      subroutine MatMPICreateNonemptySubcomm_c(A_array, on_subcomm, B_array) &
          bind(c, name="MatMPICreateNonemptySubcomm_c")
          use iso_c_binding
          integer(c_long_long) :: A_array
+         integer(c_int)       :: on_subcomm
          integer(c_long_long) :: B_array
       end subroutine MatMPICreateNonemptySubcomm_c         
  

@@ -7,6 +7,8 @@ module repartition
                 
    implicit none
 
+#include "petsc_legacy.h"
+
    public
 
    ! -------------------------------------------------------------------------------------------------------------------------------
@@ -50,12 +52,12 @@ module repartition
       off_proc_nnzs = 0
       call MatGetLocalSize(input_mat, local_rows, local_cols, ierr)
       do i_loc = 1, local_rows         
-         call MatGetRow(Ad, i_loc-1, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatGetRow(Ad, i_loc-1, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          local_nnzs = local_nnzs + ncols
-         call MatRestoreRow(Ad, i_loc-1, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
-         call MatGetRow(Ao, i_loc-1, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatRestoreRow(Ad, i_loc-1, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
+         call MatGetRow(Ao, i_loc-1, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          off_proc_nnzs = off_proc_nnzs + ncols
-         call MatRestoreRow(Ao, i_loc-1, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)               
+         call MatRestoreRow(Ao, i_loc-1, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)               
       end do      
       
       ! ~~~~~~~~~~~
@@ -151,20 +153,27 @@ module repartition
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine MatMPICreateNonemptySubcomm(input_mat, output_mat)
+   subroutine MatMPICreateNonemptySubcomm(input_mat, on_subcomm, output_mat)
       
       ! Just calls MatMPICreateNonemptySubcomm_c
 
       ! ~~~~~~
       type(tMat), target, intent(in)      :: input_mat
+      logical, intent(out)                :: on_subcomm
       type(tMat), target, intent(inout)   :: output_mat
 
       integer(c_long_long) :: A_array, B_array
+      integer(c_int)       :: on_subcomm_int
 
       ! ~~~~~~  
 
       A_array = input_mat%v
-      call MatMPICreateNonemptySubcomm_c(A_array, B_array)
+      call MatMPICreateNonemptySubcomm_c(A_array, on_subcomm_int, B_array)
+      if (on_subcomm_int == 1) then
+         on_subcomm = .TRUE.
+      else
+         on_subcomm = .FALSE.
+      end if
       ! Assign the index to the mat we get back from c
       output_mat%v = B_array
 

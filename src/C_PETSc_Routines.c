@@ -285,7 +285,7 @@ PETSC_INTERN void mat_mat_symbolic_c(Mat *A, Mat *B, Mat *result)
 // If there are no empty ranks, then it returns the same matrix
 // If not there is a new copy that must be destroyed
 // Basically taken from MatMPIAdjCreateNonemptySubcommMat_MPIAdj
-PETSC_INTERN void MatMPICreateNonemptySubcomm_c(Mat *A, Mat *B)
+PETSC_INTERN PetscErrorCode MatMPICreateNonemptySubcomm_c(Mat *A, int *on_subcomm, Mat *B)
 {
   Mat_MPIAIJ     *a = (Mat_MPIAIJ *)(*A)->data;
   const PetscInt *ranges;
@@ -294,9 +294,12 @@ PETSC_INTERN void MatMPICreateNonemptySubcomm_c(Mat *A, Mat *B)
   PetscMPIInt     i, rank, size, nranks, *ranks;
 
   PetscFunctionBegin;
+
+  *on_subcomm = 1;
+
   // Ensure we return petsc_null so we can test if we are on this subcomm
   // outside the function
-#if PETSC_VERSION_MINOR >= 19
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 19)
   *B = PETSC_NULLPTR;
 #else
   *B = NULL;
@@ -311,7 +314,9 @@ PETSC_INTERN void MatMPICreateNonemptySubcomm_c(Mat *A, Mat *B)
   if (nranks == size) { /* All ranks have a positive number of rows, so we do not need to create a subcomm; */
     PetscObjectReference((PetscObject)(*A));
     *B = (*A);
-    return;
+    // We haven't actually ended up on a subcomm
+    *on_subcomm = 0;
+    PetscFunctionReturn(0);
   }
 
   PetscMalloc1(nranks, &ranks);
@@ -346,7 +351,7 @@ PETSC_INTERN void MatMPICreateNonemptySubcomm_c(Mat *A, Mat *B)
       // Before that there is no absolute value, and for some reason entering this routine
       // with <3.20 Ad will have a block size of 1, but Ao will have -1
       // After 3.20 they're both -1
-#if PETSC_VERSION_MINOR < 20
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR < 20)
       Ao_copy->rmap->bs = Ad_copy->rmap->bs;
 #endif      
 
@@ -358,7 +363,7 @@ PETSC_INTERN void MatMPICreateNonemptySubcomm_c(Mat *A, Mat *B)
 
     MPI_Comm_free(&bcomm);
   }
-  return;
+  PetscFunctionReturn(0);
 }
 
 // Returns pc->flag so we can have access to the structure flag

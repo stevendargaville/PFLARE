@@ -12,6 +12,8 @@ module approx_inverse_setup
       
    implicit none
 
+#include "petsc_legacy.h"   
+
    public
 
    contains
@@ -31,7 +33,7 @@ module approx_inverse_setup
       ! PFLAREINV_NEUMANN - Neumann polynomial
       ! PFLAREINV_SAI - SAI
       ! PFLAREINV_ISAI - Incomplete SAI (ie a restricted additive schwartz)
-      ! PFLAREINV_WJACOBI - Weighted Jacobi with weight 3 / ( 4 * || Dff^(-1/2) * Aff * Dff^(-1/2) ||_inf )
+      ! PFLAREINV_WJACOBI - Weighted Jacobi with weight 3 / ( 4 * || D^(-1/2) * A * D^(-1/2) ||_inf )
       ! PFLAREINV_JACOBI - Unweighted Jacobi                  
       ! This is just a wrapper around the start and finish routines below
       ! No opportunity to put work between the async comms
@@ -54,7 +56,7 @@ module approx_inverse_setup
       real, dimension(poly_order + 1, 1), target   :: coefficients_stack
       type(mat_ctxtype), pointer :: mat_ctx => null()
       PetscErrorCode :: ierr
-      type(tMat) :: reuse_mat
+      type(tMat) :: reuse_mat, inv_matrix_temp
 
       ! ~~~~~~  
       
@@ -71,12 +73,36 @@ module approx_inverse_setup
          coefficients => coefficients_stack
       end if
 
+      ! This is diabolical - In petsc 3.22, they changed the way to test for 
+      ! a null matrix in fortran
+      ! Fortran variables are initialized such that they are not PETSC_NULL_MAT
+      ! but such that PetscObjectIsNull returns true
+      ! Unfortunately, we call this routine from C
+      ! I can't seem to find a way to have the C matrix not be PETSC_NULL_MAT
+      ! the first time into this routine - I've tried different ways of setting 
+      ! the matrix to null in C (or not setting it at all)
+      ! If it is PETSC_NULL_MAT then this triggers a null pointer check 
+      ! in the mat creation routines  
+      ! So we test here if we were given a null matrix
+      ! If we weren't, then we copy the pointer to matrix we were given
+      ! If we were, then inv_matrix_temp will be null, but in the Fortran way
+      ! We then copy the pointer of inv_matrix_temp back into inv_matrix after we're done
+      if (inv_matrix /= PETSC_NULL_MAT) then
+         inv_matrix_temp = inv_matrix
+      else
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
+         inv_matrix_temp = PETSC_NULL_MAT
+#endif          
+      end if
+
       ! The inverse is always returned on the same comm as the input matrix
       ! but some methods benefit from having their intermediate calculations 
       ! done on a subcomm
       buffers%subcomm = subcomm
       ! Don't do any re-use, if you want reuse call the start/finish yourself
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
       reuse_mat = PETSC_NULL_MAT
+#endif      
 
       ! Start the calculation
       call start_approximate_inverse(matrix, inverse_type, &
@@ -88,16 +114,19 @@ module approx_inverse_setup
                   buffers, coefficients, &
                   matrix_free, &
                   reuse_mat, &
-                  inv_matrix)
+                  inv_matrix_temp)
             
       ! Have to tell the matshell to own the coefficient pointers
       if (matrix_free) then
-         call MatShellGetContext(inv_matrix, mat_ctx, ierr)
+         call MatShellGetContext(inv_matrix_temp, mat_ctx, ierr)
          mat_ctx%own_coefficients = .TRUE.               
       end if
-      if (reuse_mat /= PETSC_NULL_MAT) then
+      if (.NOT. PetscMatIsNull(reuse_mat)) then
          call MatDestroy(reuse_mat, ierr)
       end if
+
+      ! Copy the pointer - see comment above about petsc 3.22
+      inv_matrix = inv_matrix_temp
 
    end subroutine calculate_and_build_approximate_inverse    
 
@@ -116,16 +145,21 @@ module approx_inverse_setup
       type(tsqr_buffers), intent(inout)                 :: buffers 
       real, dimension(:, :), intent(inout)              :: coefficients
 
-      ! Local variables
-      type(tMat) :: matrix_subcomm
+      PetscErrorCode :: ierr
+      integer :: MPI_COMM_MATRIX, errorcode
       ! ~~~~~~    
 
+      if (buffers%subcomm .AND. inverse_type == PFLAREINV_POWER) then
+         print *, "There is no reason to use a subcomm with the power basis, turn off subcomm"
+         call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)         
+      end if
+
       if (buffers%subcomm .AND. &
-            (inverse_type == PFLAREINV_POWER .OR. inverse_type == PFLAREINV_ARNOLDI .OR. inverse_type == PFLAREINV_NEWTON)) then
+            (inverse_type == PFLAREINV_ARNOLDI .OR. inverse_type == PFLAREINV_NEWTON)) then
 
          ! Create a version of matrix on a subcomm and store it in buffers%matrix
          ! If all ranks have entries, then this just returns a pointer to the original 
-         ! matrix (ie buffers%matrix = matrix)
+         ! matrix (ie buffers%matrix = matrix) with the reference counter incremented
          ! If not, then a copy is taken on a subcomm with ranks that have entries
          ! That is the matrix we use to start our polynomial coefficient calculation
          ! But *importantly* the inverse matrix we create is always on MPI_COMM_WORLD
@@ -133,19 +167,22 @@ module approx_inverse_setup
          ! subcomms with processor agglomeration, but it ended up expensive
          ! This way, only the reductions done in the coefficient calculation happen on 
          ! the subcomm
-         ! On any rank that isn't part of this subcomm, nothing happens and the coefficients
-         ! are not comm'd onto those ranks, which is fine as those ranks have no rows anyway
-         ! and hence they don't need them         
-         call MatMPICreateNonemptySubcomm(matrix, buffers%matrix)        
+         ! On any rank that isn't part of this subcomm, we then need to comm the coefficients 
+         ! to those ranks, as petsc in debug mode checks that matscale (and mataxpy) all use
+         ! the same coefficient, even if the matrix doesn't have any rows and hence wouldn't use them    
+         call MatMPICreateNonemptySubcomm(matrix, buffers%on_subcomm, buffers%matrix)     
       else
+
          buffers%matrix = matrix
+         ! Increase the reference counter
+         call PetscObjectReference(matrix, ierr)          
       end if
 
       ! ~~~~~~~~~~~~~~~
       ! ~~~~~~~~~~~~~~~
 
       ! If we're on the subcomm, we don't need to do anything
-      if (buffers%matrix /= PETSC_NULL_MAT) then
+      if (.NOT. PetscMatIsNull(buffers%matrix)) then
 
          ! Gmres poylnomial with power basis
          if (inverse_type == PFLAREINV_POWER) then
@@ -170,6 +207,38 @@ module approx_inverse_setup
          end if
       end if
 
+      ! If we ended up on a subcomm, we need to comm the coefficients back to 
+      ! MPI_COMM_MATRIX
+      ! Both the arnoldi and newton basis have already finished their comms, so we can start an 
+      ! all reduce here and conclude it in finish_approximate_inverse
+      ! The power basis however does not yet have its coefficients finished, so we have to do all the 
+      ! comms in finish (although it doesn't really make sense to move onto a subcomm for the power basis
+      ! given it only does one reduction on MPI_COMM_MATRIX anyway)
+      ! Gmres polynomial with arnoldi basis
+      if (buffers%on_subcomm) then
+
+         ! Get the comm
+         call PetscObjectGetComm(matrix, MPI_COMM_MATRIX, ierr)       
+         buffers%request = MPI_REQUEST_NULL
+
+         if (inverse_type == PFLAREINV_ARNOLDI) then
+
+            ! We know rank 0 will always have the coefficients, just broadcast them to everyone on MPI_COMM_MATRIX
+            ! Some of the ranks on MPI_COMM_MATRIX will already have the coefficients, but I'm not going 
+            ! to bother creating an intercommunicator to send the coefficients from any rank on the comm of buffers%matrix
+            ! to the comm of ranks which aren't in MPI_COMM_MATRIX but are in buffers%matrix
+            call MPI_IBcast(coefficients, size(coefficients, 1), MPI_DOUBLE, 0, &
+                     MPI_COMM_MATRIX, buffers%request, errorcode)
+
+         ! Gmres polynomial with Newton basis - Can only use matrix-free
+         else if (inverse_type == PFLAREINV_NEWTON) then
+
+            ! Have to broadcast the 2D real and imaginary roots
+            call MPI_IBcast(coefficients, size(coefficients, 1) * size(coefficients, 2), MPI_DOUBLE, 0, &
+                     MPI_COMM_MATRIX, buffers%request, errorcode)
+         end if    
+      end if  
+
    end subroutine start_approximate_inverse
 
 ! -------------------------------------------------------------------------------------------------------------------------------
@@ -193,12 +262,27 @@ module approx_inverse_setup
       logical :: incomplete
       PetscErrorCode :: ierr
       integer :: errorcode
+      integer, dimension(MPI_STATUS_SIZE) :: status
 
       ! ~~~~~~    
 
       ! ~~~~~~~~~~~~
       ! For any calculations started in start_approximate_inverse that happen on 
-      ! a subcomm, buffers%request should be null and hence only processors on subcomms finish
+      ! a subcomm, we need to finish the broadcasts
+      ! ~~~~~~~~~~~~
+      if (buffers%on_subcomm .AND. buffers%request /= MPI_REQUEST_NULL) then
+
+         ! Finish the non-blocking comms
+         call mpi_wait(buffers%request, &
+                        status, errorcode)
+            
+         if (errorcode /= MPI_SUCCESS) then
+            print *, "mpi_wait failed"
+            call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)         
+         end if    
+         buffers%request = MPI_REQUEST_NULL           
+      end if
+
       ! ~~~~~~~~~~~~
 
       ! Gmres poylnomial with power or arnoldi basis
@@ -257,20 +341,12 @@ module approx_inverse_setup
 
       end if
 
-      ! If we created a gmres polynomial inverse, we may have created 
-      ! a matrix on a subcomm
-      if (inverse_type == PFLAREINV_POWER .OR. inverse_type == PFLAREINV_ARNOLDI .OR. inverse_type == PFLAREINV_NEWTON) then
-
-         ! buffers%matrix could just be a pointer to the original matrix, so we 
-         ! don't want to destroy it in that case
-         if (matrix%v /= buffers%matrix%v) then
-            ! If we're not on a subcomm there is no matrix
-            if (buffers%matrix /= PETSC_NULL_MAT) then
-               call MatDestroy(buffers%matrix, ierr)
-               buffers%matrix = PETSC_NULL_MAT
-            end if
-         end if
-      end if
+      ! If we were on a subcomm we created a copy of our matrix, if not we incremented 
+      ! the reference counter
+      call MatDestroy(buffers%matrix, ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
+      buffers%matrix = PETSC_NULL_MAT
+#endif               
 
    end subroutine finish_approximate_inverse
    
@@ -288,7 +364,7 @@ module approx_inverse_setup
       type(mat_ctxtype), pointer :: mat_ctx
       ! ~~~~~~
 
-      if (matrix /= PETSC_NULL_MAT) then
+      if (.NOT. PetscMatIsNull(matrix)) then
          call MatGetType(matrix, mat_type, ierr)
          ! If its a matshell, make sure to delete its ctx
          if (mat_type==MATSHELL) then
@@ -297,7 +373,9 @@ module approx_inverse_setup
             deallocate(mat_ctx)
          end if               
          call MatDestroy(matrix, ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
          matrix = PETSC_NULL_MAT
+#endif         
       end if  
       
    end subroutine reset_inverse_mat

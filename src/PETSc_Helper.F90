@@ -7,6 +7,8 @@ module petsc_helper
                 
    implicit none
 
+#include "petsc_legacy.h"
+
    public
 
    ! -------------------------------------------------------------------------------------------------------------------------------
@@ -83,9 +85,9 @@ module petsc_helper
 
       do ifree = global_row_start, global_row_end_plus_one-1                  
 
-         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
       end do
 
       allocate(cols(max_nnzs))
@@ -212,7 +214,7 @@ module petsc_helper
          end if
 
          ! Much quicker to call setvalues
-         call MatSetValues(output_mat, one, ifree, ncols, cols_mod, &
+         call MatSetValues(output_mat, one, [ifree], ncols, cols_mod, &
                   vals_copy, INSERT_VALUES, ierr)
 
          ! Must call otherwise petsc leaks memory
@@ -254,12 +256,12 @@ module petsc_helper
       max_nnzs = 0
       do ifree = global_row_start, global_row_end_plus_one-1                  
 
-         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
-         call MatGetRow(output_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
+         call MatGetRow(output_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(output_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)         
+         call MatRestoreRow(output_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)         
       end do
 
       allocate(cols(max_nnzs))
@@ -279,7 +281,7 @@ module petsc_helper
       
          ! Get the row
          call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)
-         call MatSetValues(output_mat, one, ifree, ncols, cols, &
+         call MatSetValues(output_mat, one, [ifree], ncols, cols, &
                   vals, INSERT_VALUES, ierr)
          call MatRestoreRow(input_mat, ifree, ncols, cols, vals, ierr)                    
  
@@ -346,12 +348,12 @@ module petsc_helper
 
       do ifree = global_row_start, global_row_end_plus_one-1                  
 
-         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
-         call MatGetRow(sparsity_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
+         call MatGetRow(sparsity_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(sparsity_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)         
+         call MatRestoreRow(sparsity_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)         
       end do
 
       allocate(cols(max_nnzs))
@@ -392,7 +394,7 @@ module petsc_helper
          ! Must call otherwise petsc leaks memory
          call MatRestoreRow(input_mat, ifree, ncols, cols, vals, ierr)  
          ! Get the sparsity row
-         call MatGetRow(sparsity_mat, ifree, ncols, cols, PETSC_NULL_SCALAR, ierr)    
+         call MatGetRow(sparsity_mat, ifree, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)    
          
          ! Now loop through and do the intersection
          ! Anything that is not in both is not inserted
@@ -419,7 +421,7 @@ module petsc_helper
          end do
 
          ! Must call otherwise petsc leaks memory
-         call MatRestoreRow(sparsity_mat, ifree, ncols, cols, PETSC_NULL_SCALAR, ierr)          
+         call MatRestoreRow(sparsity_mat, ifree, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)          
 
          ! Add lumped terms to the diagonal
          if (lump_entries) then
@@ -427,7 +429,7 @@ module petsc_helper
          end if
 
          ! Much quicker to call setvalues
-         call MatSetValues(output_mat, one, ifree, ncols_mod, cols_mod, &
+         call MatSetValues(output_mat, one, [ifree], ncols_mod, cols_mod, &
                   vals_copy, INSERT_VALUES, ierr)                  
  
       end do  
@@ -480,9 +482,9 @@ module petsc_helper
       max_nnzs = 0
       do ifree = global_row_start, global_row_end_plus_one-1                  
 
-         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
       end do
 
       allocate(cols(max_nnzs))
@@ -527,7 +529,7 @@ module petsc_helper
                   output_mat, ierr)   
 
       else
-         call MatCreateSeqAIJ(PETSC_COMM_SELF, global_rows, global_cols, one, PETSC_NULL_INTEGER, &
+         call MatCreateSeqAIJ(PETSC_COMM_SELF, global_rows, global_cols, one, PETSC_NULL_INTEGER_ARRAY, &
                      output_mat, ierr)            
       end if    
       
@@ -601,9 +603,9 @@ module petsc_helper
       max_nnzs = 0
       do ifree = global_row_start, global_row_end_plus_one-1                  
 
-         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
       end do
 
       allocate(cols(max_nnzs))
@@ -648,7 +650,7 @@ module petsc_helper
                   output_mat, ierr)   
 
       else
-         call MatCreateSeqAIJ(PETSC_COMM_SELF, global_rows, global_cols, one, PETSC_NULL_INTEGER, &
+         call MatCreateSeqAIJ(PETSC_COMM_SELF, global_rows, global_cols, one, PETSC_NULL_INTEGER_ARRAY, &
                      output_mat, ierr)            
       end if    
       
@@ -744,10 +746,10 @@ module petsc_helper
       max_ncols = -1
       do i_loc = global_row_start_W, global_row_end_plus_one_W-1
          call MatGetRow(W, i_loc, &
-                  ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+                  ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_ncols) max_ncols = ncols
          call MatRestoreRow(W, i_loc, &
-                  ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)          
+                  ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)          
       end do
       max_ncols = max_ncols + 1
       allocate(cols(max_ncols))
@@ -759,7 +761,7 @@ module petsc_helper
          ! Have to get the number of local and off processor nnzs
          do i_loc = global_row_start_W, global_row_end_plus_one_W-1
             call MatGetRow(W, i_loc, &
-                     ncols, cols, PETSC_NULL_SCALAR, ierr)
+                     ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
             do col = 1, ncols
                if (cols(col) .ge. global_col_start_W .AND. cols(col) .le. global_col_end_plus_one_W - 1) then
                   nnzs_row(is_pointer_fine(i_loc - global_row_start_W + 1)-global_row_start +1) = nnzs_row(is_pointer_fine(i_loc - global_row_start_W + 1)-global_row_start +1) + 1
@@ -768,7 +770,7 @@ module petsc_helper
                end if
             end do
             call MatRestoreRow(W, i_loc, &
-                     ncols, cols, PETSC_NULL_SCALAR, ierr)          
+                     ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)          
          end do
 
          ! Identity
@@ -802,7 +804,7 @@ module petsc_helper
                   ncols, cols, vals, ierr)
 
          call MatSetValues(P,&
-                  one, is_pointer_fine(i_loc - global_row_start_W + 1), &
+                  one, [is_pointer_fine(i_loc - global_row_start_W + 1)], &
                   ncols, cols(1:ncols), &
                   vals(1:ncols), INSERT_VALUES, ierr)                     
 
@@ -908,7 +910,7 @@ module petsc_helper
       end if
 
       ! We can reuse the orig_fine_col_indices as they can be expensive to generate in parallel
-      if (orig_fine_col_indices == PETSC_NULL_IS) then
+      if (PetscISIsNull(orig_fine_col_indices)) then
             
          ! Now we need the global off-processor column indices in Z
          if (comm_size /= 1) then 
@@ -969,10 +971,10 @@ module petsc_helper
       max_ncols = -1
       do i_loc = global_row_start_Z, global_row_end_plus_one_Z-1
          call MatGetRow(Z, i_loc, &
-                  ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+                  ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_ncols) max_ncols = ncols
          call MatRestoreRow(Z, i_loc, &
-                  ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)          
+                  ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)          
       end do
       max_ncols = max_ncols + 1
       allocate(cols(max_ncols))
@@ -984,7 +986,7 @@ module petsc_helper
          ! Have to get the number of local and off processor nnzs
          do i_loc = global_row_start_Z, global_row_end_plus_one_Z-1
             call MatGetRow(Z, i_loc, &
-                     ncols, cols, PETSC_NULL_SCALAR, ierr)
+                     ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
             do col = 1, ncols
                if (cols(col) .ge. global_col_start_Z .AND. cols(col) .le. global_col_end_plus_one_Z - 1) then
                   nnzs_row(i_loc - global_row_start_Z + 1) = nnzs_row(i_loc - global_row_start_Z + 1) + 1
@@ -993,7 +995,7 @@ module petsc_helper
                end if
             end do
             call MatRestoreRow(Z, i_loc, &
-                     ncols, cols, PETSC_NULL_SCALAR, ierr)          
+                     ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)          
          end do
 
          ! Identity
@@ -1026,7 +1028,7 @@ module petsc_helper
          call MatGetRow(Ad, i_loc-1, &
                   ncols, cols, vals, ierr)
          call MatSetValues(R,&
-                  one, i_loc -1 + global_row_start_Z, &
+                  one, [i_loc -1 + global_row_start_Z], &
                   ncols, is_pointer_orig_fine_col(cols(1:ncols)+1), &
                   vals(1:ncols), INSERT_VALUES, ierr)
          call MatRestoreRow(Ad, i_loc-1, &
@@ -1038,7 +1040,7 @@ module petsc_helper
             call MatGetRow(Ao, i_loc-1, &
                      ncols, cols, vals, ierr)
             call MatSetValues(R,&
-                     one, i_loc -1 + global_row_start_Z, &
+                     one, [i_loc -1 + global_row_start_Z], &
                      ncols, is_pointer_orig_fine_col(cols(1:ncols)+1 + cols_ad), &
                      vals(1:ncols), INSERT_VALUES, ierr)
             call MatRestoreRow(Ao, i_loc-1, &
@@ -1096,9 +1098,9 @@ module petsc_helper
 
       ! This will be the nnzs associated with the local rows
       do i_loc = global_row_start, global_row_end_plus_one-1                  
-         call MatGetRow(input_mat, i_loc, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatGetRow(input_mat, i_loc, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          local_nnzs = local_nnzs + ncols
-         call MatRestoreRow(input_mat, i_loc, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatRestoreRow(input_mat, i_loc, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
       end do          
 
       ! Do an accumulate if in parallel

@@ -9,6 +9,8 @@ module sai_z
 
    implicit none
 
+#include "petsc_legacy.h"
+
    public
 
    PetscEnum, parameter :: AIR_Z_PRODUCT=0
@@ -86,7 +88,7 @@ module sai_z
       ! We're enforcing the same sparsity 
       
       ! If not re-using
-      if (z == PETSC_NULL_MAT) then
+      if (PetscMatIsNull(z)) then
          call MatDuplicate(sparsity_mat_cf, MAT_DO_NOT_COPY_VALUES, z, ierr)
       end if
 
@@ -159,7 +161,7 @@ module sai_z
          ! This returns a sequential matrix
          if (incomplete) then
             
-            if (reuse_mat /= PETSC_NULL_MAT) then
+            if (.NOT. PetscMatIsNull(reuse_mat)) then
                submatrices_full(1) = reuse_mat
                call MatCreateSubMatrices(A_ff, one, col_indices, col_indices, MAT_REUSE_MATRIX, submatrices_full, ierr)
             else
@@ -183,7 +185,7 @@ module sai_z
             ! This means we will have to map any column indices we use 
             ! This is very slow in parallel and doesn't scale well! 
             ! There is no easy way in petsc to return only the non-zero columns for a given set of rows
-            if (reuse_mat /= PETSC_NULL_MAT) then
+            if (.NOT. PetscMatIsNull(reuse_mat)) then
                submatrices_full(1) = reuse_mat        
                call MatCreateSubMatrices(A_ff, one, col_indices, all_cols_indices, MAT_REUSE_MATRIX, submatrices_full, ierr)
             else
@@ -213,20 +215,20 @@ module sai_z
       ! Has to be the max nnzs over sparsity_mat_cf
       call MatGetOwnershipRange(sparsity_mat_cf, global_row_start, global_row_end_plus_one, ierr)              
       do i_loc = global_row_start, global_row_end_plus_one-1                  
-         call MatGetRow(sparsity_mat_cf, i_loc, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatGetRow(sparsity_mat_cf, i_loc, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(sparsity_mat_cf, i_loc, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatRestoreRow(sparsity_mat_cf, i_loc, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
       end do   
       do i_loc = global_row_start, global_row_end_plus_one-1                  
-         call MatGetRow(A_cf, i_loc, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatGetRow(A_cf, i_loc, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(A_cf, i_loc, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatRestoreRow(A_cf, i_loc, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
       end do         
       ! This includes all the non-local rows
       do i_loc = 0, row_size-1     
-         call MatGetRow(submatrices_full(1), i_loc, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatGetRow(submatrices_full(1), i_loc, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(submatrices_full(1), i_loc, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatRestoreRow(submatrices_full(1), i_loc, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
       end do        
       
       allocate(cols(max_nnzs))
@@ -274,7 +276,7 @@ module sai_z
 
          ! We just want the F-indices of whatever distance we are going out to
          call MatGetRow(sparsity_mat_cf, i_loc, ncols, &
-                  cols, PETSC_NULL_SCALAR, ierr) 
+                  cols, PETSC_NULL_SCALAR_ARRAY, ierr) 
                   
          allocate(j_rows(ncols))
          allocate(j_vals(ncols))
@@ -282,7 +284,7 @@ module sai_z
          j_rows = cols(1:ncols)
 
          call MatRestoreRow(sparsity_mat_cf, i_loc, ncols, &
-                  cols, PETSC_NULL_SCALAR, ierr) 
+                  cols, PETSC_NULL_SCALAR_ARRAY, ierr) 
 
          ! If we have no non-zeros in this row skip it
          ! This means we have a c point with no neighbour f points
@@ -341,13 +343,13 @@ module sai_z
 
                ! We just want the indices
                call MatGetRow(submatrices_full(1), j_rows(j_loc), ncols, &
-                        cols, PETSC_NULL_SCALAR, ierr) 
+                        cols, PETSC_NULL_SCALAR_ARRAY, ierr) 
    
                call create_knuth_shuffle_tree_array(cols(1:ncols), &
                         i_rows_tree)                       
    
                call MatRestoreRow(submatrices_full(1), j_rows(j_loc), ncols, &
-                        cols, PETSC_NULL_SCALAR, ierr)             
+                        cols, PETSC_NULL_SCALAR_ARRAY, ierr)             
    
             end do
 
@@ -430,7 +432,7 @@ module sai_z
 
                call VecCreateSeqWithArray(PETSC_COMM_SELF, one, &
                   i_size, &
-                  PETSC_NULL_SCALAR, &
+                  PETSC_NULL_SCALAR_ARRAY, &
                   solution, &
                   ierr)              
                call VecPlaceArray(solution, e_row(1), ierr)          
@@ -476,12 +478,12 @@ module sai_z
                ! Have to be more careful here with sizes due to rectangular
                call VecCreateSeqWithArray(PETSC_COMM_SELF, one, &
                   j_size, &
-                  PETSC_NULL_SCALAR, &
+                  PETSC_NULL_SCALAR_ARRAY, &
                   solution, &
                   ierr) 
                call VecCreateSeqWithArray(PETSC_COMM_SELF, one, &
                   i_size, &
-                  PETSC_NULL_SCALAR, &
+                  PETSC_NULL_SCALAR_ARRAY, &
                   rhs, &
                   ierr)     
                allocate(sols(size(j_rows)))
@@ -523,7 +525,7 @@ module sai_z
          ! ~~~~~~~~~~~~~
          ! Set all the row values
          ! ~~~~~~~~~~~~~
-         call MatSetValues(z, one, i_loc, j_size, col_indices_off_proc_array(j_rows+1), e_row, INSERT_VALUES, ierr)            
+         call MatSetValues(z, one, [i_loc], j_size, col_indices_off_proc_array(j_rows+1), e_row, INSERT_VALUES, ierr)            
 
          deallocate(j_rows, i_rows, e_row, j_vals, j_indices, i_indices)  
          if (allocated(submat_vals)) deallocate(submat_vals)
@@ -583,12 +585,12 @@ module sai_z
       if (comm_size/=1) then
          call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
                   global_rows, global_cols, &
-                  one, PETSC_NULL_INTEGER, &
-                  zero, PETSC_NULL_INTEGER, &
+                  one, PETSC_NULL_INTEGER_ARRAY, &
+                  zero, PETSC_NULL_INTEGER_ARRAY, &
                   minus_I, ierr)   
       else
          call MatCreateSeqAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                  one, PETSC_NULL_INTEGER, &
+                  one, PETSC_NULL_INTEGER_ARRAY, &
                   minus_I, ierr)            
       end if 
       ! Don't set any off processor entries so no need for a reduction when assembling
@@ -620,7 +622,7 @@ module sai_z
       else
 
          ! If we're not doing reuse
-         if (inv_matrix == PETSC_NULL_MAT) then
+         if (PetscMatIsNull(inv_matrix)) then
 
             ! Copy the pointer
             A_power = matrix

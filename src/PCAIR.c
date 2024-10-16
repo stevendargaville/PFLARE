@@ -89,6 +89,8 @@ PETSC_EXTERN PetscErrorCode PCAIRSetPolyCoeffs_c(PC *pc, PetscInt petsc_level, P
 
 static PetscErrorCode PCReset_AIR_c(PC pc)
 {
+   PetscFunctionBegin;
+
    PC *pc_air_shell = (PC *)pc->data;
    // Call the underlying reset - this won't touch the context 
    // in our pcshell though as pcshell doesn't offer a way to 
@@ -103,6 +105,7 @@ static PetscErrorCode PCReset_AIR_c(PC pc)
 
 static PetscErrorCode PCApply_AIR_c(PC pc, Vec x, Vec y)
 {
+   PetscFunctionBegin;
    PC *pc_air_shell = (PC *)pc->data;
    // Just call the underlying pcshell apply
    PCApply(*pc_air_shell, x, y);
@@ -111,6 +114,7 @@ static PetscErrorCode PCApply_AIR_c(PC pc, Vec x, Vec y)
 
 static PetscErrorCode PCDestroy_AIR_c(PC pc)
 {
+   PetscFunctionBegin;
    PC *pc_air_shell = (PC *)pc->data;
    // Just call the underlying pcshell destroy, this also 
    // destroys the pc_air_data
@@ -124,6 +128,7 @@ static PetscErrorCode PCDestroy_AIR_c(PC pc)
 
 static PetscErrorCode PCSetUp_AIR_c(PC pc)
 {
+   PetscFunctionBegin;
    PC *pc_air_shell = (PC *)pc->data;
 
    // The pc_air_shell doesn't have any operators yet 
@@ -140,9 +145,10 @@ static PetscErrorCode PCSetUp_AIR_c(PC pc)
 // Get the underlying PCShell
 PETSC_EXTERN PetscErrorCode c_PCAIRGetPCShell(PC *pc, PC *pc_air_shell)
 {
-  PC *pc_shell = (PC *)(*pc)->data;
-  *pc_air_shell = *pc_shell;
-  PetscFunctionReturn(0);
+   PetscFunctionBegin;
+   PC *pc_shell = (PC *)(*pc)->data;
+   *pc_air_shell = *pc_shell;
+   PetscFunctionReturn(0);
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~
@@ -154,11 +160,13 @@ PETSC_EXTERN PetscErrorCode c_PCAIRGetPCShell(PC *pc, PC *pc_air_shell)
 
 PETSC_EXTERN PetscErrorCode PCAIRGetPrintStatsTimings(PC pc, PetscBool *input_bool)
 {
+   PetscFunctionBegin;
    PCAIRGetPrintStatsTimings_c(&pc, input_bool);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetMaxLevels(PC pc, PetscInt *input_int)
 {
+   PetscFunctionBegin;
    PCAIRGetMaxLevels_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
@@ -166,161 +174,193 @@ PETSC_EXTERN PetscErrorCode PCAIRGetMaxLevels(PC pc, PetscInt *input_int)
 // -1 if the mg is not setup yet
 PETSC_EXTERN PetscErrorCode PCAIRGetNumLevels(PC pc, PetscInt *input_int)
 {
+   PetscFunctionBegin;
    PCAIRGetNumLevels_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetProcessorAgglom(PC pc, PetscBool *input_bool)
 {
+   PetscFunctionBegin;
    PCAIRGetProcessorAgglom_c(&pc, input_bool);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetProcessorAgglomRatio(PC pc, PetscReal *input_real)
 {
+   PetscFunctionBegin;
    PCAIRGetProcessorAgglomRatio_c(&pc, input_real);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetProcessorAgglomFactor(PC pc, PetscInt *input_int)
 {
+   PetscFunctionBegin;
    PCAIRGetProcessorAgglomFactor_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetSubcomm(PC pc, PetscBool *input_bool)
 {
+   PetscFunctionBegin;
    PCAIRGetSubcomm_c(&pc, input_bool);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetStrongThreshold(PC pc, PetscReal *input_real)
 {
+   PetscFunctionBegin;
    PCAIRGetStrongThreshold_c(&pc, input_real);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetDDCFraction(PC pc, PetscReal *input_real)
 {
+   PetscFunctionBegin;
    PCAIRGetDDCFraction_c(&pc, input_real);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetCFSplittingType(PC pc, CFSplittingType *input_int)
 {
+   PetscFunctionBegin;
    PCAIRGetCFSplittingType_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetMaxLubySteps(PC pc, PetscInt *input_int)
 {
+   PetscFunctionBegin;
    PCAIRGetMaxLubySteps_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetMaxitsAff(PC pc, PetscInt *input_int)
 {
+   PetscFunctionBegin;
    PCAIRGetMaxitsAff_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetOneCSmooth(PC pc, PetscBool *input_bool)
 {
+   PetscFunctionBegin;
    PCAIRGetOneCSmooth_c(&pc, input_bool);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetMatrixFreePolys(PC pc, PetscBool *input_bool)
 {
+   PetscFunctionBegin;
    PCAIRGetMatrixFreePolys_c(&pc, input_bool);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetOnePointClassicalProlong(PC pc, PetscBool *input_bool)
 {
+   PetscFunctionBegin;
    PCAIRGetOnePointClassicalProlong_c(&pc, input_bool);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetFullSmoothingUpAndDown(PC pc, PetscBool *input_bool)
 {
+   PetscFunctionBegin;
    PCAIRGetFullSmoothingUpAndDown_c(&pc, input_bool);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetSymmetric(PC pc, PetscBool *input_bool)
 {
+   PetscFunctionBegin;
    PCAIRGetSymmetric_c(&pc, input_bool);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetConstrainW(PC pc, PetscBool *input_bool)
 {
+   PetscFunctionBegin;
    PCAIRGetConstrainW_c(&pc, input_bool);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetConstrainZ(PC pc, PetscBool *input_bool)
 {
+   PetscFunctionBegin;
    PCAIRGetConstrainZ_c(&pc, input_bool);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetStrongRThreshold(PC pc, PetscReal *input_real)
 {
+   PetscFunctionBegin;
    PCAIRGetStrongRThreshold_c(&pc, input_real);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetInverseType(PC pc, PCPFLAREINVType *input_int)
 {
+   PetscFunctionBegin;
    PCAIRGetInverseType_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetZType(PC pc, PCAIRZType *input_int)
 {
+   PetscFunctionBegin;
    PCAIRGetZType_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetPolyOrder(PC pc, PetscInt *input_int)
 {
+   PetscFunctionBegin;
    PCAIRGetPolyOrder_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetPolySparsityOrder(PC pc, PetscInt *input_int)
 {
+   PetscFunctionBegin;
    PCAIRGetPolySparsityOrder_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestInverseType(PC pc, PCPFLAREINVType *input_int)
 {
+   PetscFunctionBegin;
    PCAIRGetCoarsestInverseType_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestPolyOrder(PC pc, PetscInt *input_int)
 {
+   PetscFunctionBegin;
    PCAIRGetCoarsestPolyOrder_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestPolySparsityOrder(PC pc, PetscInt *input_int)
 {
+   PetscFunctionBegin;
    PCAIRGetCoarsestPolySparsityOrder_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestMatrixFreePolys(PC pc, PetscBool *input_bool)
 {
+   PetscFunctionBegin;
    PCAIRGetCoarsestMatrixFreePolys_c(&pc, input_bool);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestSubcomm(PC pc, PetscBool *input_bool)
 {
+   PetscFunctionBegin;
    PCAIRGetCoarsestSubcomm_c(&pc, input_bool);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetRDrop(PC pc, PetscReal *input_real)
 {
+   PetscFunctionBegin;
    PCAIRGetRDrop_c(&pc, input_real);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetADrop(PC pc, PetscReal *input_real)
 {
+   PetscFunctionBegin;
    PCAIRGetADrop_c(&pc, input_real);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetALump(PC pc, PetscBool *input_bool)
 {
+   PetscFunctionBegin;
    PCAIRGetALump_c(&pc, input_bool);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetReuseSparsity(PC pc, PetscBool *input_bool)
 {
+   PetscFunctionBegin;
    PCAIRGetReuseSparsity_c(&pc, input_bool);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetReusePolyCoeffs(PC pc, PetscBool *input_bool)
 {
+   PetscFunctionBegin;
    PCAIRGetReusePolyCoeffs_c(&pc, input_bool);
    PetscFunctionReturn(0);
 }
@@ -331,6 +371,7 @@ PETSC_EXTERN PetscErrorCode PCAIRGetReusePolyCoeffs(PC pc, PetscBool *input_bool
 // in an allocatable object (which knows its own size)
 PETSC_EXTERN PetscErrorCode PCAIRGetPolyCoeffs(PC pc, PetscInt petsc_level, PetscInt which_inverse, PetscReal **coeffs_ptr, PetscInt *row_size, PetscInt *col_size)
 {
+   PetscFunctionBegin;
    PCAIRGetPolyCoeffs_c(&pc,petsc_level, which_inverse, \
       coeffs_ptr, row_size, col_size);
    PetscFunctionReturn(0);
@@ -345,6 +386,7 @@ PETSC_EXTERN PetscErrorCode PCAIRGetPolyCoeffs(PC pc, PetscInt petsc_level, Pets
 // -pc_air_print_stats_timings
 PETSC_EXTERN PetscErrorCode PCAIRSetPrintStatsTimings(PC pc, PetscBool input_bool)
 {
+   PetscFunctionBegin;
    // No need to reset if this changes
    PCAIRSetPrintStatsTimings_c(&pc, input_bool);
    PetscFunctionReturn(0);
@@ -355,6 +397,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetPrintStatsTimings(PC pc, PetscBool input_boo
 // -pc_air_max_levels
 PETSC_EXTERN PetscErrorCode PCAIRSetMaxLevels(PC pc, PetscInt input_int)
 {
+   PetscFunctionBegin;
    PetscInt old_int;
    PCAIRGetMaxLevels(pc, &old_int);
    if (old_int == input_int) PetscFunctionReturn(0);
@@ -372,6 +415,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetMaxLevels(PC pc, PetscInt input_int)
 // -pc_air_processor_agglom
 PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglom(PC pc, PetscBool input_bool)
 {
+   PetscFunctionBegin;
    PetscBool old_bool;
    PCAIRGetProcessorAgglom(pc, &old_bool);
    if (old_bool == input_bool) PetscFunctionReturn(0);
@@ -385,6 +429,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglom(PC pc, PetscBool input_bool)
 // -pc_air_processor_agglom_ratio
 PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglomRatio(PC pc, PetscReal input_real)
 {
+   PetscFunctionBegin;
    PetscReal old_real;
    PCAIRGetProcessorAgglomRatio(pc, &old_real);
    if (old_real == input_real) PetscFunctionReturn(0);
@@ -398,6 +443,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglomRatio(PC pc, PetscReal input_
 // -pc_air_processor_agglom_factor
 PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglomFactor(PC pc, PetscInt input_int)
 {
+   PetscFunctionBegin;
    PetscInt old_int;
    PCAIRGetProcessorAgglomFactor(pc, &old_int);
    if (old_int == input_int) PetscFunctionReturn(0);
@@ -416,6 +462,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglomFactor(PC pc, PetscInt input_
 // -pc_air_subcomm
 PETSC_EXTERN PetscErrorCode PCAIRSetSubcomm(PC pc, PetscBool input_bool)
 {
+   PetscFunctionBegin;
    // No need to reset if this changes
    PCAIRSetSubcomm_c(&pc, input_bool);
    PetscFunctionReturn(0);
@@ -425,6 +472,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetSubcomm(PC pc, PetscBool input_bool)
 // -pc_air_strong_threshold
 PETSC_EXTERN PetscErrorCode PCAIRSetStrongThreshold(PC pc, PetscReal input_real)
 {
+   PetscFunctionBegin;
    PetscReal old_real;
    PCAIRGetStrongThreshold(pc, &old_real);
    if (old_real == input_real) PetscFunctionReturn(0);
@@ -438,6 +486,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetStrongThreshold(PC pc, PetscReal input_real)
 // -pc_air_ddc_fraction
 PETSC_EXTERN PetscErrorCode PCAIRSetDDCFraction(PC pc, PetscReal input_real)
 {
+   PetscFunctionBegin;
    PetscReal old_real;
    PCAIRGetDDCFraction(pc, &old_real);
    if (old_real == input_real) PetscFunctionReturn(0);
@@ -453,6 +502,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetDDCFraction(PC pc, PetscReal input_real)
 // -pc_air_cf_splitting_type
 PETSC_EXTERN PetscErrorCode PCAIRSetCFSplittingType(PC pc, CFSplittingType input_int)
 {
+   PetscFunctionBegin;
    CFSplittingType old_int;
    PCAIRGetCFSplittingType(pc, &old_int);
    if (old_int == input_int) PetscFunctionReturn(0);
@@ -467,6 +517,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetCFSplittingType(PC pc, CFSplittingType input
 // -pc_air_max_luby_steps
 PETSC_EXTERN PetscErrorCode PCAIRSetMaxLubySteps(PC pc, PetscInt input_int)
 {
+   PetscFunctionBegin;
    PetscInt old_int;
    PCAIRGetMaxLubySteps(pc, &old_int);
    if (old_int == input_int) PetscFunctionReturn(0);
@@ -479,6 +530,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetMaxLubySteps(PC pc, PetscInt input_int)
 // -pc_air_maxits_a_ff
 PETSC_EXTERN PetscErrorCode PCAIRSetMaxitsAff(PC pc, PetscInt input_int)
 {
+   PetscFunctionBegin;
    PetscInt old_int;
    PCAIRGetMaxitsAff(pc, &old_int);
    if (old_int == input_int) PetscFunctionReturn(0);
@@ -491,6 +543,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetMaxitsAff(PC pc, PetscInt input_int)
 // -pc_air_one_c_smooth
 PETSC_EXTERN PetscErrorCode PCAIRSetOneCSmooth(PC pc, PetscBool input_bool)
 {
+   PetscFunctionBegin;
    PetscBool old_bool;
    PCAIRGetOneCSmooth(pc, &old_bool);
    if (old_bool == input_bool) PetscFunctionReturn(0);
@@ -503,6 +556,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetOneCSmooth(PC pc, PetscBool input_bool)
 // -pc_air_matrix_free_polys
 PETSC_EXTERN PetscErrorCode PCAIRSetMatrixFreePolys(PC pc, PetscBool input_bool)
 {
+   PetscFunctionBegin;
    PetscBool old_bool;
    PCAIRGetMatrixFreePolys(pc, &old_bool);
    if (old_bool == input_bool) PetscFunctionReturn(0);
@@ -515,6 +569,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetMatrixFreePolys(PC pc, PetscBool input_bool)
 // -pc_air_one_point_classical_prolong
 PETSC_EXTERN PetscErrorCode PCAIRSetOnePointClassicalProlong(PC pc, PetscBool input_bool)
 {
+   PetscFunctionBegin;
    PetscBool old_bool;
    PCAIRGetOnePointClassicalProlong(pc, &old_bool);
    if (old_bool == input_bool) PetscFunctionReturn(0);
@@ -527,6 +582,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetOnePointClassicalProlong(PC pc, PetscBool in
 // -pc_air_full_smoothing_up_and_down
 PETSC_EXTERN PetscErrorCode PCAIRSetFullSmoothingUpAndDown(PC pc, PetscBool input_bool)
 {
+   PetscFunctionBegin;
    PetscBool old_bool;
    PCAIRGetFullSmoothingUpAndDown(pc, &old_bool);
    if (old_bool == input_bool) PetscFunctionReturn(0);
@@ -539,6 +595,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetFullSmoothingUpAndDown(PC pc, PetscBool inpu
 // -pc_air_symmetric
 PETSC_EXTERN PetscErrorCode PCAIRSetSymmetric(PC pc, PetscBool input_bool)
 {
+   PetscFunctionBegin;
    PetscBool old_bool;
    PCAIRGetSymmetric(pc, &old_bool);
    if (old_bool == input_bool) PetscFunctionReturn(0);
@@ -555,6 +612,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetSymmetric(PC pc, PetscBool input_bool)
 // -pc_air_constrain_w
 PETSC_EXTERN PetscErrorCode PCAIRSetConstrainW(PC pc, PetscBool input_bool)
 {
+   PetscFunctionBegin;
    PetscBool old_bool;
    PCAIRGetConstrainW(pc, &old_bool);
    if (old_bool == input_bool) PetscFunctionReturn(0);
@@ -571,6 +629,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetConstrainW(PC pc, PetscBool input_bool)
 // -pc_air_constrain_z
 PETSC_EXTERN PetscErrorCode PCAIRSetConstrainZ(PC pc, PetscBool input_bool)
 {
+   PetscFunctionBegin;
    PetscBool old_bool;
    PCAIRGetConstrainZ(pc, &old_bool);
    if (old_bool == input_bool) PetscFunctionReturn(0);
@@ -586,6 +645,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetConstrainZ(PC pc, PetscBool input_bool)
 // -pc_air_strong_r_threshold
 PETSC_EXTERN PetscErrorCode PCAIRSetStrongRThreshold(PC pc, PetscReal input_real)
 {
+   PetscFunctionBegin;
    PetscReal old_real;
    PCAIRGetStrongRThreshold(pc, &old_real);
    if (old_real == input_real) PetscFunctionReturn(0);
@@ -608,6 +668,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetStrongRThreshold(PC pc, PetscReal input_real
 // -pc_air_inverse_type
 PETSC_EXTERN PetscErrorCode PCAIRSetInverseType(PC pc, PCPFLAREINVType input_int)
 {
+   PetscFunctionBegin;
    PCPFLAREINVType old_int;
    PCAIRGetInverseType(pc, &old_int);
    if (old_int == input_int) PetscFunctionReturn(0);
@@ -623,6 +684,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetInverseType(PC pc, PCPFLAREINVType input_int
 // -pc_air_z_type
 PETSC_EXTERN PetscErrorCode PCAIRSetZType(PC pc, PCAIRZType input_int)
 {
+   PetscFunctionBegin;
    PCAIRZType old_int;
    PCAIRGetZType(pc, &old_int);
    if (old_int == input_int) PetscFunctionReturn(0);
@@ -635,6 +697,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetZType(PC pc, PCAIRZType input_int)
 // -pc_air_poly_order
 PETSC_EXTERN PetscErrorCode PCAIRSetPolyOrder(PC pc, PetscInt input_int)
 {
+   PetscFunctionBegin;
    PetscInt old_int;
    PCAIRGetPolyOrder(pc, &old_int);
    if (old_int == input_int) PetscFunctionReturn(0);
@@ -649,6 +712,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetPolyOrder(PC pc, PetscInt input_int)
 // -pc_air_poly_sparsity_order
 PETSC_EXTERN PetscErrorCode PCAIRSetPolySparsityOrder(PC pc, PetscInt input_int)
 {
+   PetscFunctionBegin;
    PetscInt old_int;
    PCAIRGetPolySparsityOrder(pc, &old_int);
    if (old_int == input_int) PetscFunctionReturn(0);
@@ -661,6 +725,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetPolySparsityOrder(PC pc, PetscInt input_int)
 // -pc_air_coarsest_inverse_type
 PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestInverseType(PC pc, PCPFLAREINVType input_int)
 {
+   PetscFunctionBegin;
    PCPFLAREINVType old_int;
    PCAIRGetCoarsestInverseType(pc, &old_int);
    if (old_int == input_int) PetscFunctionReturn(0);
@@ -673,6 +738,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestInverseType(PC pc, PCPFLAREINVType i
 // -pc_air_coarsest_poly_order
 PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestPolyOrder(PC pc, PetscInt input_int)
 {
+   PetscFunctionBegin;
    PetscInt old_int;
    PCAIRGetCoarsestPolyOrder(pc, &old_int);
    if (old_int == input_int) PetscFunctionReturn(0);
@@ -685,6 +751,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestPolyOrder(PC pc, PetscInt input_int)
 // -pc_air_coarsest_poly_sparsity_order
 PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestPolySparsityOrder(PC pc, PetscInt input_int)
 {
+   PetscFunctionBegin;
    PetscInt old_int;
    PCAIRGetCoarsestPolySparsityOrder(pc, &old_int);
    if (old_int == input_int) PetscFunctionReturn(0);
@@ -697,6 +764,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestPolySparsityOrder(PC pc, PetscInt in
 // -pc_air_coarsest_matrix_free_polys
 PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestMatrixFreePolys(PC pc, PetscBool input_bool)
 {
+   PetscFunctionBegin;
    PetscBool old_bool;
    PCAIRGetCoarsestMatrixFreePolys(pc, &old_bool);
    if (old_bool == input_bool) PetscFunctionReturn(0);
@@ -709,6 +777,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestMatrixFreePolys(PC pc, PetscBool inp
 // -pc_air_coarsest_subcomm
 PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestSubcomm(PC pc, PetscBool input_bool)
 {
+   PetscFunctionBegin;
    // No need to reset if this changes
    PCAIRSetCoarsestSubcomm_c(&pc, input_bool);
    PetscFunctionReturn(0);
@@ -718,6 +787,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestSubcomm(PC pc, PetscBool input_bool)
 // -pc_air_r_drop
 PETSC_EXTERN PetscErrorCode PCAIRSetRDrop(PC pc, PetscReal input_real)
 {
+   PetscFunctionBegin;
    PetscReal old_real;
    PCAIRGetRDrop(pc, &old_real);
    if (old_real == input_real) PetscFunctionReturn(0);
@@ -730,6 +800,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetRDrop(PC pc, PetscReal input_real)
 // -pc_air_a_drop
 PETSC_EXTERN PetscErrorCode PCAIRSetADrop(PC pc, PetscReal input_real)
 {
+   PetscFunctionBegin;
    PetscReal old_real;
    PCAIRGetADrop(pc, &old_real);
    if (old_real == input_real) PetscFunctionReturn(0);
@@ -742,6 +813,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetADrop(PC pc, PetscReal input_real)
 // -pc_air_a_lump
 PETSC_EXTERN PetscErrorCode PCAIRSetALump(PC pc, PetscBool input_bool)
 {
+   PetscFunctionBegin;
    PetscBool old_bool;
    PCAIRGetALump(pc, &old_bool);
    if (old_bool == input_bool) PetscFunctionReturn(0);
@@ -759,7 +831,8 @@ PETSC_EXTERN PetscErrorCode PCAIRSetALump(PC pc, PetscBool input_bool)
 // Default: false
 // -pc_air_reuse_sparsity
 PETSC_EXTERN PetscErrorCode PCAIRSetReuseSparsity(PC pc, PetscBool input_bool)
-{   
+{  
+   PetscFunctionBegin; 
    PCAIRSetReuseSparsity_c(&pc, input_bool);
    PetscFunctionReturn(0); 
 }
@@ -775,6 +848,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetReuseSparsity(PC pc, PetscBool input_bool)
 // -pc_air_reuse_poly_coeffs
 PETSC_EXTERN PetscErrorCode PCAIRSetReusePolyCoeffs(PC pc, PetscBool input_bool)
 {   
+   PetscFunctionBegin;
    PCAIRSetReusePolyCoeffs_c(&pc, input_bool);
    PetscFunctionReturn(0); 
 }
@@ -782,6 +856,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetReusePolyCoeffs(PC pc, PetscBool input_bool)
 // row_size and col_size are the size of the coeffs_ptr array
 PETSC_EXTERN PetscErrorCode PCAIRSetPolyCoeffs(PC pc, PetscInt petsc_level, PetscInt which_inverse, PetscReal *coeffs_ptr, PetscInt row_size, PetscInt col_size)
 {
+   PetscFunctionBegin;
    PCAIRSetPolyCoeffs_c(&pc,petsc_level, which_inverse, \
       coeffs_ptr, row_size, col_size);
    PetscFunctionReturn(0);
@@ -789,12 +864,14 @@ PETSC_EXTERN PetscErrorCode PCAIRSetPolyCoeffs(PC pc, PetscInt petsc_level, Pets
 
 // ~~~~~~~~~~~~~~~~
 
-#if PETSC_VERSION_MINOR >= 18
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 18)
 static PetscErrorCode PCSetFromOptions_AIR_c(PC pc, PetscOptionItems *PetscOptionsObject)
 #else
 static PetscErrorCode PCSetFromOptions_AIR_c(PetscOptionItems *PetscOptionsObject,PC pc)
 #endif
 {
+   PetscFunctionBegin;
+   
    PetscBool    flg, old_flag;
    PetscInt input_int, old_int;
    PetscReal input_real, old_real;
@@ -802,7 +879,7 @@ static PetscErrorCode PCSetFromOptions_AIR_c(PetscOptionItems *PetscOptionsObjec
    PCAIRZType old_z_type, z_type;
    CFSplittingType old_cf_type, cf_type;
 
-#if PETSC_VERSION_MINOR >= 18
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 18)
    PetscOptionsHeadBegin(PetscOptionsObject, "PCAIR options");
 #else
    PetscOptionsHead(PetscOptionsObject, "PCAIR options");
@@ -977,7 +1054,7 @@ static PetscErrorCode PCSetFromOptions_AIR_c(PetscOptionItems *PetscOptionsObjec
    PCAIRSetProcessorAgglomFactor(pc, input_int);   
    // ~~~~                                                          
 
-#if PETSC_VERSION_MINOR >= 18
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 18)
    PetscOptionsHeadEnd();
 #else
    PetscOptionsTail();
@@ -989,6 +1066,8 @@ static PetscErrorCode PCSetFromOptions_AIR_c(PetscOptionItems *PetscOptionsObjec
 
 static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
 {
+   PetscFunctionBegin;
+   
    PC *pc_air_shell = (PC *)pc->data;
 
    PetscInt input_int, input_int_two, input_int_three;
@@ -1231,6 +1310,8 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
 // Creates the structure we need for this PC
 PETSC_EXTERN PetscErrorCode PCCreate_AIR(PC pc)
 {
+   PetscFunctionBegin;
+
    // Now we call petsc fortran routines from this PC
    // so we have to have made sure this is called
    PetscInitializeFortran();

@@ -8,6 +8,8 @@ module cf_splitting
 
    implicit none
 
+#include "petsc_legacy.h"
+
    public   
 
    PetscEnum, parameter :: CF_PMISR_DDC=0
@@ -131,9 +133,9 @@ module cf_splitting
 
       do ifree = global_row_start, global_row_end_plus_one-1                  
 
-         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)
+         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
       end do
 
       allocate(cols(max_nnzs))
@@ -239,7 +241,7 @@ module cf_splitting
          end do
 
          ! Much quicker to call setvalues
-         call MatSetValues(output_mat, one, ifree, ncols, cols_mod, &
+         call MatSetValues(output_mat, one, [ifree], ncols, cols_mod, &
                   vals_copy, INSERT_VALUES, ierr)
 
          ! Must call otherwise petsc leaks memory
@@ -319,9 +321,9 @@ module cf_splitting
       if (symmetrize .OR. square) then
          max_nnzs = 0
          do ifree = global_row_start, global_row_end_plus_one-1     
-            call MatGetRow(output_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)  
+            call MatGetRow(output_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)  
             if (ncols > max_nnzs) max_nnzs = ncols
-            call MatRestoreRow(output_mat, ifree, ncols, PETSC_NULL_INTEGER, PETSC_NULL_SCALAR, ierr)               
+            call MatRestoreRow(output_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)               
          end do
          allocate(vals(max_nnzs))
          vals = 1.0
