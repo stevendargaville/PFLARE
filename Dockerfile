@@ -43,7 +43,7 @@ RUN cd PFLARE && make && make tests && make python && make tests_python
 
 RUN useradd -ms /bin/bash pflare
 USER pflare
-WORKDIR /home/PFLARE
+WORKDIR /build/PFLARE
 
 LABEL maintainer='Steven Dargaville'
 LABEL description='PFLARE'
