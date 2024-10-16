@@ -607,7 +607,8 @@ module pcair_c_fortran_bindings
 
       ! ~~~~~~~~
       integer(c_long_long), intent(inout) :: pc_ptr
-      PetscInt, value, intent(in)         :: petsc_level, which_inverse 
+      PetscInt, value, intent(in)         :: petsc_level
+      integer(c_int), value, intent(in)   :: which_inverse 
       PetscInt, intent(out)               :: row_size, col_size
       type(c_ptr), intent(out)            :: coeffs_ptr
 
@@ -1247,7 +1248,8 @@ module pcair_c_fortran_bindings
 
       ! ~~~~~~~~
       integer(c_long_long), intent(inout) :: pc_ptr
-      PetscInt, value, intent(in)         :: petsc_level, which_inverse 
+      PetscInt, value, intent(in)         :: petsc_level
+      integer(c_int), value, intent(in)   :: which_inverse 
       PetscInt, value, intent(in)         :: row_size, col_size
       type(c_ptr), value, intent(in)      :: coeffs_ptr
 
@@ -1318,7 +1320,7 @@ module pcair_c_fortran_bindings
          end do        
 
       else
-         print *, "Unknown which_inverse in PCAIRGetPolyCoeffs_c"
+         print *, "Unknown which_inverse in PCAIRSetPolyCoeffs_c"
          call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
       end if      
 

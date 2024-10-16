@@ -47,7 +47,7 @@ PETSC_EXTERN PetscErrorCode PCAIRGetADrop_c(PC *pc, PetscReal *input_real);
 PETSC_EXTERN PetscErrorCode PCAIRGetALump_c(PC *pc, PetscBool *input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRGetReuseSparsity_c(PC *pc, PetscBool *input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRGetReusePolyCoeffs_c(PC *pc, PetscBool *input_bool);
-PETSC_EXTERN PetscErrorCode PCAIRGetPolyCoeffs_c(PC *pc, PetscInt petsc_level, PetscInt which_inverse, PetscReal **coeffs_ptr, PetscInt *row_size, PetscInt *col_size);
+PETSC_EXTERN PetscErrorCode PCAIRGetPolyCoeffs_c(PC *pc, PetscInt petsc_level, int which_inverse, PetscReal **coeffs_ptr, PetscInt *row_size, PetscInt *col_size);
 
 // Setters
 PETSC_EXTERN PetscErrorCode PCAIRSetPrintStatsTimings_c(PC *pc, PetscBool input_bool);
@@ -83,7 +83,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetADrop_c(PC *pc, PetscReal input_real);
 PETSC_EXTERN PetscErrorCode PCAIRSetALump_c(PC *pc, PetscBool input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRSetReuseSparsity_c(PC *pc, PetscBool input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRSetReusePolyCoeffs_c(PC *pc, PetscBool input_bool);
-PETSC_EXTERN PetscErrorCode PCAIRSetPolyCoeffs_c(PC *pc, PetscInt petsc_level, PetscInt which_inverse, PetscReal *coeffs_ptr, PetscInt row_size, PetscInt col_size);
+PETSC_EXTERN PetscErrorCode PCAIRSetPolyCoeffs_c(PC *pc, PetscInt petsc_level, int which_inverse, PetscReal *coeffs_ptr, PetscInt row_size, PetscInt col_size);
 
 // ~~~~~~~~~~~~~
 
@@ -369,7 +369,7 @@ PETSC_EXTERN PetscErrorCode PCAIRGetReusePolyCoeffs(PC pc, PetscBool *input_bool
 // the size of the coeff pointer array is also returned 
 // This is different to the fortran interface to this routine, which returns a copy
 // in an allocatable object (which knows its own size)
-PETSC_EXTERN PetscErrorCode PCAIRGetPolyCoeffs(PC pc, PetscInt petsc_level, PetscInt which_inverse, PetscReal **coeffs_ptr, PetscInt *row_size, PetscInt *col_size)
+PETSC_EXTERN PetscErrorCode PCAIRGetPolyCoeffs(PC pc, PetscInt petsc_level, int which_inverse, PetscReal **coeffs_ptr, PetscInt *row_size, PetscInt *col_size)
 {
    PetscFunctionBegin;
    PCAIRGetPolyCoeffs_c(&pc,petsc_level, which_inverse, \
@@ -854,7 +854,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetReusePolyCoeffs(PC pc, PetscBool input_bool)
 }
 // This routine sets the polynomial coefficients in the PCAIR object
 // row_size and col_size are the size of the coeffs_ptr array
-PETSC_EXTERN PetscErrorCode PCAIRSetPolyCoeffs(PC pc, PetscInt petsc_level, PetscInt which_inverse, PetscReal *coeffs_ptr, PetscInt row_size, PetscInt col_size)
+PETSC_EXTERN PetscErrorCode PCAIRSetPolyCoeffs(PC pc, PetscInt petsc_level, int which_inverse, PetscReal *coeffs_ptr, PetscInt row_size, PetscInt col_size)
 {
    PetscFunctionBegin;
    PCAIRSetPolyCoeffs_c(&pc,petsc_level, which_inverse, \

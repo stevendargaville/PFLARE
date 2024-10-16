@@ -44,8 +44,8 @@ module gmres_poly
       ! Setups the gmres poly data structure and does some size checking
 
       ! ~~~~~~
-      PetscInt, intent(in)                              :: global_rows
-      integer, intent(in)                               :: inverse_type, poly_order, number_splits
+      PetscInt, intent(in)                              :: global_rows, number_splits
+      integer, intent(in)                               :: inverse_type, poly_order
       integer, intent(in)                               :: poly_sparsity_order
       logical, intent(in)                               :: subcomm
       type(gmres_poly_data), intent(inout)              :: poly_data
@@ -58,7 +58,7 @@ module gmres_poly
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
       poly_data%buffers%matrix = PETSC_NULL_MAT
 #endif      
-      poly_data%buffers%number_splits = number_splits
+      poly_data%buffers%number_splits = int(number_splits)
 
       ! For matrices with size smaller than the subspace size (ie polynomial order + 1)
       ! we'll have (close to) an exact solver and only need to go up to the matrix size
