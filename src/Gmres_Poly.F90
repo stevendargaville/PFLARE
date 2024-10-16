@@ -276,7 +276,7 @@ module gmres_poly
 
       ! Computes a fixed order gmres polynomial for the matrix passed in
       ! and stores each of the polynomial coefficients in coefficients
-      ! This computes the coefficients in the power basis using the Arnoldi basis
+      ! This computes the coefficients using the Arnoldi basis
       ! This won't be stable at high order, but is stable at higher order than
       ! using the power basis. The cost of this is many reductions in parallel
       ! There is a comms-avoiding one given in start_gmres_polynomial_coefficients_power 
