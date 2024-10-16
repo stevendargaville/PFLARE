@@ -53,11 +53,9 @@ module air_data_type
       integer :: processor_agglom_factor = 2      
       ! If we are doing processor agglomeration, then we have 
       ! some ranks with no rows
-      ! During the gmres polynomial coefficient creation, we can therefore
-      ! have the reductions occur on a subcomm if we want to reduce the cost
-      ! This also allows ranks with zero rows to be used in the 
-      ! fixed sparsity inverse assembly if omp is enabled (assuming reasonable
-      ! pinning of omp threads)
+      ! If computing a gmres polynomial inverse 
+      ! with inverse_type arnoldi or newton, then we can have 
+      ! the reductions occur on a subcomm if we want to reduce the cost
       ! -pc_air_subcomm
       logical :: subcomm = .FALSE.
 
