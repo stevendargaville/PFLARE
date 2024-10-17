@@ -29,7 +29,7 @@ module aggregation
       PetscInt :: local_rows, local_cols, global_rows, global_cols
       PetscInt :: a_global_row_start, a_global_row_end_plus_one, ifree, ncols, kfree
       PetscInt :: max_nnzs, ncols_store, aggregate, max_neighbour_index, max_neighbour_value
-      integer :: comm_rank, errorcode, jfree, comm_size
+      integer :: errorcode, jfree, comm_size
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX      
       PetscInt, dimension(:), allocatable :: indices, cols
@@ -37,9 +37,7 @@ module aggregation
 
       ! ~~~~~~   
 
-      call PetscObjectGetComm(strength_mat, MPI_COMM_MATRIX, ierr)  
-      ! Get the comm rank 
-      call MPI_Comm_rank(MPI_COMM_MATRIX, comm_rank, errorcode)       
+      call PetscObjectGetComm(strength_mat, MPI_COMM_MATRIX, ierr)       
       ! Get the comm size 
       call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)      
       ! Serial only!
@@ -70,15 +68,15 @@ module aggregation
 
       allocate(cols(max_nnzs))    
    
-      ! Backwards ordering to match pyamg in serial
+      ! Serial ordering to match pyamg in serial
       do ifree = 1, local_rows
-         indices(ifree) = local_rows - (ifree-1)
+         indices(ifree) = ifree
       end do
 
       aggregate = 1
 
       ! Loop over all the rows - Step 1 - initial covering
-      do ifree = local_rows, 1, -1
+      do ifree = 1, size(indices)
 
          ! Get S_i - distance 1 neighbours
          call MatGetRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
@@ -115,7 +113,7 @@ module aggregation
       end do
 
       ! Step 2 - enlarging the sets
-      do ifree = local_rows, 1, -1
+      do ifree = 1, size(indices)
 
          ! Check if this node has been assigned
          if (cf_markers(indices(ifree)) /= 0) cycle
@@ -159,12 +157,12 @@ module aggregation
       end do      
 
       ! Swap the negative ones back to positive
-      do ifree = 1, local_rows
+      do ifree = 1, size(indices)
          if (aggregates(ifree) < 0) aggregates(ifree) = aggregates(ifree) * (-1.0)
       end do
 
       ! Step 3 - any remnants
-      do ifree = local_rows, 1, -1
+      do ifree = 1, size(indices)
 
          ! Check if this node has been assigned
          if (cf_markers(indices(ifree)) /= 0) cycle

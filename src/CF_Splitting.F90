@@ -355,7 +355,7 @@ module cf_splitting
       ! Local
       PetscInt :: local_c_size, global_row_start, global_row_end_plus_one, i_loc, counter
       PetscInt :: global_row_start_dist2, global_row_end_plus_one_dist2
-      integer :: errorcode
+      integer :: errorcode, MPI_COMM_MATRIX, comm_size
       PetscErrorCode :: ierr
       type(tMat) :: strength_mat, strength_mat_fc, prolongators, temp_mat, strength_mat_c
       type(tIS) :: is_fine, is_coarse, zero_diags
@@ -364,22 +364,42 @@ module cf_splitting
       PetscInt, dimension(:), pointer :: is_pointer_coarse, is_pointer_fine, zero_diags_pointer
       type(tVec) :: diag_vec
       PetscInt, parameter :: nz_ignore = -1
+      type(tMat) :: Ad, Ao
+      PetscOffset :: iicol
+      PetscInt :: icol(1)      
 
       ! ~~~~~~  
 
-      ! Generate the strength matrix - symmetrize
+      call PetscObjectGetComm(input_mat, MPI_COMM_MATRIX, ierr)    
+      ! Get the comm size 
+      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)  
+      call MatGetOwnershipRange(input_mat, global_row_start, global_row_end_plus_one, ierr)   
+
+      ! ~~~~~~~~~~~~
+      ! Generate the strength matrix
+      ! ~~~~~~~~~~~~
+
       ! Use classical strength of connection
       if (cf_splitting_type == CF_PMIS_DIST2) then
+
          ! Square the strength of connection graph - S'S + S
          ! Note we are symmetrizing the strength matrix here
          call generate_sabs(input_mat, strong_threshold, .TRUE., .TRUE., strength_mat)
+
       else if (cf_splitting_type == CF_PMIS) then
+
          ! Note we are symmetrizing the strength matrix here
          call generate_sabs(input_mat, strong_threshold, .TRUE., .FALSE., strength_mat)
-      ! pmisr ddc and aggregation
+
+      ! PMISR DDC and Aggregation
       else 
+         ! Only symmetrize if not already symmetric
          call generate_sabs(input_mat, strong_threshold, .NOT. symmetric, .FALSE., strength_mat)         
       end if
+
+      ! ~~~~~~~~~~~~
+      ! Do the first pass splitting
+      ! ~~~~~~~~~~~~
 
       ! Generate an independent set
       if (cf_splitting_type == CF_PMISR_DDC) then
@@ -481,10 +501,17 @@ module cf_splitting
          ! call MatDestroy(strength_mat_c, ierr)
          ! call MatDestroy(prolongators, ierr)
 
-      else if (cf_splitting_type == CF_AGG) then         
+      else if (cf_splitting_type == CF_AGG) then 
+         
+         if (comm_size /= 1) then
+            ! Get the sequential part of the matrix
+            call MatMPIAIJGetSeqAIJ(strength_mat, Ad, Ao, icol, iicol, ierr)         
+         else
+            Ad = strength_mat
+         end if
 
-         ! Call an aggregation algorithm
-         call generate_serial_aggregation(strength_mat, cf_markers_local, aggregates)
+         ! Call an aggregation algorithm but only on the local Ad
+         call generate_serial_aggregation(Ad, cf_markers_local, aggregates)
          deallocate(aggregates)
 
       else
