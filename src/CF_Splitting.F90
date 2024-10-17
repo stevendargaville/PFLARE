@@ -484,7 +484,7 @@ module cf_splitting
       else if (cf_splitting_type == CF_AGG) then         
 
          ! Call an aggregation algorithm
-         call generate_aggregation(input_mat, strength_mat, cf_markers_local, aggregates)
+         call generate_serial_aggregation(input_mat, strength_mat, cf_markers_local, aggregates)
          deallocate(aggregates)
 
       else
