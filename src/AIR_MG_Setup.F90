@@ -1114,13 +1114,14 @@ module air_mg_setup
       type(tMat)          :: coarse_matrix_temp
       type(tKSP)          :: ksp_smoother_up, ksp_smoother_down, ksp_coarse_solver
       type(tPC)           :: pc_smoother_up, pc_smoother_down, pc_coarse_solver
-      type(tVec)          :: result
+      type(tVec)          :: temp_coarse_vec
       type(tIS)           :: is_unchanged
       type(mat_ctxtype), pointer :: mat_ctx
       PetscInt, parameter :: one=1, zero=0
       type(tVec), dimension(:), allocatable :: left_null_vecs, right_null_vecs
       type(tVec), dimension(:), allocatable :: left_null_vecs_c, right_null_vecs_c
       logical :: cst_nullspace
+      VecScatter :: vec_scatter
 
       ! ~~~~~~     
 
@@ -1475,7 +1476,9 @@ module air_mg_setup
                                  number_splits, .FALSE., air_data%reuse(our_level)%reuse_is(IS_REPARTITION))
                   end if
 
+                  ! ~~~~~~~~~~~~~~~~~~
                   ! Repartition the coarse matrix
+                  ! ~~~~~~~~~~~~~~~~~~
                   if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_COARSE_REPARTITIONED))) then
 
                      call MatCreateSubMatrix(air_data%coarse_matrix(our_level_coarse), &
@@ -1504,7 +1507,9 @@ module air_mg_setup
                   call MatGetOwnershipRange(air_data%prolongators(our_level), prolongator_start, prolongator_end_plus_one, ierr)                     
                   call ISCreateStride(MPI_COMM_MATRIX, prolongator_end_plus_one - prolongator_start, prolongator_start, one, is_unchanged, ierr)
 
+                  ! ~~~~~~~~~~~~~~~~~~
                   ! Repartition the prolongator matrix
+                  ! ~~~~~~~~~~~~~~~~~~
                   if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_P_REPARTITIONED))) then
 
                      ! If we've got a one point classical prolongator then we just use the existing repartitioned
@@ -1537,7 +1542,9 @@ module air_mg_setup
 #endif                     
                   end if                   
                   
+                  ! ~~~~~~~~~~~~~~~~~~
                   ! If need to repartition a restrictor
+                  ! ~~~~~~~~~~~~~~~~~~
                   if (.NOT. air_data%options%symmetric) then
 
                      ! Repartition the restrictor matrix
@@ -1563,6 +1570,56 @@ module air_mg_setup
 #endif                        
                      end if                     
                   end if
+
+                  ! ~~~~~~~~~~~~~~~~~~
+                  ! If need to repartition the coarse right and left near-nullspace vectors
+                  ! ~~~~~~~~~~~~~~~~~~     
+                  if (air_data%options%constrain_z .OR. air_data%options%constrain_w) then 
+                     call MatCreateVecs(air_data%coarse_matrix(our_level_coarse), temp_coarse_vec, PETSC_NULL_VEC, ierr)    
+
+                     if (air_data%options%constrain_z) then
+                        call VecScatterCreate(left_null_vecs(1), air_data%reuse(our_level)%reuse_is(IS_REPARTITION), &
+                                 temp_coarse_vec, PETSC_NULL_VEC, vec_scatter,ierr)
+                     else if (air_data%options%constrain_w) then
+                        call VecScatterCreate(right_null_vecs(1), air_data%reuse(our_level)%reuse_is(IS_REPARTITION), &
+                                 temp_coarse_vec, PETSC_NULL_VEC, vec_scatter,ierr)
+                     end if
+                  end if
+
+                  ! Could overlap the comms if we stored a copy of the number of vectors
+                  
+                  ! Do the vec scatters for the left nullspace vecs
+                  if (air_data%options%constrain_z) then
+                     do i_loc = 1, size(left_null_vecs) 
+                        call VecScatterBegin(vec_scatter, left_null_vecs(i_loc), temp_coarse_vec, &
+                                    INSERT_VALUES, SCATTER_FORWARD, ierr)
+                        call VecScatterEnd(vec_scatter, left_null_vecs(i_loc), temp_coarse_vec, &
+                                    INSERT_VALUES, SCATTER_FORWARD, ierr)                                         
+                        call VecDestroy(left_null_vecs(i_loc), ierr)
+                        call VecDuplicate(temp_coarse_vec, left_null_vecs(i_loc), ierr)
+                        call VecCopy(temp_coarse_vec, left_null_vecs(i_loc), ierr)
+                     end do
+                  end if
+                  
+                  ! Do the vec scatters for the right nullspace vecs
+                  if (air_data%options%constrain_w) then
+                     do i_loc = 1, size(right_null_vecs) 
+                        call VecScatterBegin(vec_scatter, right_null_vecs(i_loc), temp_coarse_vec, &
+                                    INSERT_VALUES, SCATTER_FORWARD, ierr)
+                        call VecScatterEnd(vec_scatter, right_null_vecs(i_loc), temp_coarse_vec, &
+                                    INSERT_VALUES, SCATTER_FORWARD, ierr)        
+                        call VecDestroy(right_null_vecs(i_loc), ierr)
+                        call VecDuplicate(temp_coarse_vec, right_null_vecs(i_loc), ierr)
+                        call VecCopy(temp_coarse_vec, right_null_vecs(i_loc), ierr)
+                     end do                     
+                  end if    
+                  
+                  if (air_data%options%constrain_z .OR. air_data%options%constrain_w) then 
+                     call VecDestroy(temp_coarse_vec, ierr)
+                     call VecScatterDestroy(vec_scatter, ierr)
+                  end if
+
+                  ! ~~~~~~~~~~~~~~~~~~
 
                   call ISDestroy(is_unchanged, ierr)
                   ! Delete temporary if not reusing
