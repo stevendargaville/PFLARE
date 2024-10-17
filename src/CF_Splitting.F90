@@ -527,9 +527,10 @@ module cf_splitting
       ! Create the IS for the CF splittings
       call create_cf_is(input_mat, cf_markers_local, is_fine, is_coarse)   
       
-      ! Only bother doing the second pass if we haven't requested an exact independent set
-      ! ie only do if we don't have diagonal Aff
-      if (strong_threshold /= 0.0) then
+      ! Only do the DDC pass if we're doing PMISR_DDC
+      ! and if we haven't requested an exact independent set, ie strong threshold is not zero
+      ! as this gives diagonal Aff)
+      if (strong_threshold /= 0.0 .AND. cf_splitting_type == CF_PMISR_DDC) then
 
          ! Do the second pass cleanup - this will directly modify the values in cf_markers_local
          call ddc(input_mat, is_fine, fraction_swap, cf_markers_local)

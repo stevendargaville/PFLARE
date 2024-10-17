@@ -197,7 +197,7 @@ run_tests:
 	@echo ""
 	@echo "Test solving isotropic diffusion with fast coarsening and near-nullspace"
 	./ex62f.o -m 50 -n 50 -pc_air_z_type lair -pc_air_one_c_smooth -pc_air_symmetric -pc_air_constrain_z \
-	 -pc_air_cf_splitting_type agg -pc_air_ddc_fraction 0.0 -pc_air_a_drop 1e-5 -pc_air_a_lump\
+	 -pc_air_cf_splitting_type agg -pc_air_a_drop 1e-5 -pc_air_a_lump\
 	 -pc_air_r_drop 0 -ksp_rtol 1e-10 -ksp_pc_side right	
 # 
 	@echo ""
