@@ -1281,7 +1281,7 @@ module air_mg_setup
                   end do
                end if
                deallocate(left_null_vecs)
-               deallocate(left_null_vecs_c)
+               if (allocated(left_null_vecs_c)) deallocate(left_null_vecs_c)
             end if
             if (air_data%options%constrain_w) then
                if (cst_nullspace .AND. our_level == 1) then
@@ -1293,7 +1293,7 @@ module air_mg_setup
                   end do
                end if
                deallocate(right_null_vecs)
-               deallocate(right_null_vecs_c)
+               if (allocated(right_null_vecs_c)) deallocate(right_null_vecs_c)
             end if            
 
             no_levels = our_level
