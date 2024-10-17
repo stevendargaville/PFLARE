@@ -14,14 +14,14 @@ module aggregation
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine generate_serial_aggregation(input_mat, strength_mat, cf_markers, aggregates)
+   subroutine generate_serial_aggregation(strength_mat, cf_markers, aggregates)
 
       ! Do an aggregation algorithm - this is currently an exact copy of the aggregation 
       ! algorithm in PyAMG
       ! Only in serial
 
       ! ~~~~~~
-      type(tMat), target, intent(in)      :: input_mat, strength_mat
+      type(tMat), target, intent(in)      :: strength_mat
       integer, dimension(:), allocatable, intent(inout) :: cf_markers
       PetscInt, dimension(:), allocatable, intent(inout) :: aggregates
 
@@ -32,13 +32,12 @@ module aggregation
       integer :: comm_rank, errorcode, jfree, comm_size
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX      
-      PetscInt, dimension(:), allocatable :: indices, cols, neighbours
-      real, dimension(:), allocatable :: vals
+      PetscInt, dimension(:), allocatable :: indices, cols
       logical :: mark, mark_neigh
 
       ! ~~~~~~   
 
-      call PetscObjectGetComm(input_mat, MPI_COMM_MATRIX, ierr)  
+      call PetscObjectGetComm(strength_mat, MPI_COMM_MATRIX, ierr)  
       ! Get the comm rank 
       call MPI_Comm_rank(MPI_COMM_MATRIX, comm_rank, errorcode)       
       ! Get the comm size 
@@ -64,15 +63,14 @@ module aggregation
       ! Get nnzs 
       max_nnzs = 0
       do ifree = a_global_row_start, a_global_row_end_plus_one-1                  
-         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
+         call MatGetRow(strength_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
+         call MatRestoreRow(strength_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
       end do        
 
       allocate(cols(max_nnzs))    
-      allocate(vals(max_nnzs))  
    
-      ! Backwards ordering to match pyamg
+      ! Backwards ordering to match pyamg in serial
       do ifree = 1, local_rows
          indices(ifree) = local_rows - (ifree-1)
       end do
@@ -82,15 +80,10 @@ module aggregation
       ! Loop over all the rows - Step 1 - initial covering
       do ifree = local_rows, 1, -1
 
-         ! Get S_i
+         ! Get S_i - distance 1 neighbours
          call MatGetRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
-         ! Store the distance 1 neighbours
-         ncols_store = ncols
-         allocate(neighbours(ncols_store))
-         neighbours = cols(1:ncols)
-         call MatRestoreRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
 
-         if (ncols_store == 0) then
+         if (ncols == 0) then
 
             ! No neighbours it stays fine
             cf_markers(indices(ifree)) = -1
@@ -98,7 +91,7 @@ module aggregation
          else       
 
             ! Check if this node or any of the strongly connected neighbours are already in an aggregate
-            mark_neigh = any(cf_markers(neighbours+1) /= 0 .OR. cf_markers(indices(ifree)) /= 0)      
+            mark_neigh = any(cf_markers(cols(1:ncols)+1) /= 0 .OR. cf_markers(indices(ifree)) /= 0)      
          
             ! Skip if this node or any strong neighbours are already in an aggregate
             if (.NOT. mark_neigh) then
@@ -107,9 +100,9 @@ module aggregation
                cf_markers(indices(ifree)) = 1
                aggregates(indices(ifree)) = aggregate
                ! It's neighbours are fine
-               do jfree = 1, size(neighbours)
-                  cf_markers(neighbours(jfree)+1) = -1
-                  aggregates(neighbours(jfree)+1) = aggregate
+               do jfree = 1, ncols
+                  cf_markers(cols(jfree)+1) = -1
+                  aggregates(cols(jfree)+1) = aggregate
                end do         
                ! Advance to a new aggregate
                aggregate = aggregate + 1
@@ -117,7 +110,7 @@ module aggregation
 
          end if
 
-         deallocate(neighbours)
+         call MatRestoreRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
 
       end do
 
@@ -127,39 +120,27 @@ module aggregation
          ! Check if this node has been assigned
          if (cf_markers(indices(ifree)) /= 0) cycle
 
-         ! Get S_i
+         ! Get S_i - distance 1 neighbours
          call MatGetRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
-         ! Store the distance 1 neighbours
-         ncols_store = ncols
-         allocate(neighbours(ncols_store))
-         neighbours = cols(1:ncols)
-         call MatRestoreRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
 
          max_neighbour_index = -1
          max_neighbour_value = 0
-         ! Could just keep the size of the strong connections in strength_mat and avoid this
-         call MatGetRow(input_mat, a_global_row_start + indices(ifree)-1, ncols, cols, vals, ierr)
 
          ! Loop over strongly connected neighbours
-         j_loop: do jfree = 1, size(neighbours)
+         j_loop: do jfree = 1, ncols
 
             ! Have we hit a strongly connected neighbour in an aggregate
             ! that wasn't added as part of stage 2
-            if (aggregates(neighbours(jfree)+1) .le. 0) cycle
-            ! Get the actual matrix entry
-            ! Let's find the actual size of this strong connection
+            if (aggregates(cols(jfree)+1) .le. 0) cycle
+            ! The pyamg version doesn't test for the actual strength of this connection
+            ! It just finds the first strongly connected aggregate neighbour and appends to that
             k_loop: do kfree = 1, ncols
-               if (cols(kfree) == neighbours(jfree)) then
-                  ! Store which neighbour has the biggest connection
-                  !if (abs(vals(kfree)) > max_neighbour_value) then
-                  !   max_neighbour_value = abs(vals(kfree))
-                     max_neighbour_index = jfree
-                     exit j_loop
-                  !end if
+               if (cols(kfree) == cols(jfree)) then
+                  max_neighbour_index = jfree
+                  exit j_loop
                end if
             end do k_loop
          end do j_loop
-         call MatRestoreRow(input_mat, a_global_row_start + indices(ifree)-1, ncols, cols, vals, ierr)
 
          ! If we didn't have a strongly connected neighbour, cycle
          if (max_neighbour_index /= -1) then
@@ -168,13 +149,13 @@ module aggregation
             ! And so this node becomes part of that aggregate (ie an F point)
             cf_markers(indices(ifree)) = -1
             ! Make this negative to record that it was added as part of stage 2
-            aggregates(indices(ifree)) = -aggregates(neighbours(max_neighbour_index)+1)
+            aggregates(indices(ifree)) = -aggregates(cols(max_neighbour_index)+1)
          
             ! Advance to a new aggregate
             aggregate = aggregate + 1
          end if
 
-         deallocate(neighbours)
+         call MatRestoreRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
       end do      
 
       ! Swap the negative ones back to positive
@@ -188,32 +169,26 @@ module aggregation
          ! Check if this node has been assigned
          if (cf_markers(indices(ifree)) /= 0) cycle
 
-         ! Get S_i
+         ! Get S_i - distance 1 neighbours
          call MatGetRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
-         ! Store the distance 1 neighbours
-         ncols_store = ncols
-         allocate(neighbours(ncols_store))
-         neighbours = cols(1:ncols)
-         call MatRestoreRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
 
          ! This is the root node
          cf_markers(indices(ifree)) = 1
          aggregates(indices(ifree)) = aggregate
 
          ! Any unassigned strong neighbours are fine and in this aggregate
-         do jfree = 1, size(neighbours)
-            if (cf_markers(neighbours(jfree)+1) /= 0) cycle            
-            cf_markers(neighbours(jfree)+1) = -1
-            aggregates(neighbours(jfree)+1) = aggregate
+         do jfree = 1, ncols
+            if (cf_markers(cols(jfree)+1) /= 0) cycle            
+            cf_markers(cols(jfree)+1) = -1
+            aggregates(cols(jfree)+1) = aggregate
          end do         
          ! Advance to a new aggregate
          aggregate = aggregate + 1
 
-         deallocate(neighbours)
-
+         call MatRestoreRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
       end do      
 
-      deallocate(indices, cols, vals)
+      deallocate(indices, cols)
 
    end subroutine generate_serial_aggregation   
 
