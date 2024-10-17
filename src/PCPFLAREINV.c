@@ -390,8 +390,7 @@ static PetscErrorCode PCSetUp_PFLAREINV_c(PC pc)
       }
       else if (pc->flag == SAME_NONZERO_PATTERN)
       {
-         // TODO - rebuild with same sparsity
-         PCReset_PFLAREINV_c(pc);
+         // We don't call reset on the pc here so it reuses the sparsity
          // Build the polynomial inverse as a Mat
          calculate_and_build_approximate_inverse_c(&(pc->pmat), \
                type, \
