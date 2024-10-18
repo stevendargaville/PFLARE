@@ -158,7 +158,7 @@ ddc_fraction = 0.1;
 # As many steps as needed
 max_luby_steps = -1;
 # PMISR DDC
-algorithm = 0;
+algorithm = pflare.CF_PMISR_DDC;
 # Is the matrix symmetric?
 symmetric = False;
 

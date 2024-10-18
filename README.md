@@ -464,7 +464,7 @@ or in Python with petsc4py:
      # As many steps as needed
      max_luby_steps = -1;
      # PMISR DDC
-     algorithm = 0;
+     algorithm = pflare.CF_PMISR_DDC;
      # Is the matrix symmetric?
      symmetric = False;
 
