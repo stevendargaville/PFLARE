@@ -16,6 +16,7 @@ module cf_splitting
    PetscEnum, parameter :: CF_PMIS=1
    PetscEnum, parameter :: CF_PMIS_DIST2=2
    PetscEnum, parameter :: CF_AGG=3
+   PetscEnum, parameter :: CF_PMIS_AGG=4
    
    contains
 
@@ -355,6 +356,7 @@ module cf_splitting
       ! Local
       PetscInt :: local_c_size, global_row_start, global_row_end_plus_one, i_loc, counter
       PetscInt :: global_row_start_dist2, global_row_end_plus_one_dist2
+      PetscInt :: local_rows, local_cols, ncols
       integer :: errorcode, MPI_COMM_MATRIX, comm_size
       PetscErrorCode :: ierr
       type(tMat) :: strength_mat, strength_mat_fc, prolongators, temp_mat, strength_mat_c
@@ -373,6 +375,7 @@ module cf_splitting
       call PetscObjectGetComm(input_mat, MPI_COMM_MATRIX, ierr)    
       ! Get the comm size 
       call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)  
+      call MatGetLocalSize(input_mat, local_rows, local_cols, ierr)
       call MatGetOwnershipRange(input_mat, global_row_start, global_row_end_plus_one, ierr)   
 
       ! ~~~~~~~~~~~~
@@ -401,15 +404,17 @@ module cf_splitting
       ! Do the first pass splitting
       ! ~~~~~~~~~~~~
 
-      ! Generate an independent set
+      ! PMISR
       if (cf_splitting_type == CF_PMISR_DDC) then
-         ! Do PMISR
+
          call pmisr(strength_mat, max_luby_steps, .FALSE., cf_markers_local)
 
+      ! Distance 1 PMIS
       else if (cf_splitting_type == CF_PMIS) then
-         ! Do distance 1 PMIS
+
          call pmisr(strength_mat, max_luby_steps, .TRUE., cf_markers_local)
 
+      ! Distance 2 PMIS
       else if (cf_splitting_type == CF_PMIS_DIST2) then
 
          ! As we have generated S'S + S for the strength matrix, this will do distance 2 PMIS
@@ -501,11 +506,29 @@ module cf_splitting
          ! call MatDestroy(strength_mat_c, ierr)
          ! call MatDestroy(prolongators, ierr)
 
-      else if (cf_splitting_type == CF_AGG) then 
-         
+      ! PMIS on boundary nodes then processor local aggregation
+      else if (cf_splitting_type == CF_PMIS_AGG) then
+        
+         ! In parallel we do distance 1 pmis on boundary nodes, then do serial aggregation 
          if (comm_size /= 1) then
+
+            ! Do distance 1 PMIS
+            call pmisr(strength_mat, max_luby_steps, .TRUE., cf_markers_local)
+
             ! Get the sequential part of the matrix
-            call MatMPIAIJGetSeqAIJ(strength_mat, Ad, Ao, icol, iicol, ierr)         
+            call MatMPIAIJGetSeqAIJ(strength_mat, Ad, Ao, icol, iicol, ierr)   
+            
+            ! For any local node that doesn't touch a boundary node, we set the 
+            ! cf_markers back to unassigned and leave them to be done by the aggregation
+            do i_loc = 1, local_rows
+
+               ! Get how many non-zeros are in the off-diagonal 
+               call MatGetRow(Ao, i_loc-1, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
+               ! If we don't touch anything off-processor, its local and set it to unassigned
+               if (ncols == 0) cf_markers_local(i_loc) = 0
+               call MatRestoreRow(Ao, i_loc-1, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
+            end do
+            
          else
             Ad = strength_mat
          end if
@@ -513,6 +536,22 @@ module cf_splitting
          ! Call an aggregation algorithm but only on the local Ad
          call generate_serial_aggregation(Ad, cf_markers_local, aggregates)
          deallocate(aggregates)
+
+      ! Processor local aggregation
+      else if (cf_splitting_type == CF_AGG) then
+        
+         if (comm_size /= 1) then
+
+            ! Get the sequential part of the matrix
+            call MatMPIAIJGetSeqAIJ(strength_mat, Ad, Ao, icol, iicol, ierr)   
+            
+         else
+            Ad = strength_mat
+         end if
+
+         ! Call an aggregation algorithm but only on the local Ad
+         call generate_serial_aggregation(Ad, cf_markers_local, aggregates)
+         deallocate(aggregates)         
 
       else
          ! Just do the same thing as distance 2 multiple times if you want higher distance

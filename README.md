@@ -408,7 +408,8 @@ The CF splittings in PFLARE are used within PCAIR to form the multigrid hierarch
    | pmisr_ddc  |  CF_PMISR_DDC  | Two-pass splitting giving diagonally dominant $\mathbf{A}_\textrm{ff}$ |
    | pmis  |  CF_PMIS  | PMIS method with symmetrized strength matrix |
    | pmis_dist2  |  CF_PMIS_DIST2  | Distance 2 PMIS method with strength matrix formed by S'S + S and then symmetrized |
-   | agg  |  CF_AGG  | Aggregation method with root-nodes as C points. In parallel the aggregation occurs rank local  |
+   | agg  |  CF_AGG  | Aggregation method with root-nodes as C points. In parallel this is processor local aggregation  |
+   | pmis_agg  |  CF_PMIS_AGG  | PMIS method with symmetrized strength matrix on boundary nodes, then processor local aggregation.  |   
 
 The CF splittings can also be called independently from PCAIR. The CF splittings are returned in two PETSc IS's representing the coarse and fine points. For example, to compute a PMISR DDC CF splitting of a PETSc matrix $\mathbf{A}$:
 

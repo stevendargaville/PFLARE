@@ -988,7 +988,7 @@ static PetscErrorCode PCSetFromOptions_AIR_c(PetscOptionItems *PetscOptionsObjec
    PetscOptionsReal("-pc_air_a_drop", "Drop tolerance for A", "PCAIRSetADrop", old_real, &input_real, NULL);
    PCAIRSetADrop(pc, input_real);
    // ~~~~  
-   const char *const CFSplittingTypes[] = {"PMISR_DDC", "PMIS", "PMIS_DIST2", "AGG", "CFSplittingType", "CF_", NULL};
+   const char *const CFSplittingTypes[] = {"PMISR_DDC", "PMIS", "PMIS_DIST2", "AGG", "PMIS_AGG", "CFSplittingType", "CF_", NULL};
    PCAIRGetCFSplittingType(pc, &old_cf_type);
    cf_type = old_cf_type;
    PetscOptionsEnum("-pc_air_cf_splitting_type", "CF splitting algorithm", "PCAIRSetCFSplittingType", CFSplittingTypes, (PetscEnum)old_cf_type, (PetscEnum *)&cf_type, &flg);

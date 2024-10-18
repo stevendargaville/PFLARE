@@ -23,6 +23,7 @@ typedef enum {
    CF_PMIS,
    CF_PMIS_DIST2,
    CF_AGG,
+   CF_PMIS_AGG,
 }  CFSplittingType;
 
 #define PCAIR "air"

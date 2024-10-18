@@ -49,14 +49,26 @@ module aggregation
       ! Get the local sizes
       call MatGetLocalSize(strength_mat, local_rows, local_cols, ierr)
       call MatGetSize(strength_mat, global_rows, global_cols, ierr)      
-      call MatGetOwnershipRange(strength_mat, a_global_row_start, a_global_row_end_plus_one, ierr)   
+      call MatGetOwnershipRange(strength_mat, a_global_row_start, a_global_row_end_plus_one, ierr)       
 
       ! Get the number of connections in S
       allocate(indices(local_rows))
-      allocate(cf_markers(local_rows)) 
-      cf_markers = 0 
       allocate(aggregates(local_rows))  
       aggregates = 0
+
+      ! If we've passed in a partially completed cf splitting
+      if (allocated(cf_markers)) then
+         ! we assign them a negative aggregate, which stops any new 
+         ! points being added to those "aggregates" in step 2
+         do ifree = 1, local_rows
+            if (cf_markers(ifree) /= 0) then
+               aggregates(ifree) = -1
+            end if
+         end do         
+      else
+         allocate(cf_markers(local_rows)) 
+         cf_markers = 0 
+      end if
 
       ! Get nnzs 
       max_nnzs = 0
@@ -184,7 +196,7 @@ module aggregation
          aggregate = aggregate + 1
 
          call MatRestoreRow(strength_mat, a_global_row_start + indices(ifree)-1, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
-      end do      
+      end do
 
       deallocate(indices, cols)
 
