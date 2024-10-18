@@ -1105,6 +1105,7 @@ module air_mg_setup
       PetscInt            :: local_rows, local_cols, global_rows, global_cols, local_fine_is_size, local_coarse_is_size
       PetscInt            :: global_coarse_is_size, global_fine_is_size, global_row_start, global_row_end_plus_one
       PetscInt            :: prolongator_start, prolongator_end_plus_one, number_splits, petsc_level, no_levels_petsc_int
+      PetscInt            :: local_vec_size, ystart, yend, local_rows_repart, local_cols_repart, global_rows_repart, global_cols_repart
       integer             :: no_active_cores, min_size_coarse, i_loc
       integer             :: no_levels, our_level, our_level_coarse, errorcode, comm_rank, comm_size
       PetscErrorCode      :: ierr
@@ -1115,7 +1116,7 @@ module air_mg_setup
       type(tKSP)          :: ksp_smoother_up, ksp_smoother_down, ksp_coarse_solver
       type(tPC)           :: pc_smoother_up, pc_smoother_down, pc_coarse_solver
       type(tVec)          :: temp_coarse_vec
-      type(tIS)           :: is_unchanged
+      type(tIS)           :: is_unchanged, is_full
       type(mat_ctxtype), pointer :: mat_ctx
       PetscInt, parameter :: one=1, zero=0
       type(tVec), dimension(:), allocatable :: left_null_vecs, right_null_vecs
@@ -1575,14 +1576,24 @@ module air_mg_setup
                   ! If need to repartition the coarse right and left near-nullspace vectors
                   ! ~~~~~~~~~~~~~~~~~~     
                   if (air_data%options%constrain_z .OR. air_data%options%constrain_w) then 
-                     call MatCreateVecs(air_data%coarse_matrix(our_level_coarse), temp_coarse_vec, PETSC_NULL_VEC, ierr)    
+
+                     ! Can't use maccreatevecs here, if we coarsen down to one process it returns a serial vector
+                     call MatGetSize(air_data%coarse_matrix(our_level_coarse), global_rows_repart, global_cols_repart, ierr)
+                     call MatGetLocalSize(air_data%coarse_matrix(our_level_coarse), local_rows_repart, local_cols_repart, ierr)
+                     call VecCreateMPI(MPI_COMM_MATRIX, local_rows_repart, &
+                              global_rows_repart, temp_coarse_vec, ierr)  
+
+                     ! Can't seem to pass in PETSC_NULL_IS to the vecscattercreate in petsc 3.14
+                     call VecGetLocalSize(temp_coarse_vec, local_vec_size, ierr)
+                     call VecGetOwnershipRange(temp_coarse_vec, ystart, yend, ierr)
+                     call ISCreateStride(PETSC_COMM_SELF, local_vec_size, ystart, 1, is_full, ierr) 
 
                      if (air_data%options%constrain_z) then
                         call VecScatterCreate(left_null_vecs(1), air_data%reuse(our_level)%reuse_is(IS_REPARTITION), &
-                                 temp_coarse_vec, PETSC_NULL_VEC, vec_scatter,ierr)
+                                 temp_coarse_vec, is_full, vec_scatter,ierr)
                      else if (air_data%options%constrain_w) then
                         call VecScatterCreate(right_null_vecs(1), air_data%reuse(our_level)%reuse_is(IS_REPARTITION), &
-                                 temp_coarse_vec, PETSC_NULL_VEC, vec_scatter,ierr)
+                                 temp_coarse_vec, is_full, vec_scatter,ierr)
                      end if
                   end if
 
@@ -1617,6 +1628,7 @@ module air_mg_setup
                   if (air_data%options%constrain_z .OR. air_data%options%constrain_w) then 
                      call VecDestroy(temp_coarse_vec, ierr)
                      call VecScatterDestroy(vec_scatter, ierr)
+                     call ISDestroy(is_full, ierr)
                   end if
 
                   ! ~~~~~~~~~~~~~~~~~~
