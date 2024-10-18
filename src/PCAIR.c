@@ -823,9 +823,9 @@ PETSC_EXTERN PetscErrorCode PCAIRSetALump(PC pc, PetscBool input_bool)
 // with SAME_NONZERO_PATTERN
 // This involves re-using the CF splitting, the symbolic mat-mat mults, 
 // the repartitioning, the structure of the matrices with drop tolerances applied, etc
-// This will make the setup much cheaper on subsequent calls, but does not 
-// produce the same hierarchy if the matrix has changed entries and convergence
-// may suffer if the matrix is sufficiently different
+// This will take more memory but 
+// will make the setup much cheaper on subsequent calls. If the matrix has 
+// changed entries convergence may suffer if the matrix is sufficiently different
 // Default: false
 // -pc_air_reuse_sparsity
 PETSC_EXTERN PetscErrorCode PCAIRSetReuseSparsity(PC pc, PetscBool input_bool)

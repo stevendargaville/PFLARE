@@ -168,9 +168,9 @@ module air_data_type
       ! with SAME_NONZERO_PATTERN
       ! This involves re-using the CF splitting, the symbolic mat-mat mults, 
       ! the repartitioning, the structure of the matrices with drop tolerances applied, etc
-      ! This will make the setup much cheaper on subsequent calls, but does not 
-      ! produce the same hierarchy if the matrix has changed entries and convergence
-      ! may suffer if the matrix is sufficiently different
+      ! This will take more memory but 
+      ! will make the setup much cheaper on subsequent calls. If the matrix has 
+      ! changed entries convergence may suffer if the matrix is sufficiently different
       ! -pc_air_reuse_sparsity
       logical :: reuse_sparsity = .FALSE.
 
