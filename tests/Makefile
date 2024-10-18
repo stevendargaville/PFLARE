@@ -206,7 +206,7 @@ run_tests:
 # 
 	@echo ""
 	@echo "Test AIRG on steady 1D advection"
-	./ex86.o -n 1000 -pc_type air -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right 
+	./ex86.o -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right 
 # 
 	@echo ""
 	@echo "Test PMISR DDC CF splitting in C"

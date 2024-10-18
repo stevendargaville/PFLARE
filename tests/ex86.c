@@ -104,7 +104,7 @@ int main(int argc, char **args)
        KSPSetFromOptions();
   */
   KSPGetPC(ksp, &pc);
-  PCSetType(pc, PCBJACOBI);
+  PCSetType(pc, PCAIR);
 
   /*
     Set runtime options, e.g.,
