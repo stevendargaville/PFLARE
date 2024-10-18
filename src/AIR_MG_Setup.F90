@@ -1577,7 +1577,7 @@ module air_mg_setup
                   ! ~~~~~~~~~~~~~~~~~~     
                   if (air_data%options%constrain_z .OR. air_data%options%constrain_w) then 
 
-                     ! Can't use maccreatevecs here, if we coarsen down to one process it returns a serial vector
+                     ! Can't use matcreatevecs here, if we coarsen down to one process it returns a serial vector
                      call MatGetSize(air_data%coarse_matrix(our_level_coarse), global_rows_repart, global_cols_repart, ierr)
                      call MatGetLocalSize(air_data%coarse_matrix(our_level_coarse), local_rows_repart, local_cols_repart, ierr)
                      call VecCreateMPI(MPI_COMM_MATRIX, local_rows_repart, &
