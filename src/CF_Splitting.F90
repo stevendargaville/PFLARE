@@ -418,9 +418,7 @@ module cf_splitting
       else if (cf_splitting_type == CF_PMIS_DIST2) then
 
          ! As we have generated S'S + S for the strength matrix, this will do distance 2 PMIS
-         ! Need to do as many Luby steps as required or terrible convergence, as missing even a single
-         ! C point with dist 2 can leave huge patches of F points together
-         call pmisr(strength_mat, -1, .TRUE., cf_markers_local)
+         call pmisr(strength_mat, max_luby_steps, .TRUE., cf_markers_local)
 
          ! ~~~~~~~~~~
          ! The code below instead relies on the distance 1 strength matrix and does

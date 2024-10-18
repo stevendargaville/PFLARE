@@ -2099,7 +2099,7 @@ module air_mg_setup
       air_data%options%strong_threshold = 0.5
       air_data%options%ddc_fraction = 0.1
       air_data%options%cf_splitting_type = 0
-      air_data%options%max_luby_steps = 3
+      air_data%options%max_luby_steps = -1
 
       air_data%options%maxits_a_ff = 2
       air_data%options%one_c_smooth = .FALSE.

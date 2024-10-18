@@ -511,7 +511,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetCFSplittingType(PC pc, CFSplittingType input
 // Maximum number of Luby steps to do in CF splitting
 // Negative means do as many as needed (at the cost of a parallel
 // reduction everytime we finish a Luby step)
-// Default: 3
+// Default: -1
 // -pc_air_max_luby_steps
 PETSC_EXTERN PetscErrorCode PCAIRSetMaxLubySteps(PC pc, PetscInt input_int)
 {

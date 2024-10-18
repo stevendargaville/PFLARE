@@ -77,7 +77,7 @@ module air_data_type
       ! Negative means do as many as needed (at the cost of a parallel
       ! reduction everytime we finish a Luby step)
       ! -pc_air_max_luby_steps
-      integer :: max_luby_steps = 3
+      integer :: max_luby_steps = -1
 
       ! How many iterations of F point smoothing to do 
       ! -pc_air_maxits_a_ff
