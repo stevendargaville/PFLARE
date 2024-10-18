@@ -158,6 +158,7 @@ or in Python with petsc4py:
      pc = ksp.getPC()
      pc.setType("air")
 
+     petsc_options = PETSc.Options()
      petsc_options['pc_air_z_type'] = 'lair'
      petsc_options['pc_air_inverse_type'] = 'wjacobi'
      petsc_options['pc_air_one_c_smooth'] = ''     
