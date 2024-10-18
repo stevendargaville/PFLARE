@@ -5,9 +5,8 @@
 
 This library contains methods which can be used to solve linear systems in parallel with PETSc, with interfaces in C/Fortran/Python.
    
-PFLARE can be used on problems with structured or unstructured grids and does not rely on Gauss-Seidel methods. PFLARE can scalably solve:
-1) Hyperbolic problems such as time independent advection equations.
-2) Other hyperbolic problems such as time independent streaming operators from Boltzmann transport applications.
+PFLARE can scalably solve:
+1) Hyperbolic problems implicitly without Gauss-Seidel methods. This includes time dependent or independent, with structured or unstructured grids, with lower triangular structure or without. This includes advection equations, streaming operators from Boltzmann transport applications, multigrid in time discretisations, etc.
 3) Other asymmetric problems such as heavily anisotropic Poisson/diffusion problems.
 4) Symmetric Poisson/diffusion problems, including those with varying coefficients.
 
