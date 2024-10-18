@@ -37,7 +37,7 @@ LDFLAGS     := $(LDFLAGS) $(LDFLAGS_INPUT)
 .SUFFIXES: .F90 .o .mod .c
 
 # Test examples
-OBJS := ex62f.o ex12f.o ex6f.o ex6f_getcoeffs.o ex6.o ex6_cf_splitting.o
+OBJS := ex62f.o ex12f.o ex6f.o ex6f_getcoeffs.o ex6.o ex6_cf_splitting.o ex86.o
 
 # Build rules
 all: $(OBJS) 
@@ -202,7 +202,11 @@ run_tests:
 	@echo "Test solving isotropic diffusion with fast coarsening and near-nullspace in parallel"
 	$(MPIEXEC) -n 4 ./ex62f.o -m 50 -n 50 -pc_air_z_type lair -pc_air_one_c_smooth -pc_air_symmetric -pc_air_constrain_z \
 	 -pc_air_cf_splitting_type agg -pc_air_a_drop 1e-5 -pc_air_a_lump\
-	 -pc_air_r_drop 0 -ksp_rtol 1e-10 -ksp_pc_side right		 
+	 -pc_air_r_drop 0 -ksp_rtol 1e-10 -ksp_pc_side right		
+# 
+	@echo ""
+	@echo "Test AIRG on steady 1D advection"
+	./ex86.o -n 1000 -pc_type air -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right 
 # 
 	@echo ""
 	@echo "Test PMISR DDC CF splitting in C"
