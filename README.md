@@ -342,7 +342,7 @@ This means we can cheaply generate the exact same preconditioner when periodical
 
 If processor agglomeration has been enabled (it is by default) and:
 1) ``-pc_air_matrix_free_polys`` has not been set (default).
-2) ``-pc_air_inverse_type`` is one of: power (default), arnoldi, newton or neumann.
+2) ``-pc_air_inverse_type`` is one of: power (default), arnoldi or neumann.
 3) ``-pc_air_inverse_sparsity_order=1`` (default)
 
 then OpenMP can be used to reduce the time required to assemble the fixed-sparsity polynomial inverses. The idle MPI ranks that have been left with 0 unknowns after repartitioning will be used to thread. 
