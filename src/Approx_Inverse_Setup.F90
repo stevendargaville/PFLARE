@@ -21,7 +21,7 @@ module approx_inverse_setup
 ! -------------------------------------------------------------------------------------------------------------------------------
 
    subroutine calculate_and_build_approximate_inverse(matrix, inverse_type, &
-                  poly_order, poly_sparsity_order, &
+                  poly_order, inverse_sparsity_order, &
                   matrix_free, subcomm, &
                   inv_matrix)
 
@@ -42,7 +42,7 @@ module approx_inverse_setup
       ! ~~~~~~
       type(tMat), intent(in)                            :: matrix
       integer, intent(in)                               :: inverse_type, poly_order
-      integer, intent(in)                               :: poly_sparsity_order
+      integer, intent(in)                               :: inverse_sparsity_order
       logical, intent(in)                               :: matrix_free, subcomm
       type(tMat), intent(inout)                         :: inv_matrix
 
@@ -110,7 +110,7 @@ module approx_inverse_setup
                   buffers, coefficients)
       ! Finish it
       call finish_approximate_inverse(matrix, inverse_type, &
-                  poly_order, poly_sparsity_order, &
+                  poly_order, inverse_sparsity_order, &
                   buffers, coefficients, &
                   matrix_free, &
                   reuse_mat, &
@@ -244,7 +244,7 @@ module approx_inverse_setup
 ! -------------------------------------------------------------------------------------------------------------------------------
 
    subroutine finish_approximate_inverse(matrix, inverse_type, &
-                  poly_order, poly_sparsity_order, &
+                  poly_order, inverse_sparsity_order, &
                   buffers, coefficients, &
                   matrix_free, reuse_mat, inv_matrix)
 
@@ -253,7 +253,7 @@ module approx_inverse_setup
       ! ~~~~~~
       type(tMat), intent(in)                            :: matrix
       integer, intent(in)                               :: inverse_type, poly_order
-      integer, intent(in)                               :: poly_sparsity_order
+      integer, intent(in)                               :: inverse_sparsity_order
       type(tsqr_buffers), intent(inout)                 :: buffers      
       real, dimension(:, :), contiguous, intent(inout)  :: coefficients
       logical, intent(in)                               :: matrix_free
@@ -290,7 +290,7 @@ module approx_inverse_setup
 
          call build_gmres_polynomial_inverse(matrix, poly_order, &
                   buffers, coefficients(:, 1), &
-                  poly_sparsity_order, matrix_free, reuse_mat, inv_matrix)  
+                  inverse_sparsity_order, matrix_free, reuse_mat, inv_matrix)  
 
       ! Gmres polynomial with newton basis
       else if (inverse_type == PFLAREINV_NEWTON) then
@@ -308,7 +308,7 @@ module approx_inverse_setup
       else if (inverse_type == PFLAREINV_NEUMANN) then
 
          call calculate_and_build_neumann_polynomial_inverse(matrix, poly_order, &
-                     buffers, poly_sparsity_order, matrix_free, reuse_mat, inv_matrix)        
+                     buffers, inverse_sparsity_order, matrix_free, reuse_mat, inv_matrix)        
                  
       ! Sparse approximate inverse
       else if (inverse_type == PFLAREINV_SAI .OR. inverse_type == PFLAREINV_ISAI) then
@@ -327,7 +327,7 @@ module approx_inverse_setup
             incomplete = .TRUE.
          end if
 
-         call calculate_and_build_sai(matrix, poly_sparsity_order, incomplete, reuse_mat, inv_matrix)
+         call calculate_and_build_sai(matrix, inverse_sparsity_order, incomplete, reuse_mat, inv_matrix)
          
       ! Weighted jacobi
       else if (inverse_type == PFLAREINV_WJACOBI) then

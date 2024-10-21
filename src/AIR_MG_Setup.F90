@@ -1349,7 +1349,7 @@ module air_mg_setup
          call setup_gmres_poly_data(global_fine_is_size, &
                   air_data%options%inverse_type, &
                   air_data%options%poly_order, &
-                  air_data%options%poly_sparsity_order, &
+                  air_data%options%inverse_sparsity_order, &
                   air_data%options%subcomm, &
                   number_splits, &
                   air_data%inv_A_ff_poly_data(our_level))
@@ -1358,7 +1358,7 @@ module air_mg_setup
          call setup_gmres_poly_data(global_fine_is_size, &
                   air_data%options%inverse_type, &
                   air_data%options%poly_order, &
-                  air_data%options%poly_sparsity_order, &
+                  air_data%options%inverse_sparsity_order, &
                   air_data%options%subcomm, &
                   number_splits, &
                   air_data%inv_A_ff_poly_data_dropped(our_level)) 
@@ -1372,7 +1372,7 @@ module air_mg_setup
             call setup_gmres_poly_data(global_coarse_is_size, &
                      air_data%options%inverse_type, &
                      air_data%options%poly_order, &
-                     air_data%options%poly_sparsity_order, &
+                     air_data%options%inverse_sparsity_order, &
                      air_data%options%subcomm, &
                      number_splits, &
                      air_data%inv_A_cc_poly_data(our_level))   
@@ -1706,7 +1706,7 @@ module air_mg_setup
       call setup_gmres_poly_data(global_rows, &
                air_data%options%coarsest_inverse_type, &
                air_data%options%coarsest_poly_order, &
-               air_data%options%coarsest_poly_sparsity_order, &
+               air_data%options%coarsest_inverse_sparsity_order, &
                air_data%options%coarsest_subcomm, &
                number_splits, &
                air_data%inv_coarsest_poly_data)      
@@ -2129,11 +2129,11 @@ module air_mg_setup
       air_data%options%z_type = AIR_Z_PRODUCT
 
       air_data%options%poly_order = 6
-      air_data%options%poly_sparsity_order = 1
+      air_data%options%inverse_sparsity_order = 1
       
       air_data%options%coarsest_inverse_type = PFLAREINV_POWER
       air_data%options%coarsest_poly_order = 6
-      air_data%options%coarsest_poly_sparsity_order = 1
+      air_data%options%coarsest_inverse_sparsity_order = 1
       air_data%options%coarsest_matrix_free_polys = .FALSE.
       air_data%options%coarsest_subcomm = .FALSE.
 

@@ -36,10 +36,10 @@ PETSC_EXTERN PetscErrorCode PCAIRGetStrongRThreshold_c(PC *pc, PetscReal *input_
 PETSC_EXTERN PetscErrorCode PCAIRGetInverseType_c(PC *pc, PCPFLAREINVType *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetZType_c(PC *pc, PCAIRZType *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetPolyOrder_c(PC *pc, PetscInt *input_int);
-PETSC_EXTERN PetscErrorCode PCAIRGetPolySparsityOrder_c(PC *pc, PetscInt *input_int);
+PETSC_EXTERN PetscErrorCode PCAIRGetInverseSparsityOrder_c(PC *pc, PetscInt *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestInverseType_c(PC *pc, PCPFLAREINVType *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestPolyOrder_c(PC *pc, PetscInt *input_int);
-PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestPolySparsityOrder_c(PC *pc, PetscInt *input_int);
+PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestInverseSparsityOrder_c(PC *pc, PetscInt *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestMatrixFreePolys_c(PC *pc, PetscBool *input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestSubcomm_c(PC *pc, PetscBool *input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRGetRDrop_c(PC *pc, PetscReal *input_real);
@@ -72,10 +72,10 @@ PETSC_EXTERN PetscErrorCode PCAIRSetStrongRThreshold_c(PC *pc, PetscReal input_r
 PETSC_EXTERN PetscErrorCode PCAIRSetInverseType_c(PC *pc, PCPFLAREINVType input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetZType_c(PC *pc, PCAIRZType input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetPolyOrder_c(PC *pc, PetscInt input_int);
-PETSC_EXTERN PetscErrorCode PCAIRSetPolySparsityOrder_c(PC *pc, PetscInt input_int);
+PETSC_EXTERN PetscErrorCode PCAIRSetInverseSparsityOrder_c(PC *pc, PetscInt input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestInverseType_c(PC *pc, PCPFLAREINVType input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestPolyOrder_c(PC *pc, PetscInt input_int);
-PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestPolySparsityOrder_c(PC *pc, PetscInt input_int);
+PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestInverseSparsityOrder_c(PC *pc, PetscInt input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestMatrixFreePolys_c(PC *pc, PetscBool input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestSubcomm_c(PC *pc, PetscBool input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRSetRDrop_c(PC *pc, PetscReal input_real);
@@ -298,10 +298,10 @@ PETSC_EXTERN PetscErrorCode PCAIRGetPolyOrder(PC pc, PetscInt *input_int)
    PCAIRGetPolyOrder_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
-PETSC_EXTERN PetscErrorCode PCAIRGetPolySparsityOrder(PC pc, PetscInt *input_int)
+PETSC_EXTERN PetscErrorCode PCAIRGetInverseSparsityOrder(PC pc, PetscInt *input_int)
 {
    PetscFunctionBegin;
-   PCAIRGetPolySparsityOrder_c(&pc, input_int);
+   PCAIRGetInverseSparsityOrder_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestInverseType(PC pc, PCPFLAREINVType *input_int)
@@ -316,10 +316,10 @@ PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestPolyOrder(PC pc, PetscInt *input_int
    PCAIRGetCoarsestPolyOrder_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
-PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestPolySparsityOrder(PC pc, PetscInt *input_int)
+PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestInverseSparsityOrder(PC pc, PetscInt *input_int)
 {
    PetscFunctionBegin;
-   PCAIRGetCoarsestPolySparsityOrder_c(&pc, input_int);
+   PCAIRGetCoarsestInverseSparsityOrder_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestMatrixFreePolys(PC pc, PetscBool *input_bool)
@@ -705,17 +705,17 @@ PETSC_EXTERN PetscErrorCode PCAIRSetPolyOrder(PC pc, PetscInt input_int)
 }
 // This is the order of sparsity we use if we assemble our approximate inverses
 // This (hence also) determines what distance our grid-transfer operators are
-// distance = poly_sparsity_order + 1
+// distance = inverse_sparsity_order + 1
 // Default: 1
-// -pc_air_poly_sparsity_order
-PETSC_EXTERN PetscErrorCode PCAIRSetPolySparsityOrder(PC pc, PetscInt input_int)
+// -pc_air_inverse_sparsity_order
+PETSC_EXTERN PetscErrorCode PCAIRSetInverseSparsityOrder(PC pc, PetscInt input_int)
 {
    PetscFunctionBegin;
    PetscInt old_int;
-   PCAIRGetPolySparsityOrder(pc, &old_int);
+   PCAIRGetInverseSparsityOrder(pc, &old_int);
    if (old_int == input_int) PetscFunctionReturn(0);
    PCReset_AIR_c(pc);    
-   PCAIRSetPolySparsityOrder_c(&pc, input_int);
+   PCAIRSetInverseSparsityOrder_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 // Coarse grid inverse type (see PCAIRSetInverseType)
@@ -744,17 +744,17 @@ PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestPolyOrder(PC pc, PetscInt input_int)
    PCAIRSetCoarsestPolyOrder_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
-// Coarse grid polynomial sparsity order (see PCAIRSetPolySparsityOrder)
+// Coarse grid polynomial sparsity order (see PCAIRSetInverseSparsityOrder)
 // Default: 1
-// -pc_air_coarsest_poly_sparsity_order
-PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestPolySparsityOrder(PC pc, PetscInt input_int)
+// -pc_air_coarsest_inverse_sparsity_order
+PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestInverseSparsityOrder(PC pc, PetscInt input_int)
 {
    PetscFunctionBegin;
    PetscInt old_int;
-   PCAIRGetCoarsestPolySparsityOrder(pc, &old_int);
+   PCAIRGetCoarsestInverseSparsityOrder(pc, &old_int);
    if (old_int == input_int) PetscFunctionReturn(0);
    PCReset_AIR_c(pc);    
-   PCAIRSetCoarsestPolySparsityOrder_c(&pc, input_int);
+   PCAIRSetCoarsestInverseSparsityOrder_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 // Coarse grid matrix-free application (see PCAIRSetMatrixFreePolys)
@@ -1026,10 +1026,10 @@ static PetscErrorCode PCSetFromOptions_AIR_c(PetscOptionItems *PetscOptionsObjec
    PetscOptionsInt("-pc_air_poly_order", "Polynomial order", "PCAIRSetPolyOrder", old_int, &input_int, NULL);
    PCAIRSetPolyOrder(pc, input_int);
    // ~~~~ 
-   PCAIRGetPolySparsityOrder(pc, &old_int);
+   PCAIRGetInverseSparsityOrder(pc, &old_int);
    input_int = old_int;
-   PetscOptionsInt("-pc_air_poly_sparsity_order", "Polynomial sparsity order", "PCAIRSetPolySparsityOrder", old_int, &input_int, NULL);
-   PCAIRSetPolySparsityOrder(pc, input_int);
+   PetscOptionsInt("-pc_air_inverse_sparsity_order", "Inverse sparsity order", "PCAIRSetInverseSparsityOrder", old_int, &input_int, NULL);
+   PCAIRSetInverseSparsityOrder(pc, input_int);
    // ~~~~ 
    PCAIRGetCoarsestInverseType(pc, &old_type);
    type = old_type;
@@ -1041,10 +1041,10 @@ static PetscErrorCode PCSetFromOptions_AIR_c(PetscOptionItems *PetscOptionsObjec
    PetscOptionsInt("-pc_air_coarsest_poly_order", "Polynomial order on the coarse grid", "PCAIRSetCoarsestPolyOrder", old_int, &input_int, NULL);
    PCAIRSetCoarsestPolyOrder(pc, input_int);
    // ~~~~ 
-   PCAIRGetCoarsestPolySparsityOrder(pc, &old_int);
+   PCAIRGetCoarsestInverseSparsityOrder(pc, &old_int);
    input_int = old_int;
-   PetscOptionsInt("-pc_air_coarsest_poly_sparsity_order", "Polynomial sparsity order on the coarse grid", "PCAIRSetCoarsestPolySparsityOrder", old_int, &input_int, NULL);
-   PCAIRSetCoarsestPolySparsityOrder(pc, input_int);
+   PetscOptionsInt("-pc_air_coarsest_inverse_sparsity_order", "Inverse sparsity order on the coarse grid", "PCAIRSetCoarsestInverseSparsityOrder", old_int, &input_int, NULL);
+   PCAIRSetCoarsestInverseSparsityOrder(pc, input_int);
    // ~~~~ 
    PCAIRGetProcessorAgglomFactor(pc, &old_int);
    input_int = old_int;
@@ -1144,7 +1144,7 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
       } 
       ierr =  PCAIRGetInverseType(pc, &input_type);
       ierr =  PCAIRGetPolyOrder(pc, &input_int_two);
-      ierr =  PCAIRGetPolySparsityOrder(pc, &input_int_three);
+      ierr =  PCAIRGetInverseSparsityOrder(pc, &input_int_three);
       ierr =  PCAIRGetMatrixFreePolys(pc, &flg);
 
       // What type of inverse
@@ -1244,7 +1244,7 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
       PetscViewerASCIIPrintf(viewer, "  Coarse grid solver: \n");      
       ierr =  PCAIRGetCoarsestInverseType(pc, &input_type);
       ierr =  PCAIRGetCoarsestPolyOrder(pc, &input_int_two);
-      ierr =  PCAIRGetCoarsestPolySparsityOrder(pc, &input_int_three);
+      ierr =  PCAIRGetCoarsestInverseSparsityOrder(pc, &input_int_three);
       ierr =  PCAIRGetCoarsestMatrixFreePolys(pc, &flg);
 
       // What type of inverse

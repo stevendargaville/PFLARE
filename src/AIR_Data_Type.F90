@@ -139,17 +139,17 @@ module air_data_type
       integer :: poly_order = 6
       ! This is the order of sparsity we use if we assemble our approximate inverses
       ! This (hence also) determines what distance our grid-transfer operators are
-      ! distance = poly_sparsity_order + 1
-      ! -pc_air_poly_sparsity_order
-      integer :: poly_sparsity_order = 1
+      ! distance = inverse_sparsity_order + 1
+      ! -pc_air_inverse_sparsity_order
+      integer :: inverse_sparsity_order = 1
       
       ! These are for the coarse grid solver
       ! -pc_air_coarsest_inverse_type
       integer :: coarsest_inverse_type = 0
       ! -pc_air_coarsest_poly_order
       integer :: coarsest_poly_order = 6
-      ! -pc_air_coarsest_poly_sparsity_order
-      integer :: coarsest_poly_sparsity_order = 1
+      ! -pc_air_coarsest_inverse_sparsity_order
+      integer :: coarsest_inverse_sparsity_order = 1
       ! -pc_air_coarsest_matrix_free_polys
       logical :: coarsest_matrix_free_polys = .FALSE.
       ! -pc_air_coarsest_subcomm

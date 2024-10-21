@@ -40,7 +40,7 @@ typedef struct {
    // The polynomial order
    int poly_order;
    // The power of the sparsity we use (if assembled)
-   int poly_sparsity_order;
+   int inverse_sparsity_order;
    // Whether or not the mat_inverse is just a matshell and applied
    // matrix free
    PetscBool matrix_free;
@@ -86,20 +86,20 @@ static PetscErrorCode PCPFLAREINVGetOrder_PFLAREINV(PC pc, PetscInt *poly_order)
 
 // ~~~~~~~~~~
 
-PetscErrorCode PCPFLAREINVGetSparsityOrder(PC pc, PetscInt *poly_sparsity_order)
+PetscErrorCode PCPFLAREINVGetSparsityOrder(PC pc, PetscInt *inverse_sparsity_order)
 {
    PetscFunctionBegin;
-   PetscUseMethod(pc, "PCPFLAREINVGetSparsityOrder_C", (PC, PetscInt *), (pc, poly_sparsity_order));
+   PetscUseMethod(pc, "PCPFLAREINVGetSparsityOrder_C", (PC, PetscInt *), (pc, inverse_sparsity_order));
    PetscFunctionReturn(0);
 }
 
-static PetscErrorCode PCPFLAREINVGetSparsityOrder_PFLAREINV(PC pc, PetscInt *poly_sparsity_order)
+static PetscErrorCode PCPFLAREINVGetSparsityOrder_PFLAREINV(PC pc, PetscInt *inverse_sparsity_order)
 {
    PC_PFLAREINV *inv_data;
 
    PetscFunctionBegin;
    inv_data = (PC_PFLAREINV *)pc->data;    
-   *poly_sparsity_order = inv_data->poly_sparsity_order;
+   *inverse_sparsity_order = inv_data->inverse_sparsity_order;
    PetscFunctionReturn(0);
 }
 
@@ -172,14 +172,14 @@ PetscErrorCode PCPFLAREINVSetOrder(PC pc, PetscInt poly_order)
 // This is the order of sparsity we use if we assemble our approximate inverses
 // Default: 1
 // -pc_pflareinv_sparsity_order 
-PetscErrorCode PCPFLAREINVSetSparsityOrder(PC pc, PetscInt poly_sparsity_order)
+PetscErrorCode PCPFLAREINVSetSparsityOrder(PC pc, PetscInt inverse_sparsity_order)
 {
    PetscFunctionBegin;
-   PetscTryMethod(pc, "PCPFLAREINVSetSparsityOrder_C", (PC, PetscInt), (pc, poly_sparsity_order));
+   PetscTryMethod(pc, "PCPFLAREINVSetSparsityOrder_C", (PC, PetscInt), (pc, inverse_sparsity_order));
    PetscFunctionReturn(0);
 } 
 
- static PetscErrorCode PCPFLAREINVSetSparsityOrder_PFLAREINV(PC pc, PetscInt poly_sparsity_order)
+ static PetscErrorCode PCPFLAREINVSetSparsityOrder_PFLAREINV(PC pc, PetscInt inverse_sparsity_order)
 {
    PC_PFLAREINV *inv_data;
    PetscInt old_order;
@@ -187,9 +187,9 @@ PetscErrorCode PCPFLAREINVSetSparsityOrder(PC pc, PetscInt poly_sparsity_order)
    PetscFunctionBegin;
    inv_data = (PC_PFLAREINV *)pc->data;
    PCPFLAREINVGetSparsityOrder(pc, &old_order);
-   if (old_order == poly_sparsity_order) PetscFunctionReturn(0);
+   if (old_order == inverse_sparsity_order) PetscFunctionReturn(0);
    PCReset_PFLAREINV_c(pc);
-   inv_data->poly_sparsity_order = (int)poly_sparsity_order;  
+   inv_data->inverse_sparsity_order = (int)inverse_sparsity_order;  
    PetscFunctionReturn(0);
 }
 
@@ -295,7 +295,7 @@ static PetscErrorCode PCSetFromOptions_PFLAREINV_c(PetscOptionItems *PetscOption
 {
    PetscBool    flg;
    PCPFLAREINVType deflt, type;
-   PetscInt poly_order, poly_sparsity_order;
+   PetscInt poly_order, inverse_sparsity_order;
    PC_PFLAREINV *inv_data;
 
    PetscFunctionBegin;
@@ -314,8 +314,8 @@ static PetscErrorCode PCSetFromOptions_PFLAREINV_c(PetscOptionItems *PetscOption
    PetscOptionsBool("-pc_pflareinv_matrix_free", "Apply matrix free", "PCPFLAREINVSetMatrixFree", inv_data->matrix_free, &inv_data->matrix_free, NULL);
    PetscOptionsInt("-pc_pflareinv_order", "Order of polynomial", "PCPFLAREINVSetOrder", inv_data->poly_order, &poly_order, &flg);
    if (flg) PCPFLAREINVSetOrder(pc, poly_order);
-   PetscOptionsInt("-pc_pflareinv_sparsity_order", "Sparsity order of assembled inverse", "PCPFLAREINVSetSparsityOrder", inv_data->poly_sparsity_order, &poly_sparsity_order, &flg);
-   if (flg) PCPFLAREINVSetSparsityOrder(pc, poly_sparsity_order);     
+   PetscOptionsInt("-pc_pflareinv_sparsity_order", "Sparsity order of assembled inverse", "PCPFLAREINVSetSparsityOrder", inv_data->inverse_sparsity_order, &inverse_sparsity_order, &flg);
+   if (flg) PCPFLAREINVSetSparsityOrder(pc, inverse_sparsity_order);     
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 18)
    PetscOptionsHeadEnd();
 #else
@@ -370,7 +370,7 @@ static PetscErrorCode PCSetUp_PFLAREINV_c(PC pc)
       // Build the polynomial inverse as a Mat
       calculate_and_build_approximate_inverse_c(&(pc->pmat), \
             type, \
-            inv_data->poly_order, inv_data->poly_sparsity_order, \
+            inv_data->poly_order, inv_data->inverse_sparsity_order, \
             matrix_free_int, 0, \
             &(inv_data->mat_inverse));      
    }
@@ -384,7 +384,7 @@ static PetscErrorCode PCSetUp_PFLAREINV_c(PC pc)
          // Build the polynomial inverse as a Mat
          calculate_and_build_approximate_inverse_c(&(pc->pmat), \
                type, \
-               inv_data->poly_order, inv_data->poly_sparsity_order, \
+               inv_data->poly_order, inv_data->inverse_sparsity_order, \
                matrix_free_int, 0, \
                &(inv_data->mat_inverse));          
       }
@@ -394,7 +394,7 @@ static PetscErrorCode PCSetUp_PFLAREINV_c(PC pc)
          // Build the polynomial inverse as a Mat
          calculate_and_build_approximate_inverse_c(&(pc->pmat), \
                type, \
-               inv_data->poly_order, inv_data->poly_sparsity_order, \
+               inv_data->poly_order, inv_data->inverse_sparsity_order, \
                matrix_free_int, 0, \
                &(inv_data->mat_inverse));            
       }
@@ -464,7 +464,7 @@ static PetscErrorCode PCView_PFLAREINV_c(PC pc, PetscViewer viewer)
          }
          else
          {
-            PetscViewerASCIIPrintf(viewer, "  assembled inverse, sparsity order %i\n", inv_data->poly_sparsity_order);
+            PetscViewerASCIIPrintf(viewer, "  assembled inverse, sparsity order %i\n", inv_data->inverse_sparsity_order);
          }
       }
    }
@@ -505,7 +505,7 @@ PETSC_EXTERN PetscErrorCode PCCreate_PFLAREINV(PC pc)
    // The polynomial order
    inv_data->poly_order = 6;
    // The power of the sparsity we use (if assembled)
-   inv_data->poly_sparsity_order = 1;
+   inv_data->inverse_sparsity_order = 1;
    // Whether or not the mat_inverse is just a matshell and applied
    // matrix free
    inv_data->matrix_free = PETSC_FALSE;   

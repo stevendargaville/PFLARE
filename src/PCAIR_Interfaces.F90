@@ -768,7 +768,7 @@ module pcair_interfaces
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine PCAIRGetPolySparsityOrder(pc, order, ierr) 
+   subroutine PCAIRGetInverseSparsityOrder(pc, order, ierr) 
 
       ! ~~~~~~~~
       type(tPC), intent(inout)      :: pc
@@ -780,10 +780,10 @@ module pcair_interfaces
 
       ! Get the options
       call PCAIRGetOptions(pc, options)    
-      order = options%poly_sparsity_order
+      order = options%inverse_sparsity_order
       ierr = 0
 
-   end subroutine PCAIRGetPolySparsityOrder
+   end subroutine PCAIRGetInverseSparsityOrder
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
@@ -825,7 +825,7 @@ module pcair_interfaces
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine PCAIRGetCoarsestPolySparsityOrder(pc, order, ierr) 
+   subroutine PCAIRGetCoarsestInverseSparsityOrder(pc, order, ierr) 
 
       ! ~~~~~~~~
       type(tPC), intent(inout)      :: pc
@@ -837,10 +837,10 @@ module pcair_interfaces
 
       ! Get the options
       call PCAIRGetOptions(pc, options)    
-      order = options%coarsest_poly_sparsity_order
+      order = options%coarsest_inverse_sparsity_order
       ierr = 0
 
-   end subroutine PCAIRGetCoarsestPolySparsityOrder 
+   end subroutine PCAIRGetCoarsestInverseSparsityOrder 
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
@@ -1401,7 +1401,7 @@ module pcair_interfaces
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine PCAIRSetPolySparsityOrder(pc, order, ierr) 
+   subroutine PCAIRSetInverseSparsityOrder(pc, order, ierr) 
 
       ! ~~~~~~~~
       type(tPC), intent(inout)      :: pc
@@ -1413,10 +1413,10 @@ module pcair_interfaces
 
       ! Set the options
       call PCAIRGetOptions(pc, options)    
-      options%poly_sparsity_order = int(order)
+      options%inverse_sparsity_order = int(order)
       ierr = 0
 
-   end subroutine PCAIRSetPolySparsityOrder
+   end subroutine PCAIRSetInverseSparsityOrder
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
@@ -1458,7 +1458,7 @@ module pcair_interfaces
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine PCAIRSetCoarsestPolySparsityOrder(pc, order, ierr) 
+   subroutine PCAIRSetCoarsestInverseSparsityOrder(pc, order, ierr) 
 
       ! ~~~~~~~~
       type(tPC), intent(inout)      :: pc
@@ -1470,10 +1470,10 @@ module pcair_interfaces
 
       ! Set the options
       call PCAIRGetOptions(pc, options)    
-      options%coarsest_poly_sparsity_order = int(order)
+      options%coarsest_inverse_sparsity_order = int(order)
       ierr = 0
 
-   end subroutine PCAIRSetCoarsestPolySparsityOrder 
+   end subroutine PCAIRSetCoarsestInverseSparsityOrder 
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 

@@ -412,7 +412,7 @@ module pcair_c_fortran_bindings
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine PCAIRGetPolySparsityOrder_c(pc_ptr, order) bind(C, name='PCAIRGetPolySparsityOrder_c')
+   subroutine PCAIRGetInverseSparsityOrder_c(pc_ptr, order) bind(C, name='PCAIRGetInverseSparsityOrder_c')
 
       ! ~~~~~~~~
       integer(c_long_long), intent(inout) :: pc_ptr
@@ -423,9 +423,9 @@ module pcair_c_fortran_bindings
       ! ~~~~~~~~
 
       pc%v = pc_ptr
-      call PCAIRGetPolySparsityOrder(pc, order, ierr)
+      call PCAIRGetInverseSparsityOrder(pc, order, ierr)
 
-   end subroutine PCAIRGetPolySparsityOrder_c
+   end subroutine PCAIRGetInverseSparsityOrder_c
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
@@ -463,7 +463,7 @@ module pcair_c_fortran_bindings
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine PCAIRGetCoarsestPolySparsityOrder_c(pc_ptr, order) bind(C, name='PCAIRGetCoarsestPolySparsityOrder_c')
+   subroutine PCAIRGetCoarsestInverseSparsityOrder_c(pc_ptr, order) bind(C, name='PCAIRGetCoarsestInverseSparsityOrder_c')
 
       ! ~~~~~~~~
       integer(c_long_long), intent(inout) :: pc_ptr
@@ -474,9 +474,9 @@ module pcair_c_fortran_bindings
       ! ~~~~~~~~
 
       pc%v = pc_ptr
-      call PCAIRGetCoarsestPolySparsityOrder(pc, order, ierr)
+      call PCAIRGetCoarsestInverseSparsityOrder(pc, order, ierr)
 
-   end subroutine PCAIRGetCoarsestPolySparsityOrder_c 
+   end subroutine PCAIRGetCoarsestInverseSparsityOrder_c 
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
@@ -1057,7 +1057,7 @@ module pcair_c_fortran_bindings
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine PCAIRSetPolySparsityOrder_c(pc_ptr, order) bind(C, name='PCAIRSetPolySparsityOrder_c')
+   subroutine PCAIRSetInverseSparsityOrder_c(pc_ptr, order) bind(C, name='PCAIRSetInverseSparsityOrder_c')
 
       ! ~~~~~~~~
       integer(c_long_long), intent(inout) :: pc_ptr
@@ -1068,9 +1068,9 @@ module pcair_c_fortran_bindings
       ! ~~~~~~~~
 
       pc%v = pc_ptr
-      call PCAIRSetPolySparsityOrder(pc, order, ierr)
+      call PCAIRSetInverseSparsityOrder(pc, order, ierr)
 
-   end subroutine PCAIRSetPolySparsityOrder_c
+   end subroutine PCAIRSetInverseSparsityOrder_c
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
@@ -1108,7 +1108,7 @@ module pcair_c_fortran_bindings
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine PCAIRSetCoarsestPolySparsityOrder_c(pc_ptr, order) bind(C, name='PCAIRSetCoarsestPolySparsityOrder_c')
+   subroutine PCAIRSetCoarsestInverseSparsityOrder_c(pc_ptr, order) bind(C, name='PCAIRSetCoarsestInverseSparsityOrder_c')
 
       ! ~~~~~~~~
       integer(c_long_long), intent(inout) :: pc_ptr
@@ -1119,9 +1119,9 @@ module pcair_c_fortran_bindings
       ! ~~~~~~~~
 
       pc%v = pc_ptr
-      call PCAIRSetCoarsestPolySparsityOrder(pc, order, ierr)
+      call PCAIRSetCoarsestInverseSparsityOrder(pc, order, ierr)
 
-   end subroutine PCAIRSetCoarsestPolySparsityOrder_c 
+   end subroutine PCAIRSetCoarsestInverseSparsityOrder_c 
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
