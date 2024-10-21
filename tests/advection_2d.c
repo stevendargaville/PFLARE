@@ -124,7 +124,7 @@ PetscErrorCode ComputeMat(KSP ksp,Mat J, Mat jac,void *ctx)
          // Top or right - just gets the normal upwinded stencil
          } else {
 
-            // Upwind advection
+            // Upwind advection with theta between 0 and pi/2
             // left
             v[0] = -w1;              col[0].i = i;   col[0].j = j-1;
             // bottom
@@ -138,7 +138,7 @@ PetscErrorCode ComputeMat(KSP ksp,Mat J, Mat jac,void *ctx)
       // interior stencil
       } else {
 
-        // Upwind advection
+        // Upwind advection with theta between 0 and pi/2
         // left
         v[0] = -w1;              col[0].i = i;   col[0].j = j-1;
         // bottom
