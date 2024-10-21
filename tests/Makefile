@@ -37,7 +37,7 @@ LDFLAGS     := $(LDFLAGS) $(LDFLAGS_INPUT)
 .SUFFIXES: .F90 .o .mod .c
 
 # Test examples
-OBJS := ex62f.o ex12f.o ex6f.o ex6f_getcoeffs.o ex6.o ex6_cf_splitting.o ex86.o
+OBJS := ex62f.o ex12f.o ex6f.o ex6f_getcoeffs.o ex6.o ex6_cf_splitting.o ex86.o advection_2d.o
 
 # Build rules
 all: $(OBJS) 
@@ -207,6 +207,12 @@ run_tests:
 	@echo ""
 	@echo "Test AIRG on steady 1D advection"
 	./ex86.o -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right 
+# 
+	@echo ""
+	@echo "Test lAIR on steady 2D structured advection"
+	./advection_2d.o -da_grid_x 50 -da_grid_y 50 -pc_type air -ksp_pc_side right \
+	 -ksp_rtol 1e-10 -ksp_atol 1e-50 -pc_air_a_lump -pc_air_a_drop 1e-4 -pc_air_one_c_smooth \
+	 -pc_air_z_type lair -pc_air_inverse_type wjacobi
 # 
 	@echo ""
 	@echo "Test PMISR DDC CF splitting in C"
