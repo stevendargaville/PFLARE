@@ -392,6 +392,23 @@ module pcair_c_fortran_bindings
       call PCAIRGetZType(pc, z_type, ierr)
 
    end subroutine PCAIRGetZType_c
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetLairDistance_c(pc_ptr, distance) bind(C, name='PCAIRGetLairDistance_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, intent(out)         :: distance
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetLairDistance(pc, distance, ierr)
+
+   end subroutine PCAIRGetLairDistance_c   
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
@@ -1037,6 +1054,23 @@ module pcair_c_fortran_bindings
       call PCAIRSetZType(pc, z_type, ierr)
 
    end subroutine PCAIRSetZType_c
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetLairDistance_c(pc_ptr, distance) bind(C, name='PCAIRSetLairDistance_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, value, intent(in)          :: distance
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetLairDistance(pc, distance, ierr)
+
+   end subroutine PCAIRSetLairDistance_c   
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 

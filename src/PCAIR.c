@@ -36,6 +36,7 @@ PETSC_EXTERN PetscErrorCode PCAIRGetStrongRThreshold_c(PC *pc, PetscReal *input_
 PETSC_EXTERN PetscErrorCode PCAIRGetInverseType_c(PC *pc, PCPFLAREINVType *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetZType_c(PC *pc, PCAIRZType *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetPolyOrder_c(PC *pc, PetscInt *input_int);
+PETSC_EXTERN PetscErrorCode PCAIRGetLairDistance_c(PC *pc, PetscInt *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetInverseSparsityOrder_c(PC *pc, PetscInt *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestInverseType_c(PC *pc, PCPFLAREINVType *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestPolyOrder_c(PC *pc, PetscInt *input_int);
@@ -71,6 +72,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetConstrainZ_c(PC *pc, PetscBool input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRSetStrongRThreshold_c(PC *pc, PetscReal input_real);
 PETSC_EXTERN PetscErrorCode PCAIRSetInverseType_c(PC *pc, PCPFLAREINVType input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetZType_c(PC *pc, PCAIRZType input_int);
+PETSC_EXTERN PetscErrorCode PCAIRSetLairDistance_c(PC *pc, PetscInt input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetPolyOrder_c(PC *pc, PetscInt input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetInverseSparsityOrder_c(PC *pc, PetscInt input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestInverseType_c(PC *pc, PCPFLAREINVType input_int);
@@ -296,6 +298,12 @@ PETSC_EXTERN PetscErrorCode PCAIRGetPolyOrder(PC pc, PetscInt *input_int)
 {
    PetscFunctionBegin;
    PCAIRGetPolyOrder_c(&pc, input_int);
+   PetscFunctionReturn(0);
+}
+PETSC_EXTERN PetscErrorCode PCAIRGetLairDistance(PC pc, PetscInt *input_int)
+{
+   PetscFunctionBegin;
+   PCAIRGetLairDistance_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetInverseSparsityOrder(PC pc, PetscInt *input_int)
@@ -690,7 +698,24 @@ PETSC_EXTERN PetscErrorCode PCAIRSetZType(PC pc, PCAIRZType input_int)
    PCAIRSetZType_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
-// This is the order of polynomial we use in air
+// If z_type == 1 or 2, this is the distance the grid-transfer operators go out to
+// This is so we can have lair out to some distance, and then a different sparsity 
+// for our smoothers
+// If z_type == 0 this is ignored, and the distance is determined by inverse_sparsity_order + 1
+// Default: 2
+// -pc_air_lair_distance 
+PETSC_EXTERN PetscErrorCode PCAIRSetLairDistance(PC pc, PetscInt input_int)
+{
+   PetscFunctionBegin;
+   PetscInt old_int;
+   PCAIRGetLairDistance(pc, &old_int);
+   if (old_int == input_int) PetscFunctionReturn(0);
+   PCReset_AIR_c(pc);   
+   PCAIRSetLairDistance_c(&pc, input_int);
+   PetscFunctionReturn(0);
+}
+// This is the order of polynomial we use in air if inverse_type is 
+// power, arnoldi, newton or neumann
 // Default: 6
 // -pc_air_poly_order
 PETSC_EXTERN PetscErrorCode PCAIRSetPolyOrder(PC pc, PetscInt input_int)
@@ -1021,6 +1046,11 @@ static PetscErrorCode PCSetFromOptions_AIR_c(PetscOptionItems *PetscOptionsObjec
    PetscOptionsEnum("-pc_air_z_type", "Z type", "PCAIRSetZType", PCAIRZTypes, (PetscEnum)old_z_type, (PetscEnum *)&z_type, &flg);
    PCAIRSetZType(pc, z_type);
    // ~~~~ 
+   PCAIRGetLairDistance(pc, &old_int);
+   input_int = old_int;
+   PetscOptionsInt("-pc_air_lair_distance", "lAIR distance", "PCAIRSetLairDistance", old_int, &input_int, NULL);
+   PCAIRSetLairDistance(pc, input_int);   
+   // ~~~~ 
    PCAIRGetPolyOrder(pc, &old_int);
    input_int = old_int;
    PetscOptionsInt("-pc_air_poly_order", "Polynomial order", "PCAIRSetPolyOrder", old_int, &input_int, NULL);
@@ -1195,17 +1225,18 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
 
       PetscViewerASCIIPrintf(viewer, "  Grid transfer operators: \n");      
       ierr =  PCAIRGetZType(pc, &z_type);
+      ierr =  PCAIRGetLairDistance(pc, &input_int_two);
       if (z_type == AIR_Z_PRODUCT)
       {
          PetscViewerASCIIPrintf(viewer, "    Mat-Mat product used to form Z \n");      
       }
       else if (z_type == AIR_Z_LAIR)
       {
-         PetscViewerASCIIPrintf(viewer, "    lAIR Z \n");            
+         PetscViewerASCIIPrintf(viewer, "    lAIR Z, distance %"PetscInt_FMT" \n", input_int_two);            
       }
       else
       {
-         PetscViewerASCIIPrintf(viewer, "    lAIR SAI Z \n");            
+         PetscViewerASCIIPrintf(viewer, "    lAIR SAI Z, distance %"PetscInt_FMT" \n", input_int_two);            
       }
       ierr =  PCAIRGetStrongRThreshold(pc, &input_real);
       PetscViewerASCIIPrintf(viewer, "    Strong R threshold=%f \n", input_real);            

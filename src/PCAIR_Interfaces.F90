@@ -746,6 +746,25 @@ module pcair_interfaces
       ierr = 0
 
    end subroutine PCAIRGetZType
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetLairDistance(pc, distance, ierr) 
+
+      ! ~~~~~~~~
+      type(tPC), intent(inout)      :: pc
+      PetscInt, intent(out)         :: distance
+      PetscErrorCode, intent(out)   :: ierr
+
+      type(air_options), pointer :: options
+      ! ~~~~~~~~
+
+      ! Get the options
+      call PCAIRGetOptions(pc, options)    
+      distance = options%lair_distance
+      ierr = 0
+
+   end subroutine PCAIRGetLairDistance   
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
@@ -1379,6 +1398,25 @@ module pcair_interfaces
       ierr = 0
 
    end subroutine PCAIRSetZType
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetLairDistance(pc, distance, ierr) 
+
+      ! ~~~~~~~~
+      type(tPC), intent(inout)      :: pc
+      PetscInt, intent(in)          :: distance
+      PetscErrorCode, intent(out)   :: ierr
+
+      type(air_options), pointer :: options
+      ! ~~~~~~~~
+
+      ! Set the options
+      call PCAIRGetOptions(pc, options)    
+      options%lair_distance = int(distance)
+      ierr = 0
+
+   end subroutine PCAIRSetLairDistance   
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 

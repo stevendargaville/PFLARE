@@ -129,7 +129,7 @@ or in Python with petsc4py:
      
 or via the command line: ``-pc_type air``. 
 
-#### 2) Using PCAIR to apply lAIR with FFC Weighted Jacobi smoothing:
+#### 2) Using PCAIR to apply distance 2 lAIR with FFC Weighted Jacobi smoothing:
 
 in Fortran:
 

@@ -134,11 +134,19 @@ module air_data_type
       ! -pc_air_z_type
       integer :: z_type = 0
 
-      ! This is the order of polynomial we use in air
+      ! If z_type == 1 or 2, this is the distance the grid-transfer operators go out to
+      ! This is so we can have lair out to some distance, and then a different sparsity 
+      ! for our smoothers
+      ! If z_type == 0 this is ignored, and the distance is determined by inverse_sparsity_order + 1
+      ! -pc_air_lair_distance 
+      integer :: lair_distance = 2
+
+      ! This is the order of polynomial we use in air if inverse_type is 
+      ! power, arnoldi, newton or neumann
       ! -pc_air_poly_order
       integer :: poly_order = 6
       ! This is the order of sparsity we use if we assemble our approximate inverses
-      ! This (hence also) determines what distance our grid-transfer operators are
+      ! If z_type == 0 this also determines what distance our grid-transfer operators are
       ! distance = inverse_sparsity_order + 1
       ! -pc_air_inverse_sparsity_order
       integer :: inverse_sparsity_order = 1

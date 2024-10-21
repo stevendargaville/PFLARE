@@ -268,7 +268,7 @@ module air_mg_setup
       type(tMat) :: minus_mat, sparsity_mat_cf, A_ff_power, inv_dropped_Aff, smoothing_mat
       type(tVec), dimension(:), allocatable   :: left_null_vecs_f, right_null_vecs_f
       real :: sol_start, sol_end, strong_r_tol
-      integer :: comm_size, errorcode, distance, order, i_loc
+      integer :: comm_size, errorcode, order, i_loc
       MPI_Comm :: MPI_COMM_MATRIX
       integer(c_long_long) :: A_array, B_array, C_array
       PetscInt, dimension(:), allocatable :: nnzs_row, onzs_row, cols
@@ -598,14 +598,11 @@ module air_mg_setup
       ! For lAIR
       if (air_data%options%z_type /= AIR_Z_PRODUCT) then
 
-         ! Calculate z directly with sai or isai/lair
-         distance = air_data%inv_A_ff_poly_data(our_level)%gmres_poly_sparsity_order + 1
-
          ! Compute the strongly connected F neighbourhood that each C point
          ! is going to use in lAIR
          ! We use the dropped A_ff, A_cf here as they have had the strong R tolerance applied
          ! to them
-         if (distance == 1) then
+         if (air_data%options%lair_distance == 1) then
 
             sparsity_mat_cf = air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP)
          
@@ -633,7 +630,7 @@ module air_mg_setup
                destroy_mat = .FALSE.
       
                ! Compute A_ff^(distance - 1)
-               do order = 3, distance
+               do order = 3, air_data%options%lair_distance
                   
                   ! Call a symbolic mult as we don't need the values, just the resulting sparsity  
                   A_array = air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP)%v
@@ -680,7 +677,7 @@ module air_mg_setup
             air_data%reuse(our_level)%reuse_mat(MAT_SAI_SUB) = PETSC_NULL_MAT
 #endif            
          end if 
-         if (distance .ge. 2) then
+         if (air_data%options%lair_distance .ge. 2) then
             call MatDestroy(sparsity_mat_cf, ierr)        
          end if
 
@@ -2127,6 +2124,8 @@ module air_mg_setup
       air_data%options%inverse_type = PFLAREINV_POWER
 
       air_data%options%z_type = AIR_Z_PRODUCT
+
+      air_data%options%lair_distance = 2
 
       air_data%options%poly_order = 6
       air_data%options%inverse_sparsity_order = 1
