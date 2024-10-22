@@ -237,11 +237,14 @@
       call KSPSolve(ksp,b,x,ierr)
       call KSPGetConvergedReason(ksp, reason, ierr)
       call KSPGetIterationNumber(ksp,its,ierr)
-      if (reason > 0) then
-         if (rank .eq. 0) write(6,101) count,its
-      else
-         if (rank .eq. 0) print *, "Solve FAILED"
-      end if
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 17)
+       PetscCheck(reason > 0, PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONGSTATE, "Didn't converge")
+#else
+       if (reason < 0) then
+         SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONGSTATE, "Didn't converge")
+       end if
+#endif          
+      if (rank .eq. 0) write(6,101) count,its      
  101  format('Solve number ',i5,' iterations ',i5)
 
 ! Destroy the preconditioner matrix on the last time through
