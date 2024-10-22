@@ -159,13 +159,13 @@ run_tests:
 	./ex12f.o -f data/mat_stream_2364 -pc_air_strong_threshold 0.0 -pc_air_a_drop 0.0 -pc_air_r_drop 0.0 \
 	 -pc_air_inverse_type jacobi -ksp_type richardson -ksp_norm_type unpreconditioned \
 	 -pc_air_max_levels 10 -pc_air_coarsest_poly_order 60 \
-	 -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_inverse_type newton 
+	 -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_inverse_type newton -pc_air_max_luby_steps 3
 	@echo "Test AIRG as an exact solver, heavily truncating hierarchy and using high order mf GMRES poly in the\
 	 Newton basis as a coarse solver for hyperbolic streaming in parallel"
 	$(MPIEXEC) -n 2 ./ex6.o -f data/mat_stream_2364 -pc_air_strong_threshold 0.0 -pc_air_a_drop 0.0 -pc_air_r_drop 0.0 \
 	 -pc_air_inverse_type jacobi -ksp_type richardson -ksp_norm_type unpreconditioned \
 	 -pc_air_max_levels 10 -pc_air_coarsest_poly_order 60 \
-	 -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_inverse_type newton	
+	 -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_inverse_type newton -pc_air_max_luby_steps 3	
 #
 	@echo ""
 	@echo "Test AIRG with GMRES polynomials for hyperbolic streaming problem with coefficients calculated on subcomms"

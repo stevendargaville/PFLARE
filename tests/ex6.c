@@ -21,6 +21,7 @@ int main(int argc,char **args)
   PetscBool      flg,b_in_f = PETSC_TRUE;
   KSP            ksp;
   PC             pc;
+  KSPConvergedReason reason;
 
   ierr = PetscInitialize(&argc,&args,(char*)0,help);if (ierr) return ierr;
   ierr = PetscOptionsGetBool(NULL,NULL,"-b_in_f",&b_in_f,NULL);CHKERRQ(ierr);
@@ -105,6 +106,12 @@ int main(int argc,char **args)
   ierr = VecAXPY(u,-1.0,b);CHKERRQ(ierr);
   ierr = VecNorm(u,NORM_2,&norm);CHKERRQ(ierr);
   ierr = KSPGetIterationNumber(ksp,&its);CHKERRQ(ierr);
+  ierr = KSPGetConvergedReason(ksp,&reason);CHKERRQ(ierr);
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 17)
+      PetscCheck(reason > 0, PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONGSTATE, "Didn't converge");
+#else
+      if (reason < 0) SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONGSTATE, "Didn't converge");
+#endif   
   ierr = PetscPrintf(PETSC_COMM_WORLD, "Number of iterations = %3" PetscInt_FMT "\n", its);
   ierr = PetscPrintf(PETSC_COMM_WORLD, "Residual norm = %g\n", (double)norm);
 

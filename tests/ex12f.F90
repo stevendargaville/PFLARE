@@ -24,6 +24,7 @@
       MatInfo          info(MAT_INFO_SIZE)
       KSP              ksp
       PC               pc
+      KSPConvergedReason reason
 
       none = -1.0
       call PetscInitialize(PETSC_NULL_CHARACTER,ierr)
@@ -88,9 +89,15 @@
       call VecAXPY(u,none,b,ierr)
       call VecNorm(u,NORM_2,norm,ierr)
       call KSPGetIterationNumber(ksp,its,ierr)
+      call KSPGetConvergedReason(ksp,reason,ierr)
       write(6,101) norm,its
  101  format('Residual norm ',1pe9.2,' iterations ',i5)
 
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 17)
+      PetscCheck(reason > 0, PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONGSTATE, "Didn't converge")
+#else
+      if (reason < 0) SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONGSTATE, "Didn't converge")
+#endif  
       call KSPDestroy(ksp,ierr)
       call VecDestroy(b,ierr)
       call VecDestroy(x,ierr)

@@ -20,6 +20,7 @@ int main(int argc, char **args)
   PetscInt    i, j, n = 10, col[2], its;
   PetscScalar work_scalar, value[2];
   PetscRandom r;
+  KSPConvergedReason reason;
 
   PetscFunctionBeginUser;
   PetscInitialize(&argc, &args, (char*)0, help);
@@ -121,6 +122,12 @@ int main(int argc, char **args)
   KSPSolve(ksp, b, x);
 
   KSPGetIterationNumber(ksp,&its);
+  KSPGetConvergedReason(ksp,&reason);
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 17)
+      PetscCheck(reason > 0, PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONGSTATE, "Didn't converge");
+#else
+      if (reason < 0) SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONGSTATE, "Didn't converge");
+#endif   
   printf("iterations %d \n", its);
 
   /*

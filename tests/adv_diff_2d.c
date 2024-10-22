@@ -44,6 +44,7 @@ int main(int argc,char **argv)
   PetscRandom rctx;
   Vec x, b, diag_vec;
   Mat A;
+  KSPConvergedReason reason;
 
   ierr = PetscInitialize(&argc,&argv,(char*)0,help);if (ierr) return ierr;
 
@@ -179,6 +180,12 @@ int main(int argc,char **argv)
 
   // Write out the iteration count
   KSPGetIterationNumber(ksp,&its);
+  KSPGetConvergedReason(ksp,&reason);
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 17)
+      PetscCheck(reason > 0, PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONGSTATE, "Didn't converge");
+#else
+      if (reason < 0) SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONGSTATE, "Didn't converge");
+#endif    
   ierr = PetscPrintf(PETSC_COMM_WORLD, "Number of iterations = %3" PetscInt_FMT "\n", its);
 
   // ~~~~~~~~~~~~~~
