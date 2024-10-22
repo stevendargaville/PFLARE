@@ -37,7 +37,7 @@ LDFLAGS     := $(LDFLAGS) $(LDFLAGS_INPUT)
 .SUFFIXES: .F90 .o .mod .c
 
 # Test examples
-OBJS := ex62f.o ex12f.o ex6f.o ex6f_getcoeffs.o ex6.o ex6_cf_splitting.o ex86.o adv_diff_2d.o
+OBJS := ex12f.o ex6f.o ex6f_getcoeffs.o ex6.o ex6_cf_splitting.o ex86.o adv_diff_2d.o
 
 # Build rules
 all: $(OBJS) 
@@ -84,63 +84,65 @@ run_tests:
 #
 	@echo ""
 	@echo "Test AIRG with GMRES polynomials for 2D finite difference stencil"
-	./ex62f.o
+	./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air
 	@echo "Test AIRG with GMRES polynomials Arnoldi basis for 2D finite difference stencil"
-	./ex62f.o -pc_air_inverse_type arnoldi -pc_air_coarsest_inverse_type arnoldi
+	./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air -pc_air_inverse_type arnoldi -pc_air_coarsest_inverse_type arnoldi
 	@echo "Test AIRG with GMRES polynomials for 2D finite difference stencil in parallel"
-	$(MPIEXEC) -n 2 ./ex62f.o
+	$(MPIEXEC) -n 2 ./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air
 	@echo "Test AIRG with GMRES polynomials Arnoldi basis for 2D finite difference stencil in parallel"
-	$(MPIEXEC) -n 2 ./ex62f.o -pc_air_inverse_type arnoldi -pc_air_coarsest_inverse_type arnoldi
+	$(MPIEXEC) -n 2 ./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air -pc_air_inverse_type arnoldi -pc_air_coarsest_inverse_type arnoldi
 	@echo ""
 	@echo "Test lAIR with GMRES polynomial smoothing for 2D finite difference stencil in parallel"
-	$(MPIEXEC) -n 2 ./ex62f.o -pc_air_z_type lair
+	$(MPIEXEC) -n 2 ./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air -pc_air_z_type lair
 # 
 	@echo ""
 	@echo "Test single level GMRES polynomial preconditioning for 2D finite difference stencil"
-	./ex62f.o -pc_type pflareinv -pc_pflareinv_type power
+	./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type pflareinv -pc_pflareinv_type power
 	@echo "Test single level GMRES polynomial preconditioning for 2D finite difference stencil in parallel"
-	$(MPIEXEC) -n 2 ./ex62f.o -pc_type pflareinv -pc_pflareinv_type power
+	$(MPIEXEC) -n 2 ./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type pflareinv -pc_pflareinv_type power
 #
 	@echo ""
 	@echo "Test AIRG with Neumann polynomials for 2D finite difference stencil"
-	./ex62f.o -pc_air_inverse_type neumann
+	./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air -pc_air_inverse_type neumann
 	@echo "Test AIRG with Neumann polynomials for 2D finite difference stencil in parallel"
-	$(MPIEXEC) -n 2 ./ex62f.o  -pc_air_inverse_type neumann
+	$(MPIEXEC) -n 2 ./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air  -pc_air_inverse_type neumann
 	@echo "Test AIRG with Neumann polynomials for 2D finite difference stencil, matrix-free smoothing"
-	./ex62f.o -pc_air_inverse_type neumann -pc_air_matrix_free_polys
+	./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air -pc_air_inverse_type neumann -pc_air_matrix_free_polys
 	@echo "Test AIRG with Neumann polynomials for 2D finite difference stencil, matrix-free smoothing in parallel"
-	$(MPIEXEC) -n 2 ./ex62f.o  -pc_air_inverse_type neumann -pc_air_matrix_free_polys
+	$(MPIEXEC) -n 2 ./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air  -pc_air_inverse_type neumann -pc_air_matrix_free_polys
 #
 	@echo ""
 	@echo "Test AIRG with SAIs for 2D finite difference stencil"
-	./ex62f.o -pc_air_inverse_type sai
+	./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air -pc_air_inverse_type sai
 	@echo "Test AIRG with SAI for 2D finite difference stencil in parallel"
-	$(MPIEXEC) -n 2 ./ex62f.o  -pc_air_inverse_type sai
+	$(MPIEXEC) -n 2 ./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air  -pc_air_inverse_type sai
 # 
 	@echo ""
 	@echo "Test AIRG with ISAIs for 2D finite difference stencil"
-	./ex62f.o -pc_air_inverse_type isai
+	./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air -pc_air_inverse_type isai
 	@echo "Test AIRG with ISAIs for 2D finite difference stencil in parallel"
-	$(MPIEXEC) -n 2 ./ex62f.o  -pc_air_inverse_type isai
+	$(MPIEXEC) -n 2 ./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air  -pc_air_inverse_type isai
 # 
 	@echo ""
 	@echo "Test AIRG with Weighted Jacobi for 2D finite difference stencil"
-	./ex62f.o -pc_air_inverse_type wjacobi
+	./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air -pc_air_inverse_type wjacobi
 	@echo "Test AIRG with Weighted Jacobi for 2D finite difference stencil in parallel"
-	$(MPIEXEC) -n 2 ./ex62f.o  -pc_air_inverse_type wjacobi
+	$(MPIEXEC) -n 2 ./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air  -pc_air_inverse_type wjacobi
 # 
 	@echo ""
 	@echo "Test AIRG with Unweighted Jacobi for 2D finite difference stencil"
-	./ex62f.o -pc_air_inverse_type jacobi
+	./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air -pc_air_inverse_type jacobi
 	@echo "Test AIRG with Unweighted Jacobi for 2D finite difference stencil in parallel"
-	$(MPIEXEC) -n 2 ./ex62f.o  -pc_air_inverse_type jacobi
+	$(MPIEXEC) -n 2 ./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air  -pc_air_inverse_type jacobi
 # 
 	@echo ""
 	@echo "Test AIRG as an exact solver for 2D finite difference stencil"
-	./ex62f.o -pc_air_strong_threshold 0.0 -pc_air_a_drop 0.0 -pc_air_r_drop 0.0 -pc_air_inverse_type jacobi \
+	./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air \
+	 -pc_air_strong_threshold 0.0 -pc_air_a_drop 0.0 -pc_air_r_drop 0.0 -pc_air_inverse_type jacobi \
 	 -mg_coarse_ksp_type richardson -mg_coarse_ksp_max_it 10 -ksp_type richardson -ksp_norm_type unpreconditioned
 	@echo "Test AIRG as an exact solver for 2D finite difference stencil in parallel"
-	$(MPIEXEC) -n 2 ./ex62f.o -pc_air_strong_threshold 0.0 -pc_air_a_drop 0.0 -pc_air_r_drop 0.0 -pc_air_inverse_type jacobi \
+	$(MPIEXEC) -n 2 ./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air \
+	 -pc_air_strong_threshold 0.0 -pc_air_a_drop 0.0 -pc_air_r_drop 0.0 -pc_air_inverse_type jacobi \
 	 -mg_coarse_ksp_type richardson -mg_coarse_ksp_max_it 10 -ksp_type richardson -ksp_norm_type unpreconditioned
 # 
 	@echo ""	 
@@ -196,11 +198,13 @@ run_tests:
 # 
 	@echo ""
 	@echo "Test solving isotropic diffusion with fast coarsening and near-nullspace"
-	./ex62f.o -m 50 -n 50 -pc_air_z_type lair -pc_air_one_c_smooth -pc_air_symmetric -pc_air_constrain_z \
+	./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 50 -da_grid_y 50 -pc_type air -pc_air_z_type lair \
+	 -pc_air_one_c_smooth -pc_air_symmetric -pc_air_constrain_z \
 	 -pc_air_cf_splitting_type agg -pc_air_a_drop 1e-5 -pc_air_a_lump\
 	 -pc_air_r_drop 0 -ksp_rtol 1e-10 -ksp_pc_side right	
 	@echo "Test solving isotropic diffusion with fast coarsening and near-nullspace in parallel"
-	$(MPIEXEC) -n 4 ./ex62f.o -m 50 -n 50 -pc_air_z_type lair -pc_air_one_c_smooth -pc_air_symmetric -pc_air_constrain_z \
+	$(MPIEXEC) -n 4 ./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 50 -da_grid_y 50 -pc_type air -pc_air_z_type lair \
+	 -pc_air_one_c_smooth -pc_air_symmetric -pc_air_constrain_z \
 	 -pc_air_cf_splitting_type agg -pc_air_a_drop 1e-5 -pc_air_a_lump\
 	 -pc_air_r_drop 0 -ksp_rtol 1e-10 -ksp_pc_side right		
 # 
