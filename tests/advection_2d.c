@@ -61,7 +61,7 @@ int main(int argc,char **argv)
   ierr = KSPSolve(ksp,NULL,NULL);CHKERRQ(ierr);
 
   KSPGetIterationNumber(ksp,&its);
-  printf("iterations %d \n", its);
+  ierr = PetscPrintf(PETSC_COMM_WORLD, "Number of iterations = %3" PetscInt_FMT "\n", its);
 
   ierr = DMDestroy(&da);CHKERRQ(ierr);
   ierr = KSPDestroy(&ksp);CHKERRQ(ierr);
