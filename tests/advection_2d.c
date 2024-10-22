@@ -15,7 +15,6 @@ static char help[] = "Solves 2D advection equation.\n\n";
 #include "pflare.h"
 
 extern PetscErrorCode ComputeMat(KSP,Mat,Mat,void*);
-extern PetscErrorCode ComputeRHS(KSP,Vec,void*);
 
 typedef struct {
   PetscScalar theta;
@@ -28,6 +27,8 @@ int main(int argc,char **argv)
   UserContext    user;
   PetscErrorCode ierr;
   PetscInt its;
+  PetscRandom rctx;
+  Vec x, b;
 
   ierr = PetscInitialize(&argc,&argv,(char*)0,help);if (ierr) return ierr;
 
@@ -45,6 +46,17 @@ int main(int argc,char **argv)
   ierr = KSPSetDM(ksp,(DM)da);CHKERRQ(ierr);
   ierr = DMSetApplicationContext(da,&user);CHKERRQ(ierr);
 
+  ierr = DMCreateGlobalVector(da, &x);
+  ierr = DMCreateGlobalVector(da, &b);
+
+  // Random initial guess
+  PetscRandomCreate(PETSC_COMM_WORLD,&rctx);
+  VecSetRandom(x, rctx);
+  PetscRandomDestroy(&rctx);  
+
+  // Zero rhs
+  VecSet(b, 0.0);
+
   // Default theta to pi/4 - the advection direction is [cos(theta), sin(theta)]
   PetscReal pi = 4*atan(1.0);
   user.theta = pi/4.0;
@@ -55,34 +67,21 @@ int main(int argc,char **argv)
       if (user.theta > pi/2.0 || user.theta < 0.0) SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONGSTATE, "Theta must be between 0 and pi/2");
 #endif  
 
-  ierr = KSPSetComputeRHS(ksp,ComputeRHS,&user);CHKERRQ(ierr);
   ierr = KSPSetComputeOperators(ksp,ComputeMat,&user);CHKERRQ(ierr);
   ierr = KSPSetFromOptions(ksp);CHKERRQ(ierr);
-  ierr = KSPSolve(ksp,NULL,NULL);CHKERRQ(ierr);
+  ierr = KSPSetInitialGuessNonzero(ksp, PETSC_TRUE);
+
+  ierr = KSPSolve(ksp,b,x);CHKERRQ(ierr);
 
   KSPGetIterationNumber(ksp,&its);
   ierr = PetscPrintf(PETSC_COMM_WORLD, "Number of iterations = %3" PetscInt_FMT "\n", its);
 
   ierr = DMDestroy(&da);CHKERRQ(ierr);
   ierr = KSPDestroy(&ksp);CHKERRQ(ierr);
+  ierr = VecDestroy(&x);CHKERRQ(ierr);
+  ierr = VecDestroy(&b);CHKERRQ(ierr);
   ierr = PetscFinalize();
   return ierr;
-}
-
-PetscErrorCode ComputeRHS(KSP ksp,Vec b,void *ctx)
-{
-  UserContext    *user = (UserContext*)ctx;
-  PetscErrorCode ierr;
-  PetscRandom rctx;
-
-  PetscFunctionBeginUser;
-
-  // Random rhs
-  PetscRandomCreate(PETSC_COMM_WORLD,&rctx);
-  VecSetRandom(b,rctx);
-  PetscRandomDestroy(&rctx);  
-
-  PetscFunctionReturn(0);
 }
 
 PetscErrorCode ComputeMat(KSP ksp,Mat J, Mat jac,void *ctx)
