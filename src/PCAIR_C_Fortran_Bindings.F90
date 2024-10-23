@@ -375,6 +375,23 @@ module pcair_c_fortran_bindings
       call PCAIRGetInverseType(pc, inv_type, ierr)
 
    end subroutine PCAIRGetInverseType_c
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetCInverseType_c(pc_ptr, inv_type) bind(C, name='PCAIRGetCInverseType_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PCPFLAREINVType, intent(out)         :: inv_type
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetCInverseType(pc, inv_type, ierr)
+
+   end subroutine PCAIRGetCInverseType_c   
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
@@ -443,6 +460,40 @@ module pcair_c_fortran_bindings
       call PCAIRGetInverseSparsityOrder(pc, order, ierr)
 
    end subroutine PCAIRGetInverseSparsityOrder_c
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetCPolyOrder_c(pc_ptr, order) bind(C, name='PCAIRGetCPolyOrder_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, intent(out)         :: order
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetCPolyOrder(pc, order, ierr)
+
+   end subroutine PCAIRGetCPolyOrder_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetCInverseSparsityOrder_c(pc_ptr, order) bind(C, name='PCAIRGetCInverseSparsityOrder_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, intent(out)         :: order
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetCInverseSparsityOrder(pc, order, ierr)
+
+   end subroutine PCAIRGetCInverseSparsityOrder_c   
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
@@ -1037,6 +1088,23 @@ module pcair_c_fortran_bindings
       call PCAIRSetInverseType(pc, inv_type, ierr)
 
    end subroutine PCAIRSetInverseType_c
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetCInverseType_c(pc_ptr, inv_type) bind(C, name='PCAIRSetCInverseType_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PCPFLAREINVType, value, intent(in)          :: inv_type
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetCInverseType(pc, inv_type, ierr)
+
+   end subroutine PCAIRSetCInverseType_c   
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
@@ -1105,6 +1173,40 @@ module pcair_c_fortran_bindings
       call PCAIRSetInverseSparsityOrder(pc, order, ierr)
 
    end subroutine PCAIRSetInverseSparsityOrder_c
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetCPolyOrder_c(pc_ptr, order) bind(C, name='PCAIRSetCPolyOrder_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, value, intent(in)          :: order
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetCPolyOrder(pc, order, ierr)
+
+   end subroutine PCAIRSetCPolyOrder_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetCInverseSparsityOrder_c(pc_ptr, order) bind(C, name='PCAIRSetCInverseSparsityOrder_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, value, intent(in)          :: order
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetCInverseSparsityOrder(pc, order, ierr)
+
+   end subroutine PCAIRSetCInverseSparsityOrder_c   
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 

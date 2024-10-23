@@ -727,6 +727,25 @@ module pcair_interfaces
       ierr = 0
 
    end subroutine PCAIRGetInverseType
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetCInverseType(pc, inv_type, ierr) 
+
+      ! ~~~~~~~~
+      type(tPC), intent(inout)      :: pc
+      PCPFLAREINVType, intent(out)         :: inv_type
+      PetscErrorCode, intent(out)   :: ierr
+
+      type(air_options), pointer :: options
+      ! ~~~~~~~~
+
+      ! Get the options
+      call PCAIRGetOptions(pc, options)    
+      inv_type = options%c_inverse_type
+      ierr = 0
+
+   end subroutine PCAIRGetCInverseType   
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
@@ -764,7 +783,45 @@ module pcair_interfaces
       distance = options%lair_distance
       ierr = 0
 
-   end subroutine PCAIRGetLairDistance   
+   end subroutine PCAIRGetLairDistance
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetCPolyOrder(pc, order, ierr) 
+
+      ! ~~~~~~~~
+      type(tPC), intent(inout)      :: pc
+      PetscInt, intent(out)         :: order
+      PetscErrorCode, intent(out)   :: ierr
+
+      type(air_options), pointer :: options
+      ! ~~~~~~~~
+
+      ! Get the options
+      call PCAIRGetOptions(pc, options)    
+      order = options%c_poly_order
+      ierr = 0
+
+   end subroutine PCAIRGetCPolyOrder
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetCInverseSparsityOrder(pc, order, ierr) 
+
+      ! ~~~~~~~~
+      type(tPC), intent(inout)      :: pc
+      PetscInt, intent(out)         :: order
+      PetscErrorCode, intent(out)   :: ierr
+
+      type(air_options), pointer :: options
+      ! ~~~~~~~~
+
+      ! Get the options
+      call PCAIRGetOptions(pc, options)    
+      order = options%c_inverse_sparsity_order
+      ierr = 0
+
+   end subroutine PCAIRGetCInverseSparsityOrder   
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
@@ -1379,6 +1436,25 @@ module pcair_interfaces
       ierr = 0
 
    end subroutine PCAIRSetInverseType
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetCInverseType(pc, inv_type, ierr) 
+
+      ! ~~~~~~~~
+      type(tPC), intent(inout)      :: pc
+      PCPFLAREINVType, intent(in)          :: inv_type
+      PetscErrorCode, intent(out)   :: ierr
+
+      type(air_options), pointer :: options
+      ! ~~~~~~~~
+
+      ! Set the options
+      call PCAIRGetOptions(pc, options)    
+      options%c_inverse_type = inv_type
+      ierr = 0
+
+   end subroutine PCAIRSetCInverseType   
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
@@ -1455,6 +1531,44 @@ module pcair_interfaces
       ierr = 0
 
    end subroutine PCAIRSetInverseSparsityOrder
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetCPolyOrder(pc, order, ierr) 
+
+      ! ~~~~~~~~
+      type(tPC), intent(inout)      :: pc
+      PetscInt, intent(in)          :: order
+      PetscErrorCode, intent(out)   :: ierr
+
+      type(air_options), pointer :: options
+      ! ~~~~~~~~
+
+      ! Set the options
+      call PCAIRGetOptions(pc, options)    
+      options%c_poly_order = int(order)
+      ierr = 0
+
+   end subroutine PCAIRSetCPolyOrder
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetCInverseSparsityOrder(pc, order, ierr) 
+
+      ! ~~~~~~~~
+      type(tPC), intent(inout)      :: pc
+      PetscInt, intent(in)          :: order
+      PetscErrorCode, intent(out)   :: ierr
+
+      type(air_options), pointer :: options
+      ! ~~~~~~~~
+
+      ! Set the options
+      call PCAIRGetOptions(pc, options)    
+      options%c_inverse_sparsity_order = int(order)
+      ierr = 0
+
+   end subroutine PCAIRSetCInverseSparsityOrder   
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 

@@ -113,6 +113,20 @@ module air_data_type
       ! -pc_air_strong_r_threshold
       real :: strong_r_threshold = 0.0
 
+      ! What type of approximation do we use for Z?
+      ! 0 - Aff^-1 approximation determined by inverse type (below) and then Z computed with matmatmult
+      ! 1 - lAIR computes Z directly
+      ! 2 - SAI version of lAIR computes Z directly
+      ! -pc_air_z_type
+      integer :: z_type = 0
+
+      ! If z_type == 1 or 2, this is the distance the grid-transfer operators go out to
+      ! This is so we can have lair out to some distance, and then a different sparsity 
+      ! for our smoothers
+      ! If z_type == 0 this is ignored, and the distance is determined by inverse_sparsity_order + 1
+      ! -pc_air_lair_distance 
+      integer :: lair_distance = 2      
+
       ! What type of approximation do we use for Aff^-1 
       ! This is used both for Z (if z_type == 0, see below) and for F smoothing
       ! These are defined by PCPFLAREINVType 
@@ -125,21 +139,7 @@ module air_data_type
       ! 6 - Weighted Jacobi with weight 3 / ( 4 * || Dff^(-1/2) * Aff * Dff^(-1/2) ||_inf )
       ! 7 - Unweighted Jacobi
       ! -pc_air_inverse_type
-      integer :: inverse_type = 0
-
-      ! What type of approximation do we use for Z?
-      ! 0 - Aff^-1 approximation determined by inverse type (above) and then Z computed with matmatmult
-      ! 1 - lAIR computes Z directly
-      ! 2 - SAI version of lAIR computes Z directly
-      ! -pc_air_z_type
-      integer :: z_type = 0
-
-      ! If z_type == 1 or 2, this is the distance the grid-transfer operators go out to
-      ! This is so we can have lair out to some distance, and then a different sparsity 
-      ! for our smoothers
-      ! If z_type == 0 this is ignored, and the distance is determined by inverse_sparsity_order + 1
-      ! -pc_air_lair_distance 
-      integer :: lair_distance = 2
+      integer :: inverse_type = 0      
 
       ! This is the order of polynomial we use in air if inverse_type is 
       ! power, arnoldi, newton or neumann
@@ -150,6 +150,19 @@ module air_data_type
       ! distance = inverse_sparsity_order + 1
       ! -pc_air_inverse_sparsity_order
       integer :: inverse_sparsity_order = 1
+
+      ! Inverse type for c smoothing
+      ! This defaults to whatever the F point smoother is atm
+      ! -pc_air_c_inverse_type
+      integer :: c_inverse_type = 0      
+      ! Poly order for c smoothing
+      ! This defaults to whatever the F point smoother is atm
+      ! -pc_air_c_poly_order
+      integer :: c_poly_order = 6
+      ! Inverse sparsity order for c smoothing
+      ! This defaults to whatever the F point smoother is atm
+      ! -pc_air_c_inverse_sparsity_order
+      integer :: c_inverse_sparsity_order = 1      
       
       ! These are for the coarse grid solver
       ! -pc_air_coarsest_inverse_type

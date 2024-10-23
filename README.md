@@ -526,8 +526,12 @@ A brief description of the available options in PFLARE are given below and their
    | ``-pc_air_inverse_sparsity_order``  |  PCAIRGetInverseSparsityOrder  PCAIRSetInverseSparsityOrder  | This power of A is used as the sparsity in assembled inverses | 1 |        
    | ``-pc_air_matrix_free_polys``  |  PCAIRGetMatrixFreePolys  PCAIRSetMatrixFreePolys  | Do smoothing matrix-free if possible | false |   
    | ``-pc_air_maxits_a_ff``  |  PCAIRGetMaxitsAff  PCAIRSetMaxitsAff  | Number of F point smooths | 2 |
-   | ``-pc_air_one_c_smooth``  |  PCAIRGetOneCSmooth  PCAIRSetOneCSmooth  | Do a C point smooth after the F point smooths | false |
    | ``-pc_air_full_smoothing_up_and_down``  |  PCAIRGetFullSmoothingUpAndDown  PCAIRSetFullSmoothingUpAndDown  | Up and down smoothing on all points at once, rather than only down F and C smoothing which is the default  | false |     
+   | ``-pc_air_one_c_smooth``  |  PCAIRGetOneCSmooth  PCAIRSetOneCSmooth  | Do a C point smooth after the F point smooths | false |
+   | ``-pc_air_c_inverse_type``  |  PCAIRGetCInverseType  PCAIRSetCInverseType  | The inverse type for the C smooth, given above. If unset this defaults to the F point smoother | -pc_air_inverse_type |
+   | ``-pc_air_c_poly_order``  |  PCAIRGetCPolyOrder  PCAIRSetCPolyOrder  | If using a polynomial inverse type, this determines the order of the polynomial for the C smooth. If unset this defaults to the F point smoother | -pc_air_poly_order |
+   | ``-pc_air_c_inverse_sparsity_order``  |  PCAIRGetCInverseSparsityOrder  PCAIRSetCInverseSparsityOrder  | This power of A is used as the sparsity in assembled inverses for the C smooth/ If unset this defaults to the F point smoother | -pc_air_inverse_sparsity_order |    
+   
 
 #### Grid transfer options
 

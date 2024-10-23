@@ -1367,9 +1367,9 @@ module air_mg_setup
                   .NOT. air_data%options%full_smoothing_up_and_down) then                  
                   
             call setup_gmres_poly_data(global_coarse_is_size, &
-                     air_data%options%inverse_type, &
-                     air_data%options%poly_order, &
-                     air_data%options%inverse_sparsity_order, &
+                     air_data%options%c_inverse_type, &
+                     air_data%options%c_poly_order, &
+                     air_data%options%c_inverse_sparsity_order, &
                      air_data%options%subcomm, &
                      number_splits, &
                      air_data%inv_A_cc_poly_data(our_level))   
@@ -2129,6 +2129,10 @@ module air_mg_setup
 
       air_data%options%poly_order = 6
       air_data%options%inverse_sparsity_order = 1
+
+      air_data%options%c_inverse_type = PFLAREINV_POWER
+      air_data%options%c_poly_order = 6
+      air_data%options%c_inverse_sparsity_order = 1
       
       air_data%options%coarsest_inverse_type = PFLAREINV_POWER
       air_data%options%coarsest_poly_order = 6

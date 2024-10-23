@@ -34,10 +34,13 @@ PETSC_EXTERN PetscErrorCode PCAIRGetConstrainW_c(PC *pc, PetscBool *input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRGetConstrainZ_c(PC *pc, PetscBool *input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRGetStrongRThreshold_c(PC *pc, PetscReal *input_real);
 PETSC_EXTERN PetscErrorCode PCAIRGetInverseType_c(PC *pc, PCPFLAREINVType *input_int);
+PETSC_EXTERN PetscErrorCode PCAIRGetCInverseType_c(PC *pc, PCPFLAREINVType *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetZType_c(PC *pc, PCAIRZType *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetPolyOrder_c(PC *pc, PetscInt *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetLairDistance_c(PC *pc, PetscInt *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetInverseSparsityOrder_c(PC *pc, PetscInt *input_int);
+PETSC_EXTERN PetscErrorCode PCAIRGetCPolyOrder_c(PC *pc, PetscInt *input_int);
+PETSC_EXTERN PetscErrorCode PCAIRGetCInverseSparsityOrder_c(PC *pc, PetscInt *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestInverseType_c(PC *pc, PCPFLAREINVType *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestPolyOrder_c(PC *pc, PetscInt *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestInverseSparsityOrder_c(PC *pc, PetscInt *input_int);
@@ -75,6 +78,9 @@ PETSC_EXTERN PetscErrorCode PCAIRSetZType_c(PC *pc, PCAIRZType input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetLairDistance_c(PC *pc, PetscInt input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetPolyOrder_c(PC *pc, PetscInt input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetInverseSparsityOrder_c(PC *pc, PetscInt input_int);
+PETSC_EXTERN PetscErrorCode PCAIRSetCInverseType_c(PC *pc, PCPFLAREINVType input_int);
+PETSC_EXTERN PetscErrorCode PCAIRSetCPolyOrder_c(PC *pc, PetscInt input_int);
+PETSC_EXTERN PetscErrorCode PCAIRSetCInverseSparsityOrder_c(PC *pc, PetscInt input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestInverseType_c(PC *pc, PCPFLAREINVType input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestPolyOrder_c(PC *pc, PetscInt input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetCoarsestInverseSparsityOrder_c(PC *pc, PetscInt input_int);
@@ -288,6 +294,12 @@ PETSC_EXTERN PetscErrorCode PCAIRGetInverseType(PC pc, PCPFLAREINVType *input_in
    PCAIRGetInverseType_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
+PETSC_EXTERN PetscErrorCode PCAIRGetCInverseType(PC pc, PCPFLAREINVType *input_int)
+{
+   PetscFunctionBegin;
+   PCAIRGetCInverseType_c(&pc, input_int);
+   PetscFunctionReturn(0);
+}
 PETSC_EXTERN PetscErrorCode PCAIRGetZType(PC pc, PCAIRZType *input_int)
 {
    PetscFunctionBegin;
@@ -310,6 +322,18 @@ PETSC_EXTERN PetscErrorCode PCAIRGetInverseSparsityOrder(PC pc, PetscInt *input_
 {
    PetscFunctionBegin;
    PCAIRGetInverseSparsityOrder_c(&pc, input_int);
+   PetscFunctionReturn(0);
+}
+PETSC_EXTERN PetscErrorCode PCAIRGetCPolyOrder(PC pc, PetscInt *input_int)
+{
+   PetscFunctionBegin;
+   PCAIRGetCPolyOrder_c(&pc, input_int);
+   PetscFunctionReturn(0);
+}
+PETSC_EXTERN PetscErrorCode PCAIRGetCInverseSparsityOrder(PC pc, PetscInt *input_int)
+{
+   PetscFunctionBegin;
+   PCAIRGetCInverseSparsityOrder_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetCoarsestInverseType(PC pc, PCPFLAREINVType *input_int)
@@ -682,6 +706,20 @@ PETSC_EXTERN PetscErrorCode PCAIRSetInverseType(PC pc, PCPFLAREINVType input_int
    PCAIRSetInverseType_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
+// What type of approximation do we use for Acc^-1 
+// If unset, this defaults to whatever the F point smoother is atm
+// Default: pc_air_inverse_type
+// -pc_air_c_inverse_type
+PETSC_EXTERN PetscErrorCode PCAIRSetCInverseType(PC pc, PCPFLAREINVType input_int)
+{
+   PetscFunctionBegin;
+   PCPFLAREINVType old_int;
+   PCAIRGetCInverseType(pc, &old_int);
+   if (old_int == input_int) PetscFunctionReturn(0);
+   PCReset_AIR_c(pc);    
+   PCAIRSetCInverseType_c(&pc, input_int);
+   PetscFunctionReturn(0);
+}
 // What type of approximation do we use for Z?
 // "product" - AIR_Z_PRODUCT - Aff^-1 approximation determined by inverse type (above) and then Z computed with matmatmult
 // "lair" - AIR_Z_LAIR - lAIR computes Z directly
@@ -741,6 +779,36 @@ PETSC_EXTERN PetscErrorCode PCAIRSetInverseSparsityOrder(PC pc, PetscInt input_i
    if (old_int == input_int) PetscFunctionReturn(0);
    PCReset_AIR_c(pc);    
    PCAIRSetInverseSparsityOrder_c(&pc, input_int);
+   PetscFunctionReturn(0);
+}
+// This is the order of polynomial we use in air if inverse_type is 
+// power, arnoldi, newton or neumann but on the C points
+// If unset, this defaults to whatever the F point smoother is atm
+// Default: pc_air_poly_order
+// -pc_air_c_poly_order
+PETSC_EXTERN PetscErrorCode PCAIRSetCPolyOrder(PC pc, PetscInt input_int)
+{
+   PetscFunctionBegin;
+   PetscInt old_int;
+   PCAIRGetCPolyOrder(pc, &old_int);
+   if (old_int == input_int) PetscFunctionReturn(0);
+   PCReset_AIR_c(pc);   
+   PCAIRSetCPolyOrder_c(&pc, input_int);
+   PetscFunctionReturn(0);
+}
+// This is the order of sparsity we use if we assemble our approximate inverses
+// but on the C points
+// If unset, this defaults to whatever the F point smoother is atm
+// Default: pc_air_inverse_sparsity_order
+// -pc_air_c_inverse_sparsity_order
+PETSC_EXTERN PetscErrorCode PCAIRSetCInverseSparsityOrder(PC pc, PetscInt input_int)
+{
+   PetscFunctionBegin;
+   PetscInt old_int;
+   PCAIRGetCInverseSparsityOrder(pc, &old_int);
+   if (old_int == input_int) PetscFunctionReturn(0);
+   PCReset_AIR_c(pc);    
+   PCAIRSetCInverseSparsityOrder_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 // Coarse grid inverse type (see PCAIRSetInverseType)
@@ -1039,6 +1107,12 @@ static PetscErrorCode PCSetFromOptions_AIR_c(PetscOptionItems *PetscOptionsObjec
    type = old_type;
    PetscOptionsEnum("-pc_air_inverse_type", "Inverse type", "PCPFLAREINVSetType", PCPFLAREINVTypes, (PetscEnum)old_type, (PetscEnum *)&type, &flg);
    PCAIRSetInverseType(pc, type);
+   // ~~~~ 
+   // Defaults to whatever the F point smoother is atm
+   PCAIRGetInverseType(pc, &old_type);
+   type = old_type;
+   PetscOptionsEnum("-pc_air_c_inverse_type", "C point inverse type", "PCPFLAREINVSetType", PCPFLAREINVTypes, (PetscEnum)old_type, (PetscEnum *)&type, &flg);
+   PCAIRSetCInverseType(pc, type);
    // ~~~~
    const char *const PCAIRZTypes[] = {"PRODUCT", "LAIR", "LAIR_SAI", "PCAIRZType", "AIR_Z_", NULL};
    PCAIRGetZType(pc, &old_z_type);
@@ -1060,6 +1134,18 @@ static PetscErrorCode PCSetFromOptions_AIR_c(PetscOptionItems *PetscOptionsObjec
    input_int = old_int;
    PetscOptionsInt("-pc_air_inverse_sparsity_order", "Inverse sparsity order", "PCAIRSetInverseSparsityOrder", old_int, &input_int, NULL);
    PCAIRSetInverseSparsityOrder(pc, input_int);
+   // ~~~~ 
+   // Defaults to whatever the F point smoother is atm
+   PCAIRGetPolyOrder(pc, &old_int);
+   input_int = old_int;
+   PetscOptionsInt("-pc_air_c_poly_order", "C point polynomial order", "PCAIRSetCPolyOrder", old_int, &input_int, NULL);
+   PCAIRSetCPolyOrder(pc, input_int);
+   // ~~~~ 
+   // Defaults to whatever the F point smoother is atm
+   PCAIRGetInverseSparsityOrder(pc, &old_int);
+   input_int = old_int;
+   PetscOptionsInt("-pc_air_c_inverse_sparsity_order", "C point inverse sparsity order", "PCAIRSetCInverseSparsityOrder", old_int, &input_int, NULL);
+   PCAIRSetCInverseSparsityOrder(pc, input_int);   
    // ~~~~ 
    PCAIRGetCoarsestInverseType(pc, &old_type);
    type = old_type;
@@ -1180,35 +1266,35 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
       // What type of inverse
       if (input_type == PFLAREINV_POWER)
       {
-         PetscViewerASCIIPrintf(viewer, "    GMRES polynomial, power basis, order %"PetscInt_FMT" \n", input_int_two);
+         PetscViewerASCIIPrintf(viewer, "    F smooth: GMRES polynomial, power basis, order %"PetscInt_FMT" \n", input_int_two);
       }
       else if (input_type == PFLAREINV_ARNOLDI)
       {
-         PetscViewerASCIIPrintf(viewer, "    GMRES polynomial, arnoldi basis, order %"PetscInt_FMT" \n", input_int_two);
+         PetscViewerASCIIPrintf(viewer, "    F smooth: GMRES polynomial, arnoldi basis, order %"PetscInt_FMT" \n", input_int_two);
       }
       else if (input_type == PFLAREINV_NEWTON)
       {
-         PetscViewerASCIIPrintf(viewer, "    GMRES polynomial, newton basis, order %"PetscInt_FMT" \n", input_int_two);      
+         PetscViewerASCIIPrintf(viewer, "    F smooth: GMRES polynomial, newton basis, order %"PetscInt_FMT" \n", input_int_two);      
       }
       else if (input_type == PFLAREINV_SAI)
       {
-         PetscViewerASCIIPrintf(viewer, "    SAI \n");      
+         PetscViewerASCIIPrintf(viewer, "    F smooth: SAI \n");      
       }
       else if (input_type == PFLAREINV_ISAI)
       {
-         PetscViewerASCIIPrintf(viewer, "    ISAI \n");      
+         PetscViewerASCIIPrintf(viewer, "    F smooth: ISAI \n");      
       }      
       else if (input_type == PFLAREINV_NEUMANN)
       {
-         PetscViewerASCIIPrintf(viewer, "    Neumann polynomial, order %"PetscInt_FMT" \n", input_int_two);      
+         PetscViewerASCIIPrintf(viewer, "    F smooth: Neumann polynomial, order %"PetscInt_FMT" \n", input_int_two);      
       }     
       else if (input_type == PFLAREINV_WJACOBI)
       {
-         PetscViewerASCIIPrintf(viewer, "    Weighted Jacobi \n");      
+         PetscViewerASCIIPrintf(viewer, "    F smooth: Weighted Jacobi \n");      
       }
       else if (input_type == PFLAREINV_JACOBI)
       {
-         PetscViewerASCIIPrintf(viewer, "    Unweighted Jacobi \n");      
+         PetscViewerASCIIPrintf(viewer, "    F smooth: Unweighted Jacobi \n");      
       }                  
       if (input_type != PFLAREINV_WJACOBI && input_type != PFLAREINV_JACOBI)
       {
@@ -1221,7 +1307,62 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
          {
             PetscViewerASCIIPrintf(viewer, "      assembled inverse, sparsity order %"PetscInt_FMT"\n", input_int_three);
          }
-      }      
+      }  
+
+      // If C smoothing
+      if (flg_two) {
+
+         ierr =  PCAIRGetCInverseType(pc, &input_type);
+         ierr =  PCAIRGetCPolyOrder(pc, &input_int_two);
+         ierr =  PCAIRGetCInverseSparsityOrder(pc, &input_int_three);
+         ierr =  PCAIRGetMatrixFreePolys(pc, &flg);
+
+         // What type of inverse
+         if (input_type == PFLAREINV_POWER)
+         {
+            PetscViewerASCIIPrintf(viewer, "    C smooth: GMRES polynomial, power basis, order %"PetscInt_FMT" \n", input_int_two);
+         }
+         else if (input_type == PFLAREINV_ARNOLDI)
+         {
+            PetscViewerASCIIPrintf(viewer, "    C smooth: GMRES polynomial, arnoldi basis, order %"PetscInt_FMT" \n", input_int_two);
+         }
+         else if (input_type == PFLAREINV_NEWTON)
+         {
+            PetscViewerASCIIPrintf(viewer, "    C smooth: GMRES polynomial, newton basis, order %"PetscInt_FMT" \n", input_int_two);      
+         }
+         else if (input_type == PFLAREINV_SAI)
+         {
+            PetscViewerASCIIPrintf(viewer, "    C smooth: SAI \n");      
+         }
+         else if (input_type == PFLAREINV_ISAI)
+         {
+            PetscViewerASCIIPrintf(viewer, "    C smooth: ISAI \n");      
+         }      
+         else if (input_type == PFLAREINV_NEUMANN)
+         {
+            PetscViewerASCIIPrintf(viewer, "    C smooth: Neumann polynomial, order %"PetscInt_FMT" \n", input_int_two);      
+         }     
+         else if (input_type == PFLAREINV_WJACOBI)
+         {
+            PetscViewerASCIIPrintf(viewer, "    C smooth: Weighted Jacobi \n");      
+         }
+         else if (input_type == PFLAREINV_JACOBI)
+         {
+            PetscViewerASCIIPrintf(viewer, "    C smooth: Unweighted Jacobi \n");      
+         }                  
+         if (input_type != PFLAREINV_WJACOBI && input_type != PFLAREINV_JACOBI)
+         {
+            // If matrix-free or not
+            if (flg)
+            {
+               PetscViewerASCIIPrintf(viewer, "      matrix-free inverse \n");
+            }
+            else
+            {
+               PetscViewerASCIIPrintf(viewer, "      assembled inverse, sparsity order %"PetscInt_FMT"\n", input_int_three);
+            }
+         }  
+      }         
 
       PetscViewerASCIIPrintf(viewer, "  Grid transfer operators: \n");      
       ierr =  PCAIRGetZType(pc, &z_type);
