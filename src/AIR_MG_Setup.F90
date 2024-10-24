@@ -1118,7 +1118,6 @@ module air_mg_setup
       PetscInt, parameter :: one=1, zero=0
       type(tVec), dimension(:), allocatable :: left_null_vecs, right_null_vecs
       type(tVec), dimension(:), allocatable :: left_null_vecs_c, right_null_vecs_c
-      logical :: cst_nullspace
       VecScatter :: vec_scatter
 
       ! ~~~~~~     
@@ -1146,7 +1145,7 @@ module air_mg_setup
       ! Check if the user has provided a near nullspace before we do anything
       ! ~~~~~~~~~~~~~~~~~~~~~
       call get_near_nullspace(amat, air_data%options%constrain_z, air_data%options%constrain_w, &
-               cst_nullspace, left_null_vecs, right_null_vecs)
+               left_null_vecs, right_null_vecs)
 
       ! ~~~~~~~~~~~~~~~~~~~~~
 
@@ -1269,27 +1268,18 @@ module air_mg_setup
             end if
 
             if (air_data%options%constrain_z) then
-               ! Only destroy the constant nullspace which we created on the top grid
-               if (cst_nullspace .AND. our_level == 1) then
-                  call VecDestroy(left_null_vecs(size(left_null_vecs)), ierr)
-               else if (our_level /= 1) then
-                  ! On every other grid destroy everything
-                  do i_loc = 1, size(left_null_vecs)
-                     call VecDestroy(left_null_vecs(i_loc), ierr)
-                  end do
-               end if
+               ! Destroy our copy of the left near nullspace vectors
+               do i_loc = 1, size(left_null_vecs)
+                  call VecDestroy(left_null_vecs(i_loc), ierr)
+               end do
                deallocate(left_null_vecs)
                if (allocated(left_null_vecs_c)) deallocate(left_null_vecs_c)
             end if
             if (air_data%options%constrain_w) then
-               if (cst_nullspace .AND. our_level == 1) then
-                  call VecDestroy(right_null_vecs(size(right_null_vecs)), ierr)
-               else if (our_level /= 1) then
-                  ! On every other grid destroy everything
-                  do i_loc = 1, size(right_null_vecs)
-                     call VecDestroy(right_null_vecs(i_loc), ierr)
-                  end do
-               end if
+               ! Destroy our copy of the right near nullspace vectors
+               do i_loc = 1, size(right_null_vecs)
+                  call VecDestroy(right_null_vecs(i_loc), ierr)
+               end do
                deallocate(right_null_vecs)
                if (allocated(right_null_vecs_c)) deallocate(right_null_vecs_c)
             end if            
@@ -1391,26 +1381,17 @@ module air_mg_setup
                left_null_vecs_c, right_null_vecs_c)
 
          if (air_data%options%constrain_z) then
-            ! Only destroy the constant nullspace which we created on the top grid
-            if (cst_nullspace .AND. our_level == 1) then
-               call VecDestroy(left_null_vecs(size(left_null_vecs)), ierr)
-            else if (our_level /= 1) then
-               ! On every other grid destroy everything
-               do i_loc = 1, size(left_null_vecs)
-                  call VecDestroy(left_null_vecs(i_loc), ierr)
-               end do
-            end if
+            ! Destroy our copy of the left near nullspace vectors
+            do i_loc = 1, size(left_null_vecs)
+               call VecDestroy(left_null_vecs(i_loc), ierr)
+            end do
             left_null_vecs = left_null_vecs_c
          end if
          if (air_data%options%constrain_w) then
-            if (cst_nullspace .AND. our_level == 1) then
-               call VecDestroy(right_null_vecs(size(right_null_vecs)), ierr)
-            else if (our_level /= 1) then
-               ! On every other grid destroy everything
-               do i_loc = 1, size(right_null_vecs)
-                  call VecDestroy(right_null_vecs(i_loc), ierr)
-               end do
-            end if
+            ! Destroy our copy of the right near nullspace vectors
+            do i_loc = 1, size(right_null_vecs)
+               call VecDestroy(right_null_vecs(i_loc), ierr)
+            end do
             right_null_vecs = right_null_vecs_c
          end if
 

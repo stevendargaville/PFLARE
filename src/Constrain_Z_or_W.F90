@@ -16,17 +16,14 @@ module constrain_z_or_w
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine get_near_nullspace(input_mat, left, right, cst_nullspace, left_null_vecs, right_null_vecs)
+   subroutine get_near_nullspace(input_mat, left, right, left_null_vecs, right_null_vecs)
 
       ! Gets left and/or right near nullspace vectors set by the user with 
       ! matsetnearnullspace
-      ! If cst_nullspace returns true, then the last vector in the left/right_null_vecs
-      ! needs to be destroyed once done, the rest should not be
 
       ! ~~~~~~
       type(tMat), intent(in)                                :: input_mat
       logical, intent(in)                                   :: left, right
-      logical, intent(out)                                  :: cst_nullspace
       type(tVec), dimension(:), allocatable, intent(inout)  :: left_null_vecs, right_null_vecs
 
       integer :: comm_size, errorcode, i_loc, no_nullspace_vecs
@@ -39,6 +36,7 @@ module constrain_z_or_w
       ! Has to be big enough to hold all nullspace vectors, but there is no way to check 
       ! how many have been set
       type(tVec), dimension(20) :: null_vecs      
+      logical :: cst_nullspace
 
       ! ~~~~~
 
@@ -78,10 +76,17 @@ module constrain_z_or_w
       ! constant included
       if (left) allocate(left_null_vecs(no_nullspace_vecs))
       if (right) allocate(right_null_vecs(no_nullspace_vecs))
-      ! Copy over pointers to the user input vecs
+      ! Have to make copies of the nullspace vecs passed in, as MatNullSpaceCreate locks the vectors
+      ! to be read-only in newer petsc
       do i_loc = 1, no_nullspace
-         if (left) left_null_vecs(i_loc) = null_vecs(i_loc)
-         if (right) right_null_vecs(i_loc) = null_vecs(i_loc)
+         if (left) then
+            call VecDuplicate(null_vecs(i_loc), left_null_vecs(i_loc), ierr)
+            call VecCopy(null_vecs(i_loc), left_null_vecs(i_loc), ierr)
+         end if
+         if (right) then
+            call VecDuplicate(null_vecs(i_loc), right_null_vecs(i_loc), ierr)
+            call VecCopy(null_vecs(i_loc), right_null_vecs(i_loc), ierr)            
+         end if
       end do
 
       ! If we want to create a constant nullspace vector on the end of left_null_vecs or right_null_vecs
