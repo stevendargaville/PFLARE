@@ -463,6 +463,16 @@ module constrain_z_or_w
                   1.0, b_c_vals, size(b_c_vals,1), &
                   row_vals, 1, &
                   0.0, diff, 1)    
+
+         ! Compute W * B_c^R - B_f^R
+         ! Loop over near-nullspace vecs
+         do null_vec = 1, size(null_vecs_c)
+
+            call VecGetArrayF90(null_vecs_f(null_vec), b_f_vals, ierr)
+            ! b_f_vals is local (we want b_f for this row) but so is the value we want
+            diff(null_vec) = diff(null_vec) - b_f_vals(i_loc - global_row_start + 1)    
+            call VecRestoreArrayF90(null_vecs_f(null_vec), b_f_vals, ierr)               
+         end do                  
                
          ! Compute (B_c^R)^T * B_c^R
          call dgemm("T", "N", size(b_c_vals, 2), size(b_c_vals,2), size(b_c_vals, 1), &
@@ -478,15 +488,6 @@ module constrain_z_or_w
                   1.0, pseudo, size(pseudo,1), &
                   b_c_vals, size(b_c_vals,1), &
                   0.0, temp_mat, size(temp_mat,1))          
-                  
-         ! Loop over near-nullspace vecs
-         do null_vec = 1, size(null_vecs_c)
-
-            call VecGetArrayF90(null_vecs_f(null_vec), b_f_vals, ierr)
-            ! b_f_vals is local (we want b_f for this row) but so is the value we want
-            diff(null_vec) = diff(null_vec) - b_f_vals(i_loc - global_row_start + 1)    
-            call VecRestoreArrayF90(null_vecs_f(null_vec), b_f_vals, ierr)               
-         end do
 
          ! Now compute -(W * B_c^R - B_f^R ) * inv((B_c^R)^T * B_c^R) * (B_c^R)^T
          ! Again we're doing the left vec mat mult with a transpose
