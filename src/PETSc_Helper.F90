@@ -1111,7 +1111,85 @@ module petsc_helper
       end if    
          
    end subroutine get_nnzs_petsc_sparse
-   
+
+   !-------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine svd(input, U, sigma, VT)
+
+      ! ~~~~~~~~~~~~~~~~
+
+      real, dimension(:, :), intent(in) :: input
+      real, dimension(size(input, 1), size(input, 1)), intent(out) :: U
+      real, dimension(min(size(input, 1), size(input, 2))), intent(out) :: sigma
+      real, dimension(size(input, 2), size(input, 2)), intent(out) :: VT
+  
+      real, dimension(size(input, 1), size(input, 2)) :: tmp_input
+      real, dimension(:), allocatable :: WORK
+      integer :: LWORK, M, N, info, errorcode
+
+      ! ~~~~~~~~~~~~~~~~
+  
+     tmp_input = input
+     M = size(input, 1)
+     N = size(input, 2)
+     LWORK = 2*MAX(1,3*MIN(M,N)+MAX(M,N),5*MIN(M,N))
+     allocate(WORK(LWORK))
+  
+     call DGESVD('A', 'A', M, N, tmp_input, M, &
+            sigma, U, M, VT, N, WORK, LWORK, info)
+  
+      if (info /= 0) then
+         print *, "SVD fail"
+         call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)         
+      end if             
+     deallocate(WORK)
+
+    end subroutine svd   
+
+   !-------------------------------------------------------------------------------------------------------------------------------
+
+    subroutine pseudo_inv(input, output)
+
+      ! ~~~~~~~~~~~~~~~~
+
+      real, dimension(:, :), intent(in) :: input
+      real, dimension(min(size(input, 1), size(input, 2))), intent(out) :: output
+
+      real, dimension(size(input, 1), size(input, 1)) :: U
+      real, dimension(min(size(input, 1), size(input, 2))) :: sigma
+      real, dimension(size(input, 2), size(input, 2)) :: VT
+
+      integer :: iloc, errorcode
+
+      ! ~~~~~~~~~~~~~~~~
+
+      ! Compute the svd
+      call svd(input, U, sigma, VT)
+
+      ! Now the pseudoinverse is V * inv(sigma) * U^T
+      ! and sigma is diagonal 
+      ! So scale each column of U (given the transpose)
+      do iloc = 1, size(input,1)
+         if (abs(sigma(iloc)) > 1e-13) then
+            U(:, iloc) = U(:, iloc) * 1.0/sigma(iloc)
+         else
+            U(:, iloc) = 0.0
+         end if
+      end do
+
+      ! Do the matmatmult, making sure to transpose both
+      call dgemm("T", "T", size(input,1), size(input,1), size(input,1), &
+               1.0, VT, size(input,1), &
+               U, size(input,1), &
+               0.0, output, size(input,1))          
+
+      ! nan check
+      if (any(output /= output)) then
+         print *, "NaN in pseudo inverse"
+         call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)         
+      end if      
+  
+    end subroutine pseudo_inv   
 
    !-------------------------------------------------------------------------------------------------------------------------------
 

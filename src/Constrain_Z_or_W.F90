@@ -3,6 +3,7 @@ module constrain_z_or_w
    use iso_c_binding
    use petsc
    use c_petsc_interfaces
+   use petsc_helper
 
 #include "petsc/finclude/petsc.h"
 
@@ -241,16 +242,15 @@ module constrain_z_or_w
       PetscInt :: global_rows, global_cols, i_loc
       PetscInt :: rows_ao, cols_ao, global_col_start, max_nnzs, ncols
       PetscInt :: cols_ad, rows_ad, ncols_ad, ncols_ao, ncols_temp
-      integer :: errorcode, comm_size
+      integer :: errorcode, comm_size, null_vec
       PetscErrorCode :: ierr      
       MPI_Comm :: MPI_COMM_MATRIX
       type(tMat) :: row_mat
       PetscInt, dimension(:), allocatable :: cols, col_indices_off_proc_array
-      real, dimension(:), allocatable :: vals, row_vals, sols, b_c_vals
+      real, dimension(:), allocatable :: vals, row_vals, sols, diff
       logical :: approx_solve
       type(tMat) :: new_z_or_w
       real, dimension(:), pointer :: b_f_vals
-      real :: diff, dot
       type(c_ptr) :: colmap_c_ptr, b_c_nonlocal_c_ptr
       integer(c_long_long) :: A_array, vec_long
       PetscInt, pointer :: colmap_c(:)
@@ -258,19 +258,14 @@ module constrain_z_or_w
       PetscOffset :: iicol
       PetscInt :: icol(1)
       real(c_double), pointer :: b_c_nonlocal(:), b_c_local(:)
+      real, dimension(:,:), allocatable :: b_c_nonlocal_alloc, b_c_vals, bctbc, pseudo, temp_mat
       PetscInt, parameter :: one = 1, zero = 0
 
       ! ~~~~~~
 
       call PetscObjectGetComm(z_or_w, MPI_COMM_MATRIX, ierr)    
       ! Get the comm size 
-      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)
-
-      ! For now only allow the imposition of one vector of constraints
-      if (size(null_vecs_f) > 1 .OR. size(null_vecs_c) > 1) then
-         print *, "Fix me - more than one constraint vector provided"
-         call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
-      end if      
+      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)   
 
       ! Have to do an explicit transpose if applying constraints to columns of Z
       if (is_z) then
@@ -319,7 +314,7 @@ module constrain_z_or_w
       ! W = W - (W * B_c^R - B_f^R ) * inv((B_c^R)^T * B_c^R) * (B_c^R)^T
       ! which we can do one row at a time
       ! See Eq 3.2 in Olson 2011 or 
-      ! filter_operators in utils.py in PyAMG
+      ! filter_operator in utils.py in PyAMG
       ! If we wanted we could modify this to be done iteratively like clAIR, but 
       ! our approx Aff inverses are so good we don't really need to
       ! If B is a vector of 1 for example, all the constraint does is scales by a row sum
@@ -346,18 +341,28 @@ module constrain_z_or_w
          A_array = row_mat%v
          call get_colmap_c(A_array, colmap_c_ptr)
          call c_f_pointer(colmap_c_ptr, colmap_c, shape=[cols_ao])
-         
-         ! We want the nonlocal values in B_c
-         vec_long = null_vecs_c(1)%v
 
-         ! Do the comms
-         ! Have to call restore after we're done with lvec (ie null_vecs_c(1))
-         call vecscatter_mat_begin_c(A_array, vec_long, b_c_nonlocal_c_ptr)
-         call vecscatter_mat_end_c(A_array, vec_long, b_c_nonlocal_c_ptr)
-         ! Nonlocal vals only pointer
-         ! b_c_nonlocal now contains all the nonlocal values of B_c we need for all the nonlocal columns
-         ! in every local row
-         call c_f_pointer(b_c_nonlocal_c_ptr, b_c_nonlocal, shape=[cols_ao])
+         allocate(b_c_nonlocal_alloc(cols_ao, size(null_vecs_c)))
+
+         ! Loop over all the near nullspace vectors and get the nonlocal components
+         do null_vec = 1, size(null_vecs_c)
+         
+            ! We want the nonlocal values in B_c
+            vec_long = null_vecs_c(null_vec)%v
+
+            ! Do the comms
+            ! Have to call restore after we're done with lvec (ie null_vecs_c(null_vec))
+            call vecscatter_mat_begin_c(A_array, vec_long, b_c_nonlocal_c_ptr)
+            call vecscatter_mat_end_c(A_array, vec_long, b_c_nonlocal_c_ptr)
+            ! Nonlocal vals only pointer
+            ! b_c_nonlocal now contains all the nonlocal values of B_c we need for all the nonlocal columns
+            ! in every local row
+            call c_f_pointer(b_c_nonlocal_c_ptr, b_c_nonlocal, shape=[cols_ao])
+
+            ! Copy the values
+            b_c_nonlocal_alloc(:, null_vec) = b_c_nonlocal
+
+         end do
          
       ! In serial this is simple
       else
@@ -377,18 +382,26 @@ module constrain_z_or_w
          ncols = ncols_temp
          ! We're done with this row
          call MatRestoreRow(row_mat, i_loc, ncols_temp, &
-            cols, PETSC_NULL_SCALAR_ARRAY, ierr)                   
+            cols, PETSC_NULL_SCALAR_ARRAY, ierr)   
+            
+         ! Skip this row if there are no non-zeros
+         if (ncols == 0) cycle
 
          ! This is the rhs
          allocate(row_vals(ncols))
-         allocate(b_c_vals(ncols))
+         allocate(b_c_vals(ncols, size(null_vecs_c)))
+         allocate(bctbc(size(null_vecs_c), size(null_vecs_c)))
+         allocate(pseudo(size(null_vecs_c), size(null_vecs_c)))
+         allocate(temp_mat(size(null_vecs_c), ncols))
+
+         allocate(diff(size(null_vecs_c)))
          ! This stores the global indices, with local indices first then global
          allocate(col_indices_off_proc_array(ncols))
 
          ! ~~~~~~~~~~~
          ! Let's pull out existing entries in W and the coarse nullspace components
          ! We have the local values first then the nonlocal
-         ! This is so the ordering is easy with colmap and b_c_nonlocal above
+         ! This is so the ordering is easy with colmap and b_c_nonlocal_alloc above
          ! ~~~~~~~~~~~
          ! We do the local values first - remember Ad and Ao need sequential indices
          call MatGetRow(Ad, i_loc - global_row_start, ncols_temp, &
@@ -400,14 +413,19 @@ module constrain_z_or_w
          ! Global indices of our local cols - be careful here to use col_start not row_start
          col_indices_off_proc_array(1:ncols_ad) = cols(1:ncols_ad) + global_col_start
 
-         ! Get the local b_c values
-         call VecGetArrayF90(null_vecs_c(1), b_c_local, ierr)
-         ! cols are local indices
-         b_c_vals(1:ncols_ad) = b_c_local(cols(1:ncols_ad)+1)
-         call VecRestoreArrayF90(null_vecs_c(1), b_c_local, ierr)
+         ! Get the local b_c values 
+         ! Loop over all the near nullspace vectors and get the local components
+         do null_vec = 1, size(null_vecs_c)
 
+            call VecGetArrayF90(null_vecs_c(null_vec), b_c_local, ierr)
+
+            ! cols are local indices
+            b_c_vals(1:ncols_ad, null_vec) = b_c_local(cols(1:ncols_ad)+1)
+
+            call VecRestoreArrayF90(null_vecs_c(null_vec), b_c_local, ierr)
+         end do
          call MatRestoreRow(Ad, i_loc - global_row_start, ncols_temp, &
-                  cols, vals, ierr) 
+                  cols, vals, ierr)          
 
          ! ~~~~~~~~~
          ! Nonlocal if needed
@@ -425,8 +443,10 @@ module constrain_z_or_w
             col_indices_off_proc_array(ncols_ad+1:ncols_ad + ncols_ao) = colmap_c(cols(1:ncols_ao)+1) 
 
             ! Get the nonlocal b_c values
-            ! Remembering cols are the local indices into colmap (or equivalently b_c_nonlocal)
-            b_c_vals(ncols_ad+1:ncols_ad + ncols_ao) =  b_c_nonlocal(cols(1:ncols_ao)+1) 
+            ! Remembering cols are the local indices into colmap (or equivalently the first dim of b_c_nonlocal_alloc)
+            do null_vec = 1, size(null_vecs_c) 
+               b_c_vals(ncols_ad+1:ncols_ad + ncols_ao, null_vec) =  b_c_nonlocal_alloc(cols(1:ncols_ao)+1, null_vec) 
+            end do
 
             call MatRestoreRow(Ao, i_loc - global_row_start, ncols_temp, &
                      cols, vals, ierr)  
@@ -436,30 +456,51 @@ module constrain_z_or_w
          ! ~~~~~~~~~
          ! Now we pull out the fine near nullspace component
          ! We are then going to compute the residual for this row
-         ! ie W B_c^R - B_f^R
-         ! For more than one constraint vector this needs to be modified
-         ! We don't have scalar inv((B_c^R)^T * B_c^R) and we need a pseudo-inverse         
+         ! ie W B_c^R - B_f^R      
          ! ~~~~~~~~~
-         ! row_vals has the local and non-local values of W for this row
-         ! and b_c_vals has the local and nonlocal values of B_c
-         diff = dot_product(row_vals, b_c_vals)
+         ! W B_c^R can be done as (B_c^R)^T W
+         call dgemv("T", size(b_c_vals, 1), size(b_c_vals,2), &
+                  1.0, b_c_vals, size(b_c_vals,1), &
+                  row_vals, 1, &
+                  0.0, diff, 1)    
+               
+         ! Compute (B_c^R)^T * B_c^R
+         call dgemm("T", "N", size(b_c_vals, 2), size(b_c_vals,2), size(b_c_vals, 1), &
+                  1.0, b_c_vals, size(b_c_vals,1), &
+                  b_c_vals, size(b_c_vals,1), &
+                  0.0, bctbc, size(bctbc,1)) 
+                  
+         ! Compute the pseudo inverse of (B_c^R)^T * B_c^R
+         call pseudo_inv(bctbc, pseudo)
 
-         call VecGetArrayF90(null_vecs_f(1), b_f_vals, ierr)
-         ! b_f_vals is local (we want b_f for this row) but so is the value we want
-         diff = diff - b_f_vals(i_loc - global_row_start + 1)    
-         call VecRestoreArrayF90(null_vecs_f(1), b_f_vals, ierr)
+         ! Compute inv((B_c^R)^T * B_c^R) * (B_c^R)^T
+         call dgemm("N", "T", size(pseudo, 1), size(b_c_vals,1), size(pseudo, 2), &
+                  1.0, pseudo, size(pseudo,1), &
+                  b_c_vals, size(b_c_vals,1), &
+                  0.0, temp_mat, size(temp_mat,1))          
+                  
+         ! Loop over near-nullspace vecs
+         do null_vec = 1, size(null_vecs_c)
 
-         ! Now let's compute inv((B_c^R)^T * B_c^R)
-         dot = dot_product(b_c_vals, b_c_vals)
-         ! Then multiply the inverse of this by b_c_vals and include in diff
-         ! to give -(W * B_c^R - B_f^R ) * inv((B_c^R)^T * B_c^R) * (B_c^R)^T
-         b_c_vals = -diff * b_c_vals / dot
+            call VecGetArrayF90(null_vecs_f(null_vec), b_f_vals, ierr)
+            ! b_f_vals is local (we want b_f for this row) but so is the value we want
+            diff(null_vec) = diff(null_vec) - b_f_vals(i_loc - global_row_start + 1)    
+            call VecRestoreArrayF90(null_vecs_f(null_vec), b_f_vals, ierr)               
+         end do
+
+         ! Now compute -(W * B_c^R - B_f^R ) * inv((B_c^R)^T * B_c^R) * (B_c^R)^T
+         ! Again we're doing the left vec mat mult with a transpose
+         call dgemv("T", size(temp_mat, 1), size(temp_mat,2), &
+                  -1.0, temp_mat, size(temp_mat,1), &
+                  diff, 1, &
+                  0.0, b_c_vals, 1) 
 
          ! ~~~~~~~~~~~~~
          ! Set all the row values, same sparsity pattern
          ! ~~~~~~~~~~~~~
          call MatSetValues(new_z_or_w, one, [i_loc], ncols, col_indices_off_proc_array(1:ncols), b_c_vals, ADD_VALUES, ierr)            
          deallocate(row_vals, col_indices_off_proc_array, b_c_vals)
+         deallocate(diff, bctbc, pseudo, temp_mat)
 
       end do
 
@@ -469,6 +510,7 @@ module constrain_z_or_w
       ! Don't forget to restore
       if (comm_size /= 1) then
          call vecscatter_mat_restore_c(A_array, b_c_nonlocal_c_ptr)
+         deallocate(b_c_nonlocal_alloc)
       end if
 
       deallocate(cols, vals)
