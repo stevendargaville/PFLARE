@@ -1243,7 +1243,57 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
       ierr =  PCAIRGetFullSmoothingUpAndDown(pc, &flg);
       if (flg) 
       {
-         PetscViewerASCIIPrintf(viewer, "  Full smoothing up & down \n");      
+         PetscViewerASCIIPrintf(viewer, "  Full smoothing up & down \n");   
+         ierr =  PCAIRGetInverseType(pc, &input_type);
+         ierr =  PCAIRGetPolyOrder(pc, &input_int_two);
+         ierr =  PCAIRGetInverseSparsityOrder(pc, &input_int_three);
+         ierr =  PCAIRGetMatrixFreePolys(pc, &flg);
+
+         // What type of inverse
+         if (input_type == PFLAREINV_POWER)
+         {
+            PetscViewerASCIIPrintf(viewer, "    GMRES polynomial, power basis, order %"PetscInt_FMT" \n", input_int_two);
+         }
+         else if (input_type == PFLAREINV_ARNOLDI)
+         {
+            PetscViewerASCIIPrintf(viewer, "    GMRES polynomial, arnoldi basis, order %"PetscInt_FMT" \n", input_int_two);
+         }
+         else if (input_type == PFLAREINV_NEWTON)
+         {
+            PetscViewerASCIIPrintf(viewer, "    GMRES polynomial, newton basis, order %"PetscInt_FMT" \n", input_int_two);      
+         }
+         else if (input_type == PFLAREINV_SAI)
+         {
+            PetscViewerASCIIPrintf(viewer, "    SAI \n");      
+         }
+         else if (input_type == PFLAREINV_ISAI)
+         {
+            PetscViewerASCIIPrintf(viewer, "    ISAI \n");      
+         }      
+         else if (input_type == PFLAREINV_NEUMANN)
+         {
+            PetscViewerASCIIPrintf(viewer, "    Neumann polynomial, order %"PetscInt_FMT" \n", input_int_two);      
+         }     
+         else if (input_type == PFLAREINV_WJACOBI)
+         {
+            PetscViewerASCIIPrintf(viewer, "    Weighted Jacobi \n");      
+         }
+         else if (input_type == PFLAREINV_JACOBI)
+         {
+            PetscViewerASCIIPrintf(viewer, "    Unweighted Jacobi \n");      
+         }                  
+         if (input_type != PFLAREINV_WJACOBI && input_type != PFLAREINV_JACOBI)
+         {
+            // If matrix-free or not
+            if (flg)
+            {
+               PetscViewerASCIIPrintf(viewer, "      matrix-free inverse \n");
+            }
+            else
+            {
+               PetscViewerASCIIPrintf(viewer, "      assembled inverse, sparsity order %"PetscInt_FMT"\n", input_int_three);
+            }
+         }             
       }
       else
       {
@@ -1257,98 +1307,43 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
          {
             PetscViewerASCIIPrintf(viewer, "  Up F smoothing with number of F smooths=%"PetscInt_FMT": \n", input_int);      
          }
-      } 
-      ierr =  PCAIRGetInverseType(pc, &input_type);
-      ierr =  PCAIRGetPolyOrder(pc, &input_int_two);
-      ierr =  PCAIRGetInverseSparsityOrder(pc, &input_int_three);
-      ierr =  PCAIRGetMatrixFreePolys(pc, &flg);
-
-      // What type of inverse
-      if (input_type == PFLAREINV_POWER)
-      {
-         PetscViewerASCIIPrintf(viewer, "    F smooth: GMRES polynomial, power basis, order %"PetscInt_FMT" \n", input_int_two);
-      }
-      else if (input_type == PFLAREINV_ARNOLDI)
-      {
-         PetscViewerASCIIPrintf(viewer, "    F smooth: GMRES polynomial, arnoldi basis, order %"PetscInt_FMT" \n", input_int_two);
-      }
-      else if (input_type == PFLAREINV_NEWTON)
-      {
-         PetscViewerASCIIPrintf(viewer, "    F smooth: GMRES polynomial, newton basis, order %"PetscInt_FMT" \n", input_int_two);      
-      }
-      else if (input_type == PFLAREINV_SAI)
-      {
-         PetscViewerASCIIPrintf(viewer, "    F smooth: SAI \n");      
-      }
-      else if (input_type == PFLAREINV_ISAI)
-      {
-         PetscViewerASCIIPrintf(viewer, "    F smooth: ISAI \n");      
-      }      
-      else if (input_type == PFLAREINV_NEUMANN)
-      {
-         PetscViewerASCIIPrintf(viewer, "    F smooth: Neumann polynomial, order %"PetscInt_FMT" \n", input_int_two);      
-      }     
-      else if (input_type == PFLAREINV_WJACOBI)
-      {
-         PetscViewerASCIIPrintf(viewer, "    F smooth: Weighted Jacobi \n");      
-      }
-      else if (input_type == PFLAREINV_JACOBI)
-      {
-         PetscViewerASCIIPrintf(viewer, "    F smooth: Unweighted Jacobi \n");      
-      }                  
-      if (input_type != PFLAREINV_WJACOBI && input_type != PFLAREINV_JACOBI)
-      {
-         // If matrix-free or not
-         if (flg)
-         {
-            PetscViewerASCIIPrintf(viewer, "      matrix-free inverse \n");
-         }
-         else
-         {
-            PetscViewerASCIIPrintf(viewer, "      assembled inverse, sparsity order %"PetscInt_FMT"\n", input_int_three);
-         }
-      }  
-
-      // If C smoothing
-      if (flg_two) {
-
-         ierr =  PCAIRGetCInverseType(pc, &input_type);
-         ierr =  PCAIRGetCPolyOrder(pc, &input_int_two);
-         ierr =  PCAIRGetCInverseSparsityOrder(pc, &input_int_three);
+         ierr =  PCAIRGetInverseType(pc, &input_type);
+         ierr =  PCAIRGetPolyOrder(pc, &input_int_two);
+         ierr =  PCAIRGetInverseSparsityOrder(pc, &input_int_three);
          ierr =  PCAIRGetMatrixFreePolys(pc, &flg);
 
          // What type of inverse
          if (input_type == PFLAREINV_POWER)
          {
-            PetscViewerASCIIPrintf(viewer, "    C smooth: GMRES polynomial, power basis, order %"PetscInt_FMT" \n", input_int_two);
+            PetscViewerASCIIPrintf(viewer, "    F smooth: GMRES polynomial, power basis, order %"PetscInt_FMT" \n", input_int_two);
          }
          else if (input_type == PFLAREINV_ARNOLDI)
          {
-            PetscViewerASCIIPrintf(viewer, "    C smooth: GMRES polynomial, arnoldi basis, order %"PetscInt_FMT" \n", input_int_two);
+            PetscViewerASCIIPrintf(viewer, "    F smooth: GMRES polynomial, arnoldi basis, order %"PetscInt_FMT" \n", input_int_two);
          }
          else if (input_type == PFLAREINV_NEWTON)
          {
-            PetscViewerASCIIPrintf(viewer, "    C smooth: GMRES polynomial, newton basis, order %"PetscInt_FMT" \n", input_int_two);      
+            PetscViewerASCIIPrintf(viewer, "    F smooth: GMRES polynomial, newton basis, order %"PetscInt_FMT" \n", input_int_two);      
          }
          else if (input_type == PFLAREINV_SAI)
          {
-            PetscViewerASCIIPrintf(viewer, "    C smooth: SAI \n");      
+            PetscViewerASCIIPrintf(viewer, "    F smooth: SAI \n");      
          }
          else if (input_type == PFLAREINV_ISAI)
          {
-            PetscViewerASCIIPrintf(viewer, "    C smooth: ISAI \n");      
+            PetscViewerASCIIPrintf(viewer, "    F smooth: ISAI \n");      
          }      
          else if (input_type == PFLAREINV_NEUMANN)
          {
-            PetscViewerASCIIPrintf(viewer, "    C smooth: Neumann polynomial, order %"PetscInt_FMT" \n", input_int_two);      
+            PetscViewerASCIIPrintf(viewer, "    F smooth: Neumann polynomial, order %"PetscInt_FMT" \n", input_int_two);      
          }     
          else if (input_type == PFLAREINV_WJACOBI)
          {
-            PetscViewerASCIIPrintf(viewer, "    C smooth: Weighted Jacobi \n");      
+            PetscViewerASCIIPrintf(viewer, "    F smooth: Weighted Jacobi \n");      
          }
          else if (input_type == PFLAREINV_JACOBI)
          {
-            PetscViewerASCIIPrintf(viewer, "    C smooth: Unweighted Jacobi \n");      
+            PetscViewerASCIIPrintf(viewer, "    F smooth: Unweighted Jacobi \n");      
          }                  
          if (input_type != PFLAREINV_WJACOBI && input_type != PFLAREINV_JACOBI)
          {
@@ -1362,7 +1357,62 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
                PetscViewerASCIIPrintf(viewer, "      assembled inverse, sparsity order %"PetscInt_FMT"\n", input_int_three);
             }
          }  
-      }         
+
+         // If C smoothing
+         if (flg_two) {
+
+            ierr =  PCAIRGetCInverseType(pc, &input_type);
+            ierr =  PCAIRGetCPolyOrder(pc, &input_int_two);
+            ierr =  PCAIRGetCInverseSparsityOrder(pc, &input_int_three);
+            ierr =  PCAIRGetMatrixFreePolys(pc, &flg);
+
+            // What type of inverse
+            if (input_type == PFLAREINV_POWER)
+            {
+               PetscViewerASCIIPrintf(viewer, "    C smooth: GMRES polynomial, power basis, order %"PetscInt_FMT" \n", input_int_two);
+            }
+            else if (input_type == PFLAREINV_ARNOLDI)
+            {
+               PetscViewerASCIIPrintf(viewer, "    C smooth: GMRES polynomial, arnoldi basis, order %"PetscInt_FMT" \n", input_int_two);
+            }
+            else if (input_type == PFLAREINV_NEWTON)
+            {
+               PetscViewerASCIIPrintf(viewer, "    C smooth: GMRES polynomial, newton basis, order %"PetscInt_FMT" \n", input_int_two);      
+            }
+            else if (input_type == PFLAREINV_SAI)
+            {
+               PetscViewerASCIIPrintf(viewer, "    C smooth: SAI \n");      
+            }
+            else if (input_type == PFLAREINV_ISAI)
+            {
+               PetscViewerASCIIPrintf(viewer, "    C smooth: ISAI \n");      
+            }      
+            else if (input_type == PFLAREINV_NEUMANN)
+            {
+               PetscViewerASCIIPrintf(viewer, "    C smooth: Neumann polynomial, order %"PetscInt_FMT" \n", input_int_two);      
+            }     
+            else if (input_type == PFLAREINV_WJACOBI)
+            {
+               PetscViewerASCIIPrintf(viewer, "    C smooth: Weighted Jacobi \n");      
+            }
+            else if (input_type == PFLAREINV_JACOBI)
+            {
+               PetscViewerASCIIPrintf(viewer, "    C smooth: Unweighted Jacobi \n");      
+            }                  
+            if (input_type != PFLAREINV_WJACOBI && input_type != PFLAREINV_JACOBI)
+            {
+               // If matrix-free or not
+               if (flg)
+               {
+                  PetscViewerASCIIPrintf(viewer, "      matrix-free inverse \n");
+               }
+               else
+               {
+                  PetscViewerASCIIPrintf(viewer, "      assembled inverse, sparsity order %"PetscInt_FMT"\n", input_int_three);
+               }
+            }  
+         }           
+      }        
 
       PetscViewerASCIIPrintf(viewer, "  Grid transfer operators: \n");      
       ierr =  PCAIRGetZType(pc, &z_type);
