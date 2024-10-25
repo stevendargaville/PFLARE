@@ -495,6 +495,7 @@ A brief description of the available options in PFLARE are given below and their
    | ------------- | -- | ------------- | --- |
    | ``-pc_air_print_stats_timings``  |  PCAIRGetPrintStatsTimings  PCAIRSetPrintStatsTimings  | Print out statistics about the multigrid hierarchy and timings | false |       
    | ``-pc_air_max_levels``  |  PCAIRGetMaxLevels  PCAIRSetMaxLevels  | Maximum number of levels in the hierarchy | 300 |
+   | ``-pc_air_coarse_eq_limit``  |  PCAIRGetCoarseEqLimit  PCAIRSetCoarseEqLimit  | Minimum number of global unknowns on the coarse grid | 6 |   
    | ``-pc_air_r_drop``  |  PCAIRGetRDrop  PCAIRSetRDrop  | Drop tolerance applied to R on each level after it is built | 0.01 |
    | ``-pc_air_a_drop``  |  PCAIRGetADrop  PCAIRSetADrop  | Drop tolerance applied to the coarse matrix on each level after it is built | 0.001 |
    | ``-pc_air_a_lump``  |  PCAIRSetALump  PCAIRSetALump  | Lump rather than drop for the coarse matrix | false |         

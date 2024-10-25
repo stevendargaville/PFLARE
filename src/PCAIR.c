@@ -15,6 +15,7 @@ PETSC_EXTERN void create_pc_air_shell_c(void **pc_air_data, PC *pc);
 /* Defined in PCAIR_C_Fortran_Bindings.F90 */
 PETSC_EXTERN PetscErrorCode PCAIRGetPrintStatsTimings_c(PC *pc, PetscBool *input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRGetMaxLevels_c(PC *pc, PetscInt *input_int);
+PETSC_EXTERN PetscErrorCode PCAIRGetCoarseEqLimit_c(PC *pc, PetscInt *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetNumLevels_c(PC *pc, PetscInt *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetProcessorAgglom_c(PC *pc, PetscBool *input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRGetProcessorAgglomRatio_c(PC *pc, PetscReal *input_real);
@@ -56,6 +57,7 @@ PETSC_EXTERN PetscErrorCode PCAIRGetPolyCoeffs_c(PC *pc, PetscInt petsc_level, i
 // Setters
 PETSC_EXTERN PetscErrorCode PCAIRSetPrintStatsTimings_c(PC *pc, PetscBool input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRSetMaxLevels_c(PC *pc, PetscInt input_int);
+PETSC_EXTERN PetscErrorCode PCAIRSetCoarseEqLimit_c(PC *pc, PetscInt input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglom_c(PC *pc, PetscBool input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglomRatio_c(PC *pc, PetscReal input_real);
 PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglomFactor_c(PC *pc, PetscInt input_int);
@@ -176,6 +178,12 @@ PETSC_EXTERN PetscErrorCode PCAIRGetMaxLevels(PC pc, PetscInt *input_int)
 {
    PetscFunctionBegin;
    PCAIRGetMaxLevels_c(&pc, input_int);
+   PetscFunctionReturn(0);
+}
+PETSC_EXTERN PetscErrorCode PCAIRGetCoarseEqLimit(PC pc, PetscInt *input_int)
+{
+   PetscFunctionBegin;
+   PCAIRGetCoarseEqLimit_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 // Returns the number of levels in the underlying PCMG
@@ -435,6 +443,19 @@ PETSC_EXTERN PetscErrorCode PCAIRSetMaxLevels(PC pc, PetscInt input_int)
    if (old_int == input_int) PetscFunctionReturn(0);
    PCReset_AIR_c(pc);
    PCAIRSetMaxLevels_c(&pc, input_int);
+   PetscFunctionReturn(0);
+}
+// Minimum number of global unknowns on the coarse grid
+// Default: 6
+// -pc_air_coarse_eq_limit
+PETSC_EXTERN PetscErrorCode PCAIRSetCoarseEqLimit(PC pc, PetscInt input_int)
+{
+   PetscFunctionBegin;
+   PetscInt old_int;
+   PCAIRGetCoarseEqLimit(pc, &old_int);
+   if (old_int == input_int) PetscFunctionReturn(0);
+   PCReset_AIR_c(pc);
+   PCAIRSetCoarseEqLimit_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 // Perform processor agglomeration throughout the hierarchy
@@ -1101,6 +1122,11 @@ static PetscErrorCode PCSetFromOptions_AIR_c(PetscOptionItems *PetscOptionsObjec
    input_int = old_int;
    PetscOptionsInt("-pc_air_max_levels", "Maximum number of levels", "PCAIRSetMaxLevels", old_int, &input_int, NULL);
    PCAIRSetMaxLevels(pc, input_int);
+   // ~~~~    
+   PCAIRGetCoarseEqLimit(pc, &old_int);
+   input_int = old_int;
+   PetscOptionsInt("-pc_air_coarse_eq_limit", "Minimum number of global unknowns on the coarse grid", "PCAIRSetCoarseEqLimit", old_int, &input_int, NULL);
+   PCAIRSetCoarseEqLimit(pc, input_int);   
    // ~~~~ 
    const char *const PCPFLAREINVTypes[] = {"POWER", "ARNOLDI", "NEWTON", "NEUMANN", "SAI", "ISAI", "WJACOBI", "JACOBI", "PCPFLAREINVType", "PFLAREINV_", NULL};
    PCAIRGetInverseType(pc, &old_type);
@@ -1200,6 +1226,8 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
 
       ierr =  PCAIRGetMaxLevels(pc, &input_int);
       PetscViewerASCIIPrintf(viewer, "  Max number of levels=%"PetscInt_FMT" \n", input_int);
+      ierr =  PCAIRGetCoarseEqLimit(pc, &input_int);
+      PetscViewerASCIIPrintf(viewer, "  Coarse eq limit=%"PetscInt_FMT" \n", input_int);      
       ierr =  PCAIRGetRDrop(pc, &input_real);
       ierr =  PCAIRGetADrop(pc, &input_real_two);
       PetscViewerASCIIPrintf(viewer, "  A drop tolerance=%f, R drop tolerance %f \n", input_real_two, input_real);

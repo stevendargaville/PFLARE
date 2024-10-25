@@ -55,6 +55,23 @@ module pcair_c_fortran_bindings
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
+   subroutine PCAIRGetCoarseEqLimit_c(pc_ptr, coarse_eq_limit) bind(C, name='PCAIRGetCoarseEqLimit_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, intent(out)               :: coarse_eq_limit
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetCoarseEqLimit(pc, coarse_eq_limit, ierr)
+
+   end subroutine PCAIRGetCoarseEqLimit_c   
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
    subroutine PCAIRGetNumLevels_c(pc_ptr, num_levels) bind(C, name='PCAIRGetNumLevels_c')
 
       ! ~~~~~~~~
@@ -782,6 +799,23 @@ module pcair_c_fortran_bindings
       call PCAIRSetMaxLevels(pc, max_levels, ierr)
 
    end subroutine PCAIRSetMaxLevels_c
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetCoarseEqLimit_c(pc_ptr, coarse_eq_limit) bind(C, name='PCAIRSetCoarseEqLimit_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, value, intent(in)          :: coarse_eq_limit
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetCoarseEqLimit(pc, coarse_eq_limit, ierr)
+
+   end subroutine PCAIRSetCoarseEqLimit_c   
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 

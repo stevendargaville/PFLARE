@@ -35,6 +35,10 @@ module air_data_type
       ! Maximum number of levels in the multigrid hierarchy
       ! -pc_air_max_levels
       integer :: max_levels = 300
+      ! Minimum number of global unknowns on the coarse grid
+      ! -pc_air_coarse_eq_limit
+      PetscInt :: coarse_eq_limit = 6
+
       ! Perform processor agglomeration throughout the hierarchy
       ! This reduces the number of active MPI ranks as we coarsen
       ! by a factor of processor_agglom_factor, whenever the 

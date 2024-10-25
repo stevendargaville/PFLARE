@@ -1103,7 +1103,7 @@ module air_mg_setup
       PetscInt            :: global_coarse_is_size, global_fine_is_size, global_row_start, global_row_end_plus_one, no_active_cores
       PetscInt            :: prolongator_start, prolongator_end_plus_one, proc_stride, petsc_level, no_levels_petsc_int
       PetscInt            :: local_vec_size, ystart, yend, local_rows_repart, local_cols_repart, global_rows_repart, global_cols_repart
-      integer             :: min_size_coarse, i_loc
+      integer             :: i_loc
       integer             :: no_levels, our_level, our_level_coarse, errorcode, comm_rank, comm_size
       PetscErrorCode      :: ierr
       MPI_Comm            :: MPI_COMM_MATRIX
@@ -1133,9 +1133,7 @@ module air_mg_setup
       call MPI_Comm_rank(MPI_COMM_MATRIX, comm_rank, errorcode)      
       
       ! The max number of levels
-      no_levels = air_data%options%max_levels
-      ! This is the minimum size coarse matrix we allow
-      min_size_coarse = air_data%options%poly_order + 1      
+      no_levels = air_data%options%max_levels    
       ! Keep track of how many times we've done processor agglomeration
       ! ie the stride between active mpi ranks
       proc_stride = 1
@@ -1204,11 +1202,9 @@ module air_mg_setup
          call ISGetLocalSize(air_data%IS_coarse_index(our_level), local_coarse_is_size, ierr)               
 
          ! Test if the problem is still big enough
-         ! Don't allow a global size smaller than the polynomial order - if we hit that then 
-         ! the grid before that is the coarse grid
          ! Also have to double check that the coarsening resulted in any fine points, sometimes
          ! you can have it such that no fine points are selected                  
-         big_enough = global_coarse_is_size > min_size_coarse .AND. global_fine_is_size /= 0       
+         big_enough = global_coarse_is_size > air_data%options%coarse_eq_limit .AND. global_fine_is_size /= 0       
 
          ! Did we end up with a coarse grid that is still big enough to continue coarsening?
          if (big_enough) then
@@ -2081,6 +2077,7 @@ module air_mg_setup
       air_data%options%print_stats_timings = .FALSE.
 
       air_data%options%max_levels = 300
+      air_data%options%coarse_eq_limit = 6
       air_data%options%processor_agglom = .TRUE.
       air_data%options%processor_agglom_ratio = 2
       air_data%options%processor_agglom_factor = 2

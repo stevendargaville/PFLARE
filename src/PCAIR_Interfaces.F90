@@ -136,6 +136,25 @@ module pcair_interfaces
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
+   subroutine PCAIRGetCoarseEqLimit(pc, coarse_eq_limit, ierr) 
+
+      ! ~~~~~~~~
+      type(tPC), intent(inout)      :: pc
+      PetscInt, intent(out)         :: coarse_eq_limit
+      PetscErrorCode, intent(out)   :: ierr
+
+      type(air_options), pointer :: options
+      ! ~~~~~~~~
+
+      ! Get the options
+      call PCAIRGetOptions(pc, options)    
+      coarse_eq_limit = options%coarse_eq_limit
+      ierr = 0
+
+   end subroutine PCAIRGetCoarseEqLimit   
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
    subroutine PCAIRGetNumLevels(pc, num_levels, ierr) 
 
       ! ~~~~~~~~
@@ -1094,6 +1113,25 @@ module pcair_interfaces
       ierr = 0
 
    end subroutine PCAIRSetMaxLevels
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetCoarseEqLimit(pc, coarse_eq_limit, ierr) 
+
+      ! ~~~~~~~~
+      type(tPC), intent(inout)      :: pc
+      PetscInt, intent(in)          :: coarse_eq_limit
+      PetscErrorCode, intent(out)   :: ierr
+
+      type(air_options), pointer :: options
+      ! ~~~~~~~~
+
+      ! Set the options
+      call PCAIRGetOptions(pc, options)    
+      options%coarse_eq_limit = coarse_eq_limit
+      ierr = 0
+
+   end subroutine PCAIRSetCoarseEqLimit   
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 

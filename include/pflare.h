@@ -54,6 +54,7 @@ PETSC_EXTERN PetscErrorCode PCPFLAREINVSetMatrixFree(PC, PetscBool);
 /* Define PCAIR get routines */
 PETSC_EXTERN PetscErrorCode PCAIRGetPrintStatsTimings(PC, PetscBool *);
 PETSC_EXTERN PetscErrorCode PCAIRGetMaxLevels(PC, PetscInt *);
+PETSC_EXTERN PetscErrorCode PCAIRGetCoarseEqLimit(PC, PetscInt *);
 PETSC_EXTERN PetscErrorCode PCAIRGetNumLevels(PC, PetscInt *);
 PETSC_EXTERN PetscErrorCode PCAIRGetProcessorAgglom(PC, PetscBool *);
 PETSC_EXTERN PetscErrorCode PCAIRGetProcessorAgglomRatio(PC, PetscReal *);
@@ -93,6 +94,7 @@ PETSC_EXTERN PetscErrorCode PCAIRGetPolyCoeffs(PC, PetscInt, int, PetscReal **, 
 /* Define PCAIR set routines */
 PETSC_EXTERN PetscErrorCode PCAIRSetPrintStatsTimings(PC, PetscBool);
 PETSC_EXTERN PetscErrorCode PCAIRSetMaxLevels(PC, PetscInt);
+PETSC_EXTERN PetscErrorCode PCAIRSetCoarseEqLimit(PC, PetscInt);
 PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglom(PC, PetscBool);
 PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglomRatio(PC, PetscReal);
 PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglomFactor(PC, PetscInt);
