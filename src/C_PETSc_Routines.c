@@ -83,17 +83,23 @@ PETSC_INTERN void MatSeqAIJGetArrayF90_mine(Mat *matrix, double **array)
 // MatPartitioningSetNParts doesn't have a fortran interface (and can't pass around
 // a matpartioning object as it doesnt have a %v), so have to do 
 // all the partitioning in C
-PETSC_INTERN void MatPartitioning_c(Mat *adj, PetscInt new_size, IS *index)
+// We have modified this from PCGAMGCreateLevel_GAMG, and we enforce that 
+// new_size <= comm_world/proc_stride
+// This always does an interleaved partitioning
+// PCGAMGCreateLevel_GAMG can modify new_size, but we don't allow that, we always partition
+// onto new_size active ranks and we enforce the interleaving happens nested to reduce comms
+PETSC_INTERN void MatPartitioning_c(Mat *adj, PetscInt new_size, PetscInt *proc_stride, IS *index)
 {
    // This is all taken from PCGAMGCreateLevel_GAMG in gamg.c
    MPI_Comm comm;
    MatPartitioning mpart;
    IS proc_is, proc_is_eq_num;
    PetscInt *test;
-   int size, rank;
+   int size, rank, errorcode;
    // If you want to use the improve, then new_size needs to equal the current size
    // ie you can't reduce the number of active ranks
    int improve = 0;
+   double ratio;
 
    // Get the comm
    PetscObjectGetComm((PetscObject)*adj, &comm);
@@ -101,6 +107,13 @@ PETSC_INTERN void MatPartitioning_c(Mat *adj, PetscInt new_size, IS *index)
    PetscInt* counts;
    PetscMalloc1(size, &counts);
    MPI_Comm_rank(comm, &rank);
+
+   // Check that new_size <= comm_world/proc_stride
+   ratio = ((double)size)/((PetscReal)*proc_stride);
+   if (new_size > ratio) 
+   {
+      MPI_Abort(comm, errorcode);
+   }
 
    PetscInt ncrs_eq_local, ncrs_eq_global;
    MatGetLocalSize(*adj, &ncrs_eq_local, NULL);
@@ -118,6 +131,58 @@ PETSC_INTERN void MatPartitioning_c(Mat *adj, PetscInt new_size, IS *index)
       }
       ISCreateGeneral(comm, ncrs_eq_local, newproc_idx, PETSC_COPY_VALUES, &proc_is);
    }
+
+   // Now we want to interleave the processors as it reduces the amount of out of node comms
+   PetscInt rfactor=1, expand_factor=1, jj, kk, fact;   
+
+   // If you're doing the improve you can't reduce the number of active ranks
+   if (!improve)
+   {
+      // GAMG
+      // /* find factor */
+      // // This is the closest match 
+      // // I've modified this to have rfactor 1
+      // if (new_size == 1) rfactor = 1;
+      // else {
+      //    PetscReal best_fact = 0.;
+      //    jj                  = -1;
+      //    for (kk = 1; kk <= size; kk++) {
+      //       if (!(size % kk)) { /* a candidate */
+      //          PetscReal nactpe = (PetscReal)size / (PetscReal)kk, fact = nactpe / (PetscReal)new_size;
+      //          if (fact > 1.0) fact = 1. / fact; /* keep fact < 1 */
+      //          if (fact > best_fact) {
+      //          best_fact = fact;
+      //          jj        = kk;
+      //          }
+      //       }
+      //    }
+      //    if (jj != -1) rfactor = jj;
+      //    else rfactor = 1; /* a prime */
+
+      //    fprintf(stderr,"rfactor %d", rfactor);
+
+      //    rfactor = floor((PetscReal)size/(PetscReal)new_size);
+         
+      //    // If you want continuous instead of interleaved, just make expand_factor 1
+      //    //expand_factor = 1;
+      //    expand_factor = rfactor;
+      // }
+
+      /* Now we have modified this from GAMG
+         proc_stride is passed in from outside and keeps track of the stride changes
+         it is just *= processor_agglom_factor after each repartitioning
+         as we coarsen on lower levels, e.g., with size = 11, new_size = 5, proc_stride = 2
+         active ranks: 0 1 2 3 4 5 6 7 8 9 10
+         active ranks: 0   2   4   6   8             
+         then new_size = 2, proc_stride becomes 4
+         active ranks: 0       4
+      */
+
+      // If you want continuous instead of interleaved, just make expand_factor 1
+      //expand_factor = 1;     
+      expand_factor = *proc_stride;
+
+   }   
 
    // Create the partitioning - this should use parmetis by default
    // but you can change via the command line options
@@ -140,39 +205,9 @@ PETSC_INTERN void MatPartitioning_c(Mat *adj, PetscInt new_size, IS *index)
    }
    MatPartitioningDestroy(&mpart);   
 
-   // Now we want to interleave the processors as it reduces the amount of out of node
-   // comms - hence we just multiply the numbers in proc_is by the reduction factor (plus or minus some rounding)
-   // I've copied the petsc code here directly
-   PetscInt rfactor=1, expand_factor=1, jj, kk, fact;
-
    // If you're doing the improve you can't reduce the number of active ranks
    if (!improve)
    {
-      /* find factor */
-      // This is the closest match 
-      // I've modified this to have rfactor 1
-      if (new_size == 1) rfactor = 1;
-      else {
-         PetscReal best_fact = 0.;
-         jj                  = -1;
-         for (kk = 1; kk <= size; kk++) {
-            if (!(size % kk)) { /* a candidate */
-               PetscReal nactpe = (PetscReal)size / (PetscReal)kk, fact = nactpe / (PetscReal)new_size;
-               if (fact > 1.0) fact = 1. / fact; /* keep fact < 1 */
-               if (fact > best_fact) {
-               best_fact = fact;
-               jj        = kk;
-               }
-            }
-         }
-         if (jj != -1) rfactor = jj;
-         else rfactor = 1; /* a prime */
-         
-         // If you want continuous instead of interleaved, just make expand_factor 1
-         //expand_factor = 1;
-         expand_factor = rfactor;
-      }
-
       ISGetIndices(proc_is, &is_idx);
       // Modified as we never have block equations
       for (kk = 0; kk < ncrs_eq_local; kk++) {
@@ -203,7 +238,7 @@ PETSC_INTERN void MatPartitioning_c(Mat *adj, PetscInt new_size, IS *index)
 }
 
 // Create data for the process agglomeration
-PETSC_INTERN void GenerateIS_ProcAgglomeration_c(PetscInt no_splits, PetscInt global_size, PetscInt *local_size_reduced, PetscInt *start)
+PETSC_INTERN void GenerateIS_ProcAgglomeration_c(PetscInt proc_stride, PetscInt global_size, PetscInt *local_size_reduced, PetscInt *start)
 {
 
    PetscSubcomm psubcomm = NULL;
@@ -212,10 +247,10 @@ PETSC_INTERN void GenerateIS_ProcAgglomeration_c(PetscInt no_splits, PetscInt gl
    // Taken from telescope.c Line 515, we're creating a subcomm
    // letting petsc decide on which ranks are interlaced
    PetscSubcommCreate(MPI_COMM_WORLD,&psubcomm);
-   PetscSubcommSetNumber(psubcomm,no_splits);
-   // The petsc subcomm splits into no_splits groups
+   PetscSubcommSetNumber(psubcomm,proc_stride);
+   // The petsc subcomm splits into proc_stride groups
    PetscSubcommSetType(psubcomm,PETSC_SUBCOMM_INTERLACED);
-   // e.g., if noprocs = 5, no_splits = 2
+   // e.g., if noprocs = 5, proc_stride = 2
    // then we have two subcomms, one with 3 procs and one with 2
    // the one with 3 corresponds to the first color, etc
    subcomm = PetscSubcommChild(psubcomm);

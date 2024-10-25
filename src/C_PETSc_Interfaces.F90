@@ -112,10 +112,10 @@ module c_petsc_interfaces
 
    interface   
       
-      subroutine GenerateIS_ProcAgglomeration_c(no_splits, global_size, local_size_reduced, start) &
+      subroutine GenerateIS_ProcAgglomeration_c(proc_stride, global_size, local_size_reduced, start) &
          bind(c, name="GenerateIS_ProcAgglomeration_c")
          use iso_c_binding
-         PetscInt, value :: no_splits
+         PetscInt, value :: proc_stride
          PetscInt, value :: global_size
          PetscInt :: local_size_reduced, start
 
@@ -125,11 +125,12 @@ module c_petsc_interfaces
    
    interface   
       
-      subroutine MatPartitioning_c(A_array, n_parts, index) &
+      subroutine MatPartitioning_c(A_array, n_parts, proc_stride, index) &
          bind(c, name="MatPartitioning_c")
          use iso_c_binding
          integer(c_long_long) :: A_array
          PetscInt, value :: n_parts
+         PetscInt :: proc_stride
          integer(c_long_long) :: index
       end subroutine MatPartitioning_c         
  

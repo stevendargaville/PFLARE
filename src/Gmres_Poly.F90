@@ -39,12 +39,12 @@ module gmres_poly
 ! -------------------------------------------------------------------------------------------------------------------------------
 
    subroutine setup_gmres_poly_data(global_rows, inverse_type, poly_order, &
-                  poly_sparsity_order, subcomm, number_splits, poly_data)   
+                  poly_sparsity_order, subcomm, proc_stride, poly_data)   
 
       ! Setups the gmres poly data structure and does some size checking
 
       ! ~~~~~~
-      PetscInt, intent(in)                              :: global_rows, number_splits
+      PetscInt, intent(in)                              :: global_rows, proc_stride
       integer, intent(in)                               :: inverse_type, poly_order
       integer, intent(in)                               :: poly_sparsity_order
       logical, intent(in)                               :: subcomm
@@ -58,7 +58,7 @@ module gmres_poly
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
       poly_data%buffers%matrix = PETSC_NULL_MAT
 #endif      
-      poly_data%buffers%number_splits = int(number_splits)
+      poly_data%buffers%proc_stride = int(proc_stride)
 
       ! For matrices with size smaller than the subspace size (ie polynomial order + 1)
       ! we'll have (close to) an exact solver and only need to go up to the matrix size
@@ -958,7 +958,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       ! before the collective matassembly (below) and goes idle and so we can use it to thread
       ! This typically requires the omp threads to be pinned reasonably 
       ! for good performance
-      ! buffers%number_splits tells us how many idle ranks we have total
+      ! buffers%proc_stride tells us how many idle ranks we have total
       ! after processor agglomeration
       ! Get the number of omp threads set in the environmental variable
       call get_environment_variable("OMP_NUM_THREADS", omp_threads_env_char, &
@@ -966,12 +966,12 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       if (status /= 1 .AND. length /= 0) then
          read(omp_threads_env_char(1:5),'(i5)') omp_threads_env
          ! If we have idle ranks
-         if (buffers%number_splits /= 1) then
+         if (buffers%proc_stride /= 1) then
             ! Don't use more than omp_threads_env omp threads
             ! It's up to the user to tell us the max number of omp threads
             ! to use via OMP_NUM_THREADS - at most the user should
             ! set it as the number of threads per numa region
-            omp_threads = min(omp_threads_env, buffers%number_splits)
+            omp_threads = min(omp_threads_env, buffers%proc_stride)
             call omp_set_num_threads(omp_threads)
          ! If we have no idle ranks then don't thread 
          else
@@ -1178,7 +1178,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       call omp_set_num_threads(omp_threads_env)
 
       ! Non-busy wait
-      if (buffers%number_splits /= 1) then
+      if (buffers%proc_stride /= 1) then
          call non_busy_wait(MPI_COMM_MATRIX, local_rows)
       end if      
 #endif  

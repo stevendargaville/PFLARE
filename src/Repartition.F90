@@ -21,13 +21,13 @@ module repartition
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine compute_mat_ratio_local_nonlocal_nnzs(input_mat, no_active_proc, ratio)
+   subroutine compute_mat_ratio_local_nonlocal_nnzs(input_mat, no_active_cores, ratio)
       
       ! Computes the local to non local ratios of nnzs in input_mat
 
       ! ~~~~~~
       type(tMat), target, intent(in)      :: input_mat
-      integer, intent(in)                 :: no_active_proc
+      integer, intent(in)                 :: no_active_cores
       real, intent(out)                   :: ratio
 
       ! Local
@@ -66,7 +66,7 @@ module repartition
       ! If a processor is entirely local, don't include it in the ratio
       ! It's a bit hard to decide here what to do, as we don't want to comm how many 
       ! processors actually have non local work
-      ! So the proxy for that is no_active_proc but
+      ! So the proxy for that is no_active_cores but
       ! there is no guarantee that that many procs all have nonlocal entries
       if (off_proc_nnzs == 0) then
          ratio = 0
@@ -78,13 +78,13 @@ module repartition
 
       ratio = ratio_parallel  
       ! Only divide by the number of processors that are active
-      ratio = ratio / real(no_active_proc)
+      ratio = ratio / real(no_active_cores)
 
    end subroutine      
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine calculate_repartition(input_mat, number_splits, simple, index)
+   subroutine calculate_repartition(input_mat, proc_stride, no_active_cores, simple, index)
       
       ! Return an IS that represents a repartitioning of the matrix
       ! Simple being true is just processor aggregation to load balance
@@ -92,12 +92,13 @@ module repartition
 
       ! ~~~~~~
       type(tMat), target, intent(in)      :: input_mat
-      PetscInt, intent(in)                :: number_splits
+      PetscInt, intent(in)                :: proc_stride
+      PetscInt, intent(inout)             :: no_active_cores
       logical, intent(in)                 :: simple
       type(tIS), intent(out)              :: index
 
       ! Local
-      PetscInt :: global_rows, global_cols, no_desired_active_proc
+      PetscInt :: global_rows, global_cols
       integer :: errorcode, comm_size
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX      
@@ -116,7 +117,7 @@ module repartition
       if (simple) then
 
          call MatGetSize(input_mat, global_rows, global_cols, ierr)
-         call GenerateIS_ProcAgglomeration_c(number_splits, global_rows, local_size_is, start_is)
+         call GenerateIS_ProcAgglomeration_c(proc_stride, global_rows, local_size_is, start_is)
 
          ! Specifically on comm_world as we aren't going onto a subcomm
          ! If we're on a processor we wish to accumulate onto the local_size_is will have
@@ -127,7 +128,7 @@ module repartition
       else
 
          ! Number of cores we want dofs on
-         no_desired_active_proc = ceiling(real(comm_size)/real(number_splits))
+         no_active_cores = floor(real(comm_size)/real(proc_stride))
 
          ! Have to symmetrize the input matrix or it won't work in parmetis
          ! as it expects a symmetric graph
@@ -138,7 +139,7 @@ module repartition
          call MatConvert(input_transpose, MATMPIADJ, MAT_INITIAL_MATRIX, adj, ierr)
 
          A_array = adj%v
-         call MatPartitioning_c(A_array, no_desired_active_proc, index_array)
+         call MatPartitioning_c(A_array, no_active_cores, proc_stride, index_array)
 
          ! Assign the index to the IS pointer we get back from c
          index%v = index_array

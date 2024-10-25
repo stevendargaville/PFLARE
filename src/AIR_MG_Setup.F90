@@ -1100,10 +1100,10 @@ module air_mg_setup
 
       ! Local
       PetscInt            :: local_rows, local_cols, global_rows, global_cols, local_fine_is_size, local_coarse_is_size
-      PetscInt            :: global_coarse_is_size, global_fine_is_size, global_row_start, global_row_end_plus_one
-      PetscInt            :: prolongator_start, prolongator_end_plus_one, number_splits, petsc_level, no_levels_petsc_int
+      PetscInt            :: global_coarse_is_size, global_fine_is_size, global_row_start, global_row_end_plus_one, no_active_cores
+      PetscInt            :: prolongator_start, prolongator_end_plus_one, proc_stride, petsc_level, no_levels_petsc_int
       PetscInt            :: local_vec_size, ystart, yend, local_rows_repart, local_cols_repart, global_rows_repart, global_cols_repart
-      integer             :: no_active_cores, min_size_coarse, i_loc
+      integer             :: min_size_coarse, i_loc
       integer             :: no_levels, our_level, our_level_coarse, errorcode, comm_rank, comm_size
       PetscErrorCode      :: ierr
       MPI_Comm            :: MPI_COMM_MATRIX
@@ -1137,7 +1137,8 @@ module air_mg_setup
       ! This is the minimum size coarse matrix we allow
       min_size_coarse = air_data%options%poly_order + 1      
       ! Keep track of how many times we've done processor agglomeration
-      number_splits = 1
+      ! ie the stride between active mpi ranks
+      proc_stride = 1
       ! Copy the top grid matrix pointer
       air_data%coarse_matrix(1) = pmat
 
@@ -1338,7 +1339,7 @@ module air_mg_setup
                   air_data%options%poly_order, &
                   air_data%options%inverse_sparsity_order, &
                   air_data%options%subcomm, &
-                  number_splits, &
+                  proc_stride, &
                   air_data%inv_A_ff_poly_data(our_level))
 
          ! Setup the same structure for the inv_A_ff made from dropped Aff 
@@ -1347,7 +1348,7 @@ module air_mg_setup
                   air_data%options%poly_order, &
                   air_data%options%inverse_sparsity_order, &
                   air_data%options%subcomm, &
-                  number_splits, &
+                  proc_stride, &
                   air_data%inv_A_ff_poly_data_dropped(our_level)) 
 
          ! ~~~~~~~~~
@@ -1361,7 +1362,7 @@ module air_mg_setup
                      air_data%options%c_poly_order, &
                      air_data%options%c_inverse_sparsity_order, &
                      air_data%options%subcomm, &
-                     number_splits, &
+                     proc_stride, &
                      air_data%inv_A_cc_poly_data(our_level))   
          end if            
 
@@ -1412,10 +1413,11 @@ module air_mg_setup
          if (air_data%options%processor_agglom) then
 
             ! If we're in parallel and we haven't already agglomerated down to one processor
-            if (comm_size /= 1 .AND. number_splits /= comm_size) then
+            if (comm_size /= 1 .AND. proc_stride /= comm_size) then
 
                ! Number of cores we have dofs on
-               no_active_cores = ceiling(real(comm_size)/real(number_splits))
+               ! Stolen from calculate_repartition, make sure they match!
+               no_active_cores = floor(real(comm_size)/real(proc_stride))
                ratio_local_nnzs_off_proc = 0.0
 
                ! If we have already setup our hierarchy, then we know what levels need to be repartitioned
@@ -1437,23 +1439,21 @@ module air_mg_setup
                   ! air_data%options%processor_agglom_factor tells us how much we're reducing the number 
                   ! of active mpi ranks by each time
                   
-                  ! number_splits is fed into the polynomial inverse assembly to tell it how many
+                  ! proc_stride is fed into the polynomial inverse assembly to tell it how many
                   ! idle ranks we have, so we can use them as threads in omp if it is enabled
-                  number_splits = number_splits * air_data%options%processor_agglom_factor
+                  proc_stride = proc_stride * air_data%options%processor_agglom_factor
                   ! If we agglomerate down to one processor
-                  if (number_splits > comm_size) number_splits = comm_size
-                  ! Number of cores we want dofs on
-                  no_active_cores = ceiling(real(comm_size)/real(number_splits))
-
-                  if (air_data%options%print_stats_timings .AND. comm_rank == 0) print *, "Doing processor agglomeration onto no cores:", no_active_cores
+                  if (proc_stride > comm_size) proc_stride = comm_size
 
                   ! Calculate the IS with the repartitioning if we haven't already
                   ! This is expensive as it calls the graph partitioner (e.g., parmetis)
                   if (PetscISIsNull(air_data%reuse(our_level)%reuse_is(IS_REPARTITION))) then
 
                      call calculate_repartition(air_data%coarse_matrix(our_level_coarse), &
-                                 number_splits, .FALSE., air_data%reuse(our_level)%reuse_is(IS_REPARTITION))
+                                 proc_stride, no_active_cores, .FALSE., air_data%reuse(our_level)%reuse_is(IS_REPARTITION))
                   end if
+
+                  if (air_data%options%print_stats_timings .AND. comm_rank == 0) print *, "Doing processor agglomeration onto no cores:", no_active_cores
 
                   ! ~~~~~~~~~~~~~~~~~~
                   ! Repartition the coarse matrix
@@ -1686,7 +1686,7 @@ module air_mg_setup
                air_data%options%coarsest_poly_order, &
                air_data%options%coarsest_inverse_sparsity_order, &
                air_data%options%coarsest_subcomm, &
-               number_splits, &
+               proc_stride, &
                air_data%inv_coarsest_poly_data)      
                
       ! Start the inverse for the coarse grid

@@ -36,7 +36,7 @@ module tsqr
       logical                          :: subcomm = .FALSE.
       ! Did we actually end up on a subcomm
       logical                          :: on_subcomm = .FALSE.
-      integer                          :: number_splits = 1
+      integer                          :: proc_stride = 1
    end type tsqr_buffers   
 
    public 
