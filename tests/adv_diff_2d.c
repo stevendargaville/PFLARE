@@ -175,6 +175,9 @@ int main(int argc,char **argv)
    ierr = VecDestroy(&diag_vec); CHKERRQ(ierr);
   }
 
+  // Setup the ksp
+  ierr = KSPSetUp(ksp);CHKERRQ(ierr);
+
   // Solve
   ierr = KSPSolve(ksp,b,x);CHKERRQ(ierr);
 
