@@ -128,7 +128,7 @@ int main(int argc, char **args)
 #else
       if (reason < 0) SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONGSTATE, "Didn't converge");
 #endif   
-  printf("iterations %d \n", its);
+  PetscPrintf(PETSC_COMM_WORLD, "iterations %3" PetscInt_FMT "\n", its);
 
   /*
      Free work space.  All PETSc objects should be destroyed when they

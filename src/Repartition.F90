@@ -27,7 +27,7 @@ module repartition
 
       ! ~~~~~~
       type(tMat), target, intent(in)      :: input_mat
-      integer, intent(in)                 :: no_active_cores
+      PetscInt, intent(in)                :: no_active_cores
       real, intent(out)                   :: ratio
 
       ! Local

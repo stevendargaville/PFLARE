@@ -1560,7 +1560,7 @@ module air_mg_setup
                      ! Can't seem to pass in PETSC_NULL_IS to the vecscattercreate in petsc 3.14
                      call VecGetLocalSize(temp_coarse_vec, local_vec_size, ierr)
                      call VecGetOwnershipRange(temp_coarse_vec, ystart, yend, ierr)
-                     call ISCreateStride(PETSC_COMM_SELF, local_vec_size, ystart, 1, is_full, ierr) 
+                     call ISCreateStride(PETSC_COMM_SELF, local_vec_size, ystart, one, is_full, ierr) 
 
                      if (air_data%options%constrain_z) then
                         call VecScatterCreate(left_null_vecs(1), air_data%reuse(our_level)%reuse_is(IS_REPARTITION), &
