@@ -44,6 +44,9 @@ module constrain_z_or_w
       ! Get the communicator the input matrix is on, we build everything on that
       call PetscObjectGetComm(input_mat, MPI_COMM_MATRIX, ierr)      
 
+      ! Get the comm size 
+      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)      
+
       ! Get the near nullspace if the user has set one 
       call MatGetNearNullSpace(input_mat, nullspace, ierr)
       ! If the user hasn't set a near nullspace and still wants constraints
