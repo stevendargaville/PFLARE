@@ -544,7 +544,7 @@ A brief description of the available options in PFLARE are given below and their
 | ``-pc_air_z_type``  |  PCAIRGetZType  PCAIRSetZType  | Type of grid-transfer operator, see above  | product |
 | ``-pc_air_lair_distance``  |  PCAIRGetLairDistance  PCAIRSetLairDistance  | If Z type is lair or lair_sai, this defines the distance of the grid-transfer operators  | 2 |          
    | ``-pc_air_constrain_w``  |  PCAIRGetConstrainW  PCAIRSetConstrainW  | Apply constraints to the prolongator. If enabled, by default it will smooth the constant vector and force the prolongator to interpolate it exactly. Can use MatSetNearNullSpace to give other vectors   | false |
-   | ``-pc_air_constrain_z``  |  PCAIRGetConstrainZ  PCAIRSetConstrainZ  | Apply constraints to the restrictor. If enabled, by default it will smooth the constant vector and force the retrictor to restrict it exactly. Can use MatSetNearNullSpace to give other vectors   | false |
+   | ``-pc_air_constrain_z``  |  PCAIRGetConstrainZ  PCAIRSetConstrainZ  | Apply constraints to the restrictor. If enabled, by default it will smooth the constant vector and force the restrictor to restrict it exactly. Can use MatSetNearNullSpace to give other vectors   | false |
 
 #### Coarse grid solver options
 
