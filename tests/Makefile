@@ -225,6 +225,11 @@ run_tests:
 	 -pc_air_c_inverse_sparsity_order 0 -pc_air_strong_threshold 0.99 -pc_air_ddc_fraction 0.0
 # 
 	@echo ""
+	@echo "Test high order GMRES polynomials in small linear system"
+	./adv_diff_2d.o -da_grid_x 5 -da_grid_y 5 -pc_type pflareinv -pc_pflareinv_type newton \
+	 -pc_pflareinv_matrix_free -pc_pflareinv_order 16
+# 
+	@echo ""
 	@echo "Test PMISR DDC CF splitting in C"
 	./ex6_cf_splitting.o  -f data/mat_stream_2364
 	@echo "Test PMISR DDC CF splitting in C in parallel"

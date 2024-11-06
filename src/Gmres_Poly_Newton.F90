@@ -123,17 +123,19 @@ module gmres_poly_newton
 
       ! Local variables
       PetscInt :: global_rows, global_cols, local_rows, local_cols
-      integer :: lwork, subspace_size, rank, i_loc, comm_size, comm_rank, errorcode
+      integer :: lwork, subspace_size, rank, i_loc, comm_size, comm_rank, errorcode, iwork_size
       PetscErrorCode :: ierr      
       MPI_Comm :: MPI_COMM_MATRIX
       real, dimension(poly_order+2,poly_order+1) :: H_n
+      real, dimension(poly_order+1,poly_order+2) :: H_n_T
       real, dimension(poly_order+1,poly_order+1) :: H_n_square
-      real, dimension(poly_order+1) :: e_d, r, c, solution, gamma
+      real, dimension(poly_order+1) :: e_d, r, c, solution, gamma, s
       integer, dimension(poly_order+1) :: iwork, pivots
+      integer, dimension(:), allocatable :: iwork_allocated
       real, dimension(1) :: ferr, berr
       real, dimension(:), allocatable :: work
       real, dimension(:,:), allocatable :: VL, VR
-      real :: beta, rcond, avg_real, avg_imag
+      real :: beta, avg_real, avg_imag
       real, dimension(:), pointer :: v_one, v_two
       real, dimension(:, :), allocatable, target :: K_m_plus_1_data, K_m_plus_1_data_not_zero
       real, dimension(:, :), pointer :: K_m_plus_1_pointer
@@ -141,6 +143,7 @@ module gmres_poly_newton
       type(tVec), dimension(poly_order+2) :: V_n
       character(1) :: equed
       logical :: use_harmonic_ritz = .TRUE.
+      real :: rcond = -1.0      
 
       ! ~~~~~~    
 
@@ -183,30 +186,84 @@ module gmres_poly_newton
 
       ! ~~~~~~~~~~~
       ! Now the Ritz values are just the eigenvalues of the square part of H_n
-      ! We're actually going to use the Harmonic Ritz values
-      ! see Embree - Polynomial preconditioned arnoldi with stability control
+      ! We're actually going to use the Harmonic Ritz values which are the reciprocals
+      ! of the (ordinary) Ritz values of A^-1
+      ! see Embree - Polynomial preconditioned arnoldi with stability control 
+      ! and Goossens - Ritz and Harmonic Ritz Values and the Convergence of FOM and GMRES
       ! ~~~~~~~~~~~
       if (use_harmonic_ritz) then
 
          e_d = 0
          e_d(poly_order + 1) = 1
 
-         allocate(work(4 * (poly_order + 1)))
-         ! Compute H_d^-H e_d
-         ! Doesn't modify H_n on output
-         call dgesvx('N', 'T', poly_order + 1, 1, &
-               H_n, size(H_n, 1), H_n_square, poly_order + 1, &
-               pivots, equed, r, c, &
-               e_d, poly_order + 1, &
-               solution, poly_order + 1, &
-               rcond, ferr, berr, work, iwork, errorcode)
-         deallocate(work)
+         ! Now we have to be careful here 
+         ! PETSc and Trilinos both just use an LU factorisation here to solve
+         ! H_d^-H e_d
+         ! But we can have the situation where the user has requested a high 
+         ! polynomial order and H_d ends up not full rank
+         ! In that case the LU factorisation fails 
+         ! Previously we just used to abort and tell the user to use lower order
+         ! But that is not super helpful
+         ! Instead we use a rank revealing factorisation that gives the 
+         ! minimum norm solution
+         ! What we find is that when used to compute eigenvalues we find evals 
+         ! as we might expect up to the rank
+         ! but then we have some eigenvalues that are numerically zero
+         ! We keep those and our application of the newton polynomial in 
+         ! petsc_matvec_gmres_newton_mf just skips them and hence we don't do any 
+         ! extra work in the application phase than we would have done with lower order
+
+         ! ~~~~~~~~~~~
+         ! Direct LU
+         ! ~~~~~~~~~~~
+
+         ! allocate(work(4 * (poly_order + 1)))
+         ! ! Compute H_d^-H e_d
+         ! ! Doesn't modify H_n on output
+         ! call dgesvx('N', 'T', poly_order + 1, 1, &
+         !       H_n, size(H_n, 1), H_n_square, poly_order + 1, &
+         !       pivots, equed, r, c, &
+         !       e_d, poly_order + 1, &
+         !       solution, poly_order + 1, &
+         !       rcond, ferr, berr, work, iwork, errorcode)
+         ! deallocate(work)
+
+         ! Rearrange given the row permutations done by the LU
+         !solution(pivots) = solution        
+         
+         ! ~~~~~~~~~~~
+         ! ~~~~~~~~~~~
+
+         ! Rank revealing min norm solution
+         H_n_T = transpose(H_n)
+
+         allocate(work(1))
+         allocate(iwork_allocated(1))
+         lwork = -1         
+
+         ! We have rcond = -1 which means the the default machine precision 
+         ! is used to decide what singular values to drop
+         ! Matlab uses max(size(A))*eps(norm(A)) in their pinv
+         call dgelsd(poly_order + 1, poly_order + 1, 1, H_n_T, size(H_n_T, 1), &
+                        e_d, size(e_d), s, rcond, rank, &
+                        work, lwork, iwork_allocated, errorcode)
+         lwork = int(work(1))
+         iwork_size = iwork_allocated(1)
+         deallocate(work, iwork_allocated)
+         allocate(work(lwork)) 
+         allocate(iwork_allocated(iwork_size))
+         call dgelsd(poly_order + 1, poly_order + 1, 1, H_n_T, size(H_n_T, 1), &
+                        e_d, size(e_d), s, rcond, rank, &
+                        work, lwork, iwork_allocated, errorcode)
+         deallocate(work, iwork_allocated)         
+
+         ! Copy in the solution
+         solution = e_d
+
          if (errorcode /= 0) then
             print *, "Harmonic Ritz solve failed - Try lower order"
             call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
          end if
-         ! Rearrange given the row permutations done by the LU
-         solution(pivots) = solution
 
          ! Scale f by H(d+1,d)^2
          solution = solution * H_n(poly_order + 2, poly_order + 1)**2
@@ -306,12 +363,19 @@ module gmres_poly_newton
          ! If real this is easy
          if (mat_ctx%imag_roots(order) == 0.0) then
 
+            ! Skips eigenvalues that are numerically zero - see 
+            ! the comment in calculate_gmres_polynomial_roots_newton 
+            if (abs(mat_ctx%real_roots(order)) < 1e-15) then
+               order = order + 1
+               cycle
+            end if
+
             ! y = y + theta_i * prod
             call VecAXPBY(y, &
                      1.0/mat_ctx%real_roots(order), &
                      1.0, &
-                     prod, ierr)    
-                     
+                     prod, ierr)   
+                                          
             ! temp_result = A * prod
             call MatMult(mat_ctx%mat, prod, temp_result, ierr)
             ! prod = prod - theta_i * temp_result
@@ -326,6 +390,12 @@ module gmres_poly_newton
          ! complex conjugate to keep the arithmetic real
          ! Relies on the complex conjugate being next to each other
          else
+
+            ! Skips eigenvalues that are numerically zero
+            if (mat_ctx%real_roots(order)**2 + mat_ctx%imag_roots(order)**2 < 1e-15) then
+               order = order + 2
+               cycle
+            end if            
 
             ! temp_result = A * prod
             call MatMult(mat_ctx%mat, prod, temp_result, ierr)    
@@ -360,11 +430,16 @@ module gmres_poly_newton
 
       ! Final step if last root is real
       if (mat_ctx%imag_roots(size(mat_ctx%real_roots)) == 0.0) then
-         ! y = y + theta_i * prod
-         call VecAXPBY(y, &
-                  1.0/mat_ctx%real_roots(order), &
-                  1.0, &
-                  prod, ierr)          
+
+         ! Skips eigenvalues that are numerically zero
+         if (abs(mat_ctx%real_roots(order)) > 1e-15) then
+
+            ! y = y + theta_i * prod
+            call VecAXPBY(y, &
+                     1.0/mat_ctx%real_roots(order), &
+                     1.0, &
+                     prod, ierr) 
+         end if
       end if
 
       call VecDestroy(temp_result, ierr)
