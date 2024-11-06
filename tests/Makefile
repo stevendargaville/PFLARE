@@ -228,6 +228,9 @@ run_tests:
 	@echo "Test high order GMRES polynomials in small linear system"
 	./adv_diff_2d.o -da_grid_x 5 -da_grid_y 5 -pc_type pflareinv -pc_pflareinv_type newton \
 	 -pc_pflareinv_matrix_free -pc_pflareinv_order 16
+	@echo "Test high order GMRES polynomials in small linear system - slightly bigger"
+	./adv_diff_2d.o -da_grid_x 10 -da_grid_y 10 -pc_type pflareinv -pc_pflareinv_type newton \
+	 -pc_pflareinv_matrix_free -pc_pflareinv_order 50
 # 
 	@echo ""
 	@echo "Test PMISR DDC CF splitting in C"

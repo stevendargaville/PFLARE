@@ -143,7 +143,7 @@ module gmres_poly_newton
       type(tVec), dimension(poly_order+2) :: V_n
       character(1) :: equed
       logical :: use_harmonic_ritz = .TRUE.
-      real :: rcond = -1.0      
+      real :: rcond = 1e-13
 
       ! ~~~~~~    
 
@@ -206,7 +206,7 @@ module gmres_poly_newton
          ! But that is not super helpful
          ! Instead we use a rank revealing factorisation that gives the 
          ! minimum norm solution
-         ! What we find is that when used to compute eigenvalues we find evals 
+         ! What we find is that when use this to compute eigenvalues we find e-vals 
          ! as we might expect up to the rank
          ! but then we have some eigenvalues that are numerically zero
          ! We keep those and our application of the newton polynomial in 
@@ -241,8 +241,7 @@ module gmres_poly_newton
          allocate(iwork_allocated(1))
          lwork = -1         
 
-         ! We have rcond = -1 which means the the default machine precision 
-         ! is used to decide what singular values to drop
+         ! We have rcond = 1e-13 which is used to decide what singular values to drop
          ! Matlab uses max(size(A))*eps(norm(A)) in their pinv
          call dgelsd(poly_order + 1, poly_order + 1, 1, H_n_T, size(H_n_T, 1), &
                         e_d, size(e_d), s, rcond, rank, &
@@ -365,7 +364,7 @@ module gmres_poly_newton
 
             ! Skips eigenvalues that are numerically zero - see 
             ! the comment in calculate_gmres_polynomial_roots_newton 
-            if (abs(mat_ctx%real_roots(order)) < 1e-15) then
+            if (abs(mat_ctx%real_roots(order)) < 1e-13) then
                order = order + 1
                cycle
             end if
@@ -392,7 +391,7 @@ module gmres_poly_newton
          else
 
             ! Skips eigenvalues that are numerically zero
-            if (mat_ctx%real_roots(order)**2 + mat_ctx%imag_roots(order)**2 < 1e-15) then
+            if (mat_ctx%real_roots(order)**2 + mat_ctx%imag_roots(order)**2 < 1e-13) then
                order = order + 2
                cycle
             end if            
@@ -432,7 +431,7 @@ module gmres_poly_newton
       if (mat_ctx%imag_roots(size(mat_ctx%real_roots)) == 0.0) then
 
          ! Skips eigenvalues that are numerically zero
-         if (abs(mat_ctx%real_roots(order)) > 1e-15) then
+         if (abs(mat_ctx%real_roots(order)) > 1e-13) then
 
             ! y = y + theta_i * prod
             call VecAXPBY(y, &
