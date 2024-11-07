@@ -153,7 +153,8 @@ module cf_splitting
          ! Get the row
          call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)
 
-         abs_biggest_entry = -huge(0)
+         ! Be careful here to use huge(0.0) rather than huge(0)!
+         abs_biggest_entry = -huge(0.0)
          ! Find the biggest entry in the row thats not the diagonal and the diagonal index
          do jfree = 1, ncols
             if (cols(jfree) == ifree) then
@@ -217,7 +218,8 @@ module cf_splitting
          ! Get the row
          call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)  
          
-         abs_biggest_entry = -huge(0)
+         ! Be careful here to use huge(0.0) rather than huge(0)!
+         abs_biggest_entry = -huge(0.0)
          ! Find the biggest entry in the row thats not the diagonal and the diagonal index
          do jfree = 1, ncols
             if (cols(jfree) == ifree) then
