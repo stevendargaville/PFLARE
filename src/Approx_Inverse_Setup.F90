@@ -143,7 +143,7 @@ module approx_inverse_setup
       type(tMat), intent(in)                            :: matrix
       integer, intent(in)                               :: inverse_type, poly_order
       type(tsqr_buffers), intent(inout)                 :: buffers 
-      real, dimension(:, :), intent(inout)              :: coefficients
+      real, dimension(:, :), pointer, intent(inout)     :: coefficients
 
       PetscErrorCode :: ierr
       integer :: MPI_COMM_MATRIX, errorcode
@@ -255,7 +255,7 @@ module approx_inverse_setup
       integer, intent(in)                               :: inverse_type, poly_order
       integer, intent(in)                               :: inverse_sparsity_order
       type(tsqr_buffers), intent(inout)                 :: buffers      
-      real, dimension(:, :), contiguous, intent(inout)  :: coefficients
+      real, dimension(:, :), pointer, contiguous, intent(inout)  :: coefficients
       logical, intent(in)                               :: matrix_free
       type(tMat), intent(inout)                         :: reuse_mat, inv_matrix
 

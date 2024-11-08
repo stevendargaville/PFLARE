@@ -15,18 +15,20 @@ module gmres_poly_newton
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine modified_leja(real_roots, imag_roots)
+   subroutine modified_leja(real_roots, imag_roots, indices)
 
       ! Computes a modified leja ordering of the eigenvalues
       ! and re-orders in place
+      ! The roots must be passed in with complex conjugate pairs next to each other
+      ! with positive imag e'vals first
 
       ! ~~~~~~
       real, dimension(:), intent(inout)  :: real_roots, imag_roots
+      integer, dimension(:), allocatable, intent(inout) :: indices
 
       ! Local variables
       integer :: i_loc, k_loc, counter
       integer :: max_loc(1)
-      integer, dimension(:), allocatable :: indices
       real, dimension(:), allocatable :: magnitude
       real :: a, b, squares
 
@@ -46,9 +48,16 @@ module gmres_poly_newton
       ! That is our first entry
       indices(counter) = max_loc(1)
       counter = counter + 1
-      ! If it was imaginary its complex conjugate is next
+      ! If it was imaginary its complex conjugate is next to this one
       if (imag_roots(indices(counter-1)) /= 0.0) then
-         indices(counter) = indices(counter - 1) + 1
+         ! dgeev returns roots with the positive imaginary part first
+         if (imag_roots(indices(counter-1)) > 0) then
+            ! So if positive we know the conjugate is ahead one
+            indices(counter) = indices(counter - 1) + 1
+         else
+            ! If negative we know the conjugate is one behind
+            indices(counter) = indices(counter - 1) - 1
+         end if
          counter = counter + 1
       end if
 
@@ -68,11 +77,15 @@ module gmres_poly_newton
                b = imag_roots(i_loc) - imag_roots(indices(k_loc))
 
                squares = a**2 + b**2
-               if (squares > 1e-14) then
+               ! This is just a test for non zero, as squares can't be negative
+               ! This ensures if we have already added in a complex root, we skip its
+               ! complex conjugate 
+               if (squares > 0) then
                   magnitude(i_loc) = magnitude(i_loc) + &
                      log10(sqrt(squares))
                else
-                  magnitude(i_loc) = -huge(0)
+                  ! Be careful here to use huge(0.0) rather than huge(0)!
+                  magnitude(i_loc) = -huge(0.0)
                   exit k_loop
                end if
             end do k_loop
@@ -82,18 +95,25 @@ module gmres_poly_newton
          max_loc = maxloc(magnitude)
          indices(counter) = max_loc(1)
          counter = counter + 1
-         ! If it was imaginary its complex conjugate is next
+         ! If it was imaginary its complex conjugate is next to this one
          if (imag_roots(indices(counter - 1)) /= 0.0) then
-            indices(counter) = indices(counter - 1) + 1
+            ! dgeev returns roots with the positive imaginary part first
+            ! We did actually find a situation where due to rounding differnces, the 
+            ! conjugate with negative imaginary root had a bigger product of factors
+            ! (by 1e-14) than the positive imaginary root, so we can't guarantee we hit 
+            ! the positive one first
+            if (imag_roots(indices(counter-1)) > 0) then
+               ! So if positive we know the conjugate is ahead one
+               indices(counter) = indices(counter - 1) + 1
+            else
+               ! If negative we know the conjugate is one behind
+               indices(counter) = indices(counter - 1) - 1
+            end if            
             counter = counter + 1
          end if
       end do
 
-      ! Reorder the roots
-      real_roots = real_roots(indices)
-      imag_roots = imag_roots(indices)
-
-      deallocate(magnitude, indices)
+      deallocate(magnitude)
 
    end subroutine modified_leja   
 
@@ -103,11 +123,8 @@ module gmres_poly_newton
 
       ! Computes a fixed order gmres polynomial for the matrix passed in
       ! and outputs the Harmonic Ritz values (ie the roots) which we can use to apply 
-      ! a polynomial in the Newton basis
-      ! This should be stable at high order, although we don't add extra roots like Loe 
-      ! for stability, so we are likely not as stable. The only reason we don't is 
-      ! that would change the number of roots.
-      ! The cost of using the newton basis is many reductions in parallel.
+      ! a polynomial in the Newton basis. This should be stable at high order
+      ! The cost of computing the newton basis is many reductions in parallel.
       ! We don't provide a way to compute the monomial polynomial coefficients from the roots 
       ! (although we could by rearranging the newton polynomial) as I don't think this would be 
       ! stable at high order anyway. The only reason we use the monomial coefficients 
@@ -119,31 +136,33 @@ module gmres_poly_newton
       ! ~~~~~~
       type(tMat), intent(in)                            :: matrix
       integer, intent(in)                               :: poly_order
-      real, dimension(:, :), intent(out)                :: coefficients
+      real, dimension(:, :), pointer, intent(inout)     :: coefficients
 
       ! Local variables
       PetscInt :: global_rows, global_cols, local_rows, local_cols
-      integer :: lwork, subspace_size, rank, i_loc, comm_size, comm_rank, errorcode, iwork_size
+      integer :: lwork, subspace_size, rank, i_loc, comm_size, comm_rank, errorcode, iwork_size, j_loc
+      integer :: total_extra, counter, k_loc
       PetscErrorCode :: ierr      
       MPI_Comm :: MPI_COMM_MATRIX
       real, dimension(poly_order+2,poly_order+1) :: H_n
       real, dimension(poly_order+1,poly_order+2) :: H_n_T
       real, dimension(poly_order+1,poly_order+1) :: H_n_square
-      real, dimension(poly_order+1) :: e_d, r, c, solution, gamma, s
-      integer, dimension(poly_order+1) :: iwork, pivots
-      integer, dimension(:), allocatable :: iwork_allocated
+      real, dimension(poly_order+1) :: e_d, r, col_scale, solution, gamma, s, pof
+      integer, dimension(poly_order+1) :: iwork, pivots, extra_pair_roots, overflow
+      integer, dimension(:), allocatable :: iwork_allocated, indices
       real, dimension(1) :: ferr, berr
       real, dimension(:), allocatable :: work
       real, dimension(:,:), allocatable :: VL, VR
-      real :: beta, avg_real, avg_imag
+      real :: beta, div_real, div_imag, a, b, c, d, div_mag
       real, dimension(:), pointer :: v_one, v_two
       real, dimension(:, :), allocatable, target :: K_m_plus_1_data, K_m_plus_1_data_not_zero
+      real, dimension(:, :), allocatable :: coefficients_temp
       real, dimension(:, :), pointer :: K_m_plus_1_pointer
       type(tVec) :: w_j
       type(tVec), dimension(poly_order+2) :: V_n
       character(1) :: equed
       logical :: use_harmonic_ritz = .TRUE.
-      real :: rcond = 1e-13
+      real :: rcond = 1e-12
 
       ! ~~~~~~    
 
@@ -222,7 +241,7 @@ module gmres_poly_newton
          ! ! Doesn't modify H_n on output
          ! call dgesvx('N', 'T', poly_order + 1, 1, &
          !       H_n, size(H_n, 1), H_n_square, poly_order + 1, &
-         !       pivots, equed, r, c, &
+         !       pivots, equed, r, col_scale, &
          !       e_d, poly_order + 1, &
          !       solution, poly_order + 1, &
          !       rcond, ferr, berr, work, iwork, errorcode)
@@ -241,7 +260,7 @@ module gmres_poly_newton
          allocate(iwork_allocated(1))
          lwork = -1         
 
-         ! We have rcond = 1e-13 which is used to decide what singular values to drop
+         ! We have rcond = 1e-12 which is used to decide what singular values to drop
          ! Matlab uses max(size(A))*eps(norm(A)) in their pinv
          call dgelsd(poly_order + 1, poly_order + 1, 1, H_n_T, size(H_n_T, 1), &
                         e_d, size(e_d), s, rcond, rank, &
@@ -260,7 +279,7 @@ module gmres_poly_newton
          solution = e_d
 
          if (errorcode /= 0) then
-            print *, "Harmonic Ritz solve failed - Try lower order"
+            print *, "Harmonic Ritz solve failed"
             call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
          end if
 
@@ -297,15 +316,135 @@ module gmres_poly_newton
       end if  
 
       ! ~~~~~~~~~~~~~~
-      ! If you want to add roots for stability that would go here
-      ! ~~~~~~~~~~~~~~       
+      ! Add roots for stability
+      ! ~~~~~~~~~~~~~~          
+
+      ! Compute the product of factors
+      pof = 1   
+      extra_pair_roots = 0
+      overflow = 0
+      total_extra = 0
+      do k_loc = 1, poly_order + 1
+
+         a = coefficients(k_loc, 1)
+         b = coefficients(k_loc, 2)      
+         
+         ! We have already computed pof for the positive imaginary complex conjugate
+         if (b < 0) cycle
+
+         ! Skips eigenvalues that are numerically zero
+         if (abs(a) < 1e-12) cycle
+         if (a**2 + b**2 < 1e-12) cycle
+
+         ! Compute product(k)_{i, j/=i} * | 1 - theta_j/theta_i|
+         do i_loc = 1, poly_order + 1
+
+            ! Skip
+            if (k_loc == i_loc) cycle
+
+            c = coefficients(i_loc, 1)
+            d = coefficients(i_loc, 2)
+
+            ! Skips eigenvalues that are numerically zero
+            if (abs(c) < 1e-12) cycle
+            if (c**2 + d**2 < 1e-12) cycle
+
+            ! theta_k/theta_i
+            div_real = (a * c + b * d)/(c**2 + d**2)
+            div_imag = (b * c - a * d)/(c**2 + d**2)
+
+            ! |1 - theta_k/theta_i|
+            div_mag = sqrt((1 - div_real)**2 + div_imag**2)
+
+            ! Pof is about to overflow, store the exponent and 
+            ! reset pof back to one
+            ! We can hit this for very high order polynomials, where we have to 
+            ! add more roots than 22 (ie pof > 1e308)
+            if (log10(pof(k_loc)) + log10(div_mag) > 307) then
+               overflow(k_loc) = overflow(k_loc) + log10(pof(k_loc))
+               pof(k_loc) = 1
+            end if            
+
+            ! Product
+            pof(k_loc) = pof(k_loc) * div_mag
+
+         end do
+
+         ! If pof > 1e4, we add an extra root, plus one extra for every 1e14
+         if (log10(pof(k_loc)) > 4 .OR. overflow(k_loc) /= 0) then
+
+            ! if real extra_pair_roots counts each distinct real root we're adding
+            ! if imaginary it only counts a pair as one
+            extra_pair_roots(k_loc) = ceiling((log10(pof(k_loc)) + overflow(k_loc) - 4.0)/14.0)
+            total_extra = total_extra + extra_pair_roots(k_loc)
+
+            ! If imaginary, the pof is the same for the conjugate, let's just set it to -1
+            if (b > 0) then
+               ! We know the positive imaginary value is first, so the conjugate follows it
+               pof(k_loc+1) = -1
+               ! We need the conjugates as well
+               total_extra = total_extra + extra_pair_roots(k_loc)
+
+            end if            
+         end if
+      end do
+
+      ! If we have extra roots we need to resize the coefficients storage
+      if (total_extra > 0) then
+         allocate(coefficients_temp(size(coefficients, 1), size(coefficients, 2)))
+         coefficients_temp(1:size(coefficients, 1), 1:size(coefficients, 2)) = coefficients
+         deallocate(coefficients)
+         allocate(coefficients(size(coefficients_temp, 1) + total_extra, 2))
+         coefficients = 0
+         coefficients(1:size(coefficients_temp, 1), :) = coefficients_temp
+         deallocate(coefficients_temp)
+      end if
+
+      ! Take a copy of the existing roots
+      coefficients_temp = coefficients
+
+      ! Add the extra copies of roots, ensuring conjugate pairs we add 
+      ! are next to each other
+      counter = size(extra_pair_roots)+1
+      do i_loc = 1, size(extra_pair_roots)
+
+         ! For each extra root pair to add
+         do j_loc = 1, extra_pair_roots(i_loc)
+
+            coefficients(counter, :) = coefficients(i_loc, :)
+            ! Add in the conjugate
+            if (coefficients(i_loc, 2) > 0) then
+               coefficients(counter+1, 1) = coefficients(i_loc, 1)
+               coefficients(counter+1, 2) = -coefficients(i_loc, 2)
+            end if
+
+            ! Store a perturbed root so we have unique values for the leja sort below
+            ! Just peturbing the real value
+            coefficients_temp(counter, 1) = coefficients(i_loc, 1) + j_loc * 5e-8
+            coefficients_temp(counter, 2) = coefficients(i_loc, 2)
+            ! Add in the conjugate
+            if (coefficients(i_loc, 2) > 0) then
+               coefficients_temp(counter+1, 1) = coefficients(i_loc, 1) + j_loc * 5e-8
+               coefficients_temp(counter+1, 2) = -coefficients(i_loc, 2)
+            end if            
+
+            counter = counter + 1
+            if (coefficients(i_loc, 2) > 0) counter = counter + 1
+         end do
+      end do
 
       ! ~~~~~~~~~~~~~~
       ! Now compute a modified leja ordering for stability
       ! ~~~~~~~~~~~~~~      
-      call modified_leja(coefficients(:,1), coefficients(:,2))
+      ! Called with the peturbed extra roots
+      call modified_leja(coefficients_temp(:,1), coefficients_temp(:,2), indices)   
+
+      ! Reorder the (non-peturbed) roots 
+      coefficients(:,1) = coefficients(indices,1)
+      coefficients(:,2) = coefficients(indices,2)
 
       ! Cleanup
+      deallocate(coefficients_temp)
       deallocate(K_m_plus_1_data)
       if (allocated(K_m_plus_1_data_not_zero)) deallocate(K_m_plus_1_data_not_zero)
       do i_loc = 1, subspace_size+1
@@ -364,7 +503,7 @@ module gmres_poly_newton
 
             ! Skips eigenvalues that are numerically zero - see 
             ! the comment in calculate_gmres_polynomial_roots_newton 
-            if (abs(mat_ctx%real_roots(order)) < 1e-13) then
+            if (abs(mat_ctx%real_roots(order)) < 1e-12) then
                order = order + 1
                cycle
             end if
@@ -391,7 +530,7 @@ module gmres_poly_newton
          else
 
             ! Skips eigenvalues that are numerically zero
-            if (mat_ctx%real_roots(order)**2 + mat_ctx%imag_roots(order)**2 < 1e-13) then
+            if (mat_ctx%real_roots(order)**2 + mat_ctx%imag_roots(order)**2 < 1e-12) then
                order = order + 2
                cycle
             end if            
@@ -431,7 +570,7 @@ module gmres_poly_newton
       if (mat_ctx%imag_roots(size(mat_ctx%real_roots)) == 0.0) then
 
          ! Skips eigenvalues that are numerically zero
-         if (abs(mat_ctx%real_roots(order)) > 1e-13) then
+         if (abs(mat_ctx%real_roots(order)) > 1e-12) then
 
             ! y = y + theta_i * prod
             call VecAXPBY(y, &
@@ -453,7 +592,7 @@ module gmres_poly_newton
                   coefficients, &
                   inv_matrix)
 
-      ! Assembles a matrix which is an approximation to the inverse of a matrix using the 
+      ! Builds a matrix which is an approximation to the inverse of a matrix using the 
       ! gmres polynomial in the newton basis
       ! Can only be applied matrix-free
 
