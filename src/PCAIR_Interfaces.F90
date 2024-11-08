@@ -219,6 +219,7 @@ module pcair_interfaces
                 size(coeffs,2) == size(pc_air_data%air_data%inv_A_ff_poly_data(our_level)%coefficients, 2))) then
 
                deallocate(coeffs)
+               coeffs => null()
             end if
          end if
 
@@ -238,6 +239,7 @@ module pcair_interfaces
                 size(coeffs,2) == size(pc_air_data%air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients, 2))) then
 
                deallocate(coeffs)
+               coeffs => null()
             end if
          end if
 
@@ -257,6 +259,7 @@ module pcair_interfaces
                 size(coeffs,2) == size(pc_air_data%air_data%inv_A_cc_poly_data(our_level)%coefficients, 2))) then
 
                deallocate(coeffs)
+               coeffs => null()
             end if
          end if
 
@@ -276,6 +279,7 @@ module pcair_interfaces
                 size(coeffs,2) == size(pc_air_data%air_data%inv_coarsest_poly_data%coefficients, 2))) then
 
                deallocate(coeffs)
+               coeffs => null()
             end if
          end if
 

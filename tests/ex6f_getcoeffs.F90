@@ -15,7 +15,8 @@ module solve_module
    implicit none
   
    type real_coeffs
-      real, dimension(:, :), pointer :: coeffs
+      ! Must be set to null to start
+      real, dimension(:, :), pointer :: coeffs => null()
    end type real_coeffs   
 
 contains 
