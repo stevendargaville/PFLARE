@@ -12,7 +12,7 @@ module neumann_poly
 
    public
 
-   PetscEnum, parameter :: PFLAREINV_NEUMANN=3
+   PetscEnum, parameter :: PFLAREINV_NEUMANN=4
    
    contains
 

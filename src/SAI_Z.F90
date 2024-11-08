@@ -17,8 +17,8 @@ module sai_z
    PetscEnum, parameter :: AIR_Z_LAIR=1
    PetscEnum, parameter :: AIR_Z_LAIR_SAI=2
    
-   PetscEnum, parameter :: PFLAREINV_SAI=4
-   PetscEnum, parameter :: PFLAREINV_ISAI=5    
+   PetscEnum, parameter :: PFLAREINV_SAI=5
+   PetscEnum, parameter :: PFLAREINV_ISAI=6    
    
    contains
 

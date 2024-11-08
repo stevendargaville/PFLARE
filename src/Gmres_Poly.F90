@@ -33,6 +33,7 @@ module gmres_poly
    PetscEnum, parameter :: PFLAREINV_POWER=0
    PetscEnum, parameter :: PFLAREINV_ARNOLDI=1
    PetscEnum, parameter :: PFLAREINV_NEWTON=2
+   PetscEnum, parameter :: PFLAREINV_NEWTON_NO_EXTRA=3
    
    contains
 
@@ -52,7 +53,10 @@ module gmres_poly
       ! ~~~~~~            
 
       ! For gmres polynomial calculation we can move the reductions onto a subcomm
-      if (inverse_type == PFLAREINV_POWER .OR. inverse_type == PFLAREINV_ARNOLDI .OR. inverse_type == PFLAREINV_NEWTON) then
+      if (inverse_type == PFLAREINV_POWER .OR. &
+          inverse_type == PFLAREINV_ARNOLDI .OR. &
+          inverse_type == PFLAREINV_NEWTON .OR. &
+          inverse_type == PFLAREINV_NEWTON_NO_EXTRA) then
          poly_data%buffers%subcomm = subcomm
       end if
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
@@ -75,11 +79,11 @@ module gmres_poly
       end if      
 
       ! Now we know the order we can create our coefficient vector
-      if (inverse_type == PFLAREINV_NEWTON) then
+      if (inverse_type == PFLAREINV_NEWTON .OR. inverse_type == PFLAREINV_NEWTON_NO_EXTRA) then
          ! Newton basis we have to store real and imag roots
-         if (.NOT. allocated(poly_data%coefficients)) allocate(poly_data%coefficients(poly_data%gmres_poly_order + 1, 2))
+         if (.NOT. associated(poly_data%coefficients)) allocate(poly_data%coefficients(poly_data%gmres_poly_order + 1, 2))
       else
-         if (.NOT. allocated(poly_data%coefficients)) allocate(poly_data%coefficients(poly_data%gmres_poly_order + 1, 1))
+         if (.NOT. associated(poly_data%coefficients)) allocate(poly_data%coefficients(poly_data%gmres_poly_order + 1, 1))
       end if
 
    end subroutine setup_gmres_poly_data

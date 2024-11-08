@@ -10,8 +10,8 @@ module weighted_jacobi
 
    public
    
-   PetscEnum, parameter :: PFLAREINV_WJACOBI=6
-   PetscEnum, parameter :: PFLAREINV_JACOBI=7    
+   PetscEnum, parameter :: PFLAREINV_WJACOBI=7
+   PetscEnum, parameter :: PFLAREINV_JACOBI=8   
    
    contains
 

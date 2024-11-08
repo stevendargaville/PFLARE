@@ -119,7 +119,7 @@ module gmres_poly_newton
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine calculate_gmres_polynomial_roots_newton(matrix, poly_order, coefficients)
+   subroutine calculate_gmres_polynomial_roots_newton(matrix, poly_order, add_roots, coefficients)
 
       ! Computes a fixed order gmres polynomial for the matrix passed in
       ! and outputs the Harmonic Ritz values (ie the roots) which we can use to apply 
@@ -136,6 +136,7 @@ module gmres_poly_newton
       ! ~~~~~~
       type(tMat), intent(in)                            :: matrix
       integer, intent(in)                               :: poly_order
+      logical, intent(in)                               :: add_roots
       real, dimension(:, :), pointer, intent(inout)     :: coefficients
 
       ! Local variables
@@ -317,121 +318,126 @@ module gmres_poly_newton
 
       ! ~~~~~~~~~~~~~~
       ! Add roots for stability
-      ! ~~~~~~~~~~~~~~          
+      ! ~~~~~~~~~~~~~~         
+      if (add_roots) then 
 
-      ! Compute the product of factors
-      pof = 1   
-      extra_pair_roots = 0
-      overflow = 0
-      total_extra = 0
-      do k_loc = 1, poly_order + 1
+         ! Compute the product of factors
+         pof = 1   
+         extra_pair_roots = 0
+         overflow = 0
+         total_extra = 0
+         do k_loc = 1, poly_order + 1
 
-         a = coefficients(k_loc, 1)
-         b = coefficients(k_loc, 2)      
-         
-         ! We have already computed pof for the positive imaginary complex conjugate
-         if (b < 0) cycle
-
-         ! Skips eigenvalues that are numerically zero
-         if (abs(a) < 1e-12) cycle
-         if (a**2 + b**2 < 1e-12) cycle
-
-         ! Compute product(k)_{i, j/=i} * | 1 - theta_j/theta_i|
-         do i_loc = 1, poly_order + 1
-
-            ! Skip
-            if (k_loc == i_loc) cycle
-
-            c = coefficients(i_loc, 1)
-            d = coefficients(i_loc, 2)
+            a = coefficients(k_loc, 1)
+            b = coefficients(k_loc, 2)      
+            
+            ! We have already computed pof for the positive imaginary complex conjugate
+            if (b < 0) cycle
 
             ! Skips eigenvalues that are numerically zero
-            if (abs(c) < 1e-12) cycle
-            if (c**2 + d**2 < 1e-12) cycle
+            if (abs(a) < 1e-12) cycle
+            if (a**2 + b**2 < 1e-12) cycle
 
-            ! theta_k/theta_i
-            div_real = (a * c + b * d)/(c**2 + d**2)
-            div_imag = (b * c - a * d)/(c**2 + d**2)
+            ! Compute product(k)_{i, j/=i} * | 1 - theta_j/theta_i|
+            do i_loc = 1, poly_order + 1
 
-            ! |1 - theta_k/theta_i|
-            div_mag = sqrt((1 - div_real)**2 + div_imag**2)
+               ! Skip
+               if (k_loc == i_loc) cycle
 
-            ! Pof is about to overflow, store the exponent and 
-            ! reset pof back to one
-            ! We can hit this for very high order polynomials, where we have to 
-            ! add more roots than 22 (ie pof > 1e308)
-            if (log10(pof(k_loc)) + log10(div_mag) > 307) then
-               overflow(k_loc) = overflow(k_loc) + log10(pof(k_loc))
-               pof(k_loc) = 1
-            end if            
+               c = coefficients(i_loc, 1)
+               d = coefficients(i_loc, 2)
 
-            ! Product
-            pof(k_loc) = pof(k_loc) * div_mag
+               ! Skips eigenvalues that are numerically zero
+               if (abs(c) < 1e-12) cycle
+               if (c**2 + d**2 < 1e-12) cycle
 
-         end do
+               ! theta_k/theta_i
+               div_real = (a * c + b * d)/(c**2 + d**2)
+               div_imag = (b * c - a * d)/(c**2 + d**2)
 
-         ! If pof > 1e4, we add an extra root, plus one extra for every 1e14
-         if (log10(pof(k_loc)) > 4 .OR. overflow(k_loc) /= 0) then
+               ! |1 - theta_k/theta_i|
+               div_mag = sqrt((1 - div_real)**2 + div_imag**2)
 
-            ! if real extra_pair_roots counts each distinct real root we're adding
-            ! if imaginary it only counts a pair as one
-            extra_pair_roots(k_loc) = ceiling((log10(pof(k_loc)) + overflow(k_loc) - 4.0)/14.0)
-            total_extra = total_extra + extra_pair_roots(k_loc)
+               ! Pof is about to overflow, store the exponent and 
+               ! reset pof back to one
+               ! We can hit this for very high order polynomials, where we have to 
+               ! add more roots than 22 (ie pof > 1e308)
+               if (log10(pof(k_loc)) + log10(div_mag) > 307) then
+                  overflow(k_loc) = overflow(k_loc) + log10(pof(k_loc))
+                  pof(k_loc) = 1
+               end if            
 
-            ! If imaginary, the pof is the same for the conjugate, let's just set it to -1
-            if (b > 0) then
-               ! We know the positive imaginary value is first, so the conjugate follows it
-               pof(k_loc+1) = -1
-               ! We need the conjugates as well
+               ! Product
+               pof(k_loc) = pof(k_loc) * div_mag
+
+            end do
+
+            ! If pof > 1e4, we add an extra root, plus one extra for every 1e14
+            if (log10(pof(k_loc)) > 4 .OR. overflow(k_loc) /= 0) then
+
+               ! if real extra_pair_roots counts each distinct real root we're adding
+               ! if imaginary it only counts a pair as one
+               extra_pair_roots(k_loc) = ceiling((log10(pof(k_loc)) + overflow(k_loc) - 4.0)/14.0)
                total_extra = total_extra + extra_pair_roots(k_loc)
 
-            end if            
-         end if
-      end do
+               ! If imaginary, the pof is the same for the conjugate, let's just set it to -1
+               if (b > 0) then
+                  ! We know the positive imaginary value is first, so the conjugate follows it
+                  pof(k_loc+1) = -1
+                  ! We need the conjugates as well
+                  total_extra = total_extra + extra_pair_roots(k_loc)
 
-      ! If we have extra roots we need to resize the coefficients storage
-      if (total_extra > 0) then
-         allocate(coefficients_temp(size(coefficients, 1), size(coefficients, 2)))
-         coefficients_temp(1:size(coefficients, 1), 1:size(coefficients, 2)) = coefficients
-         deallocate(coefficients)
-         allocate(coefficients(size(coefficients_temp, 1) + total_extra, 2))
-         coefficients = 0
-         coefficients(1:size(coefficients_temp, 1), :) = coefficients_temp
-         deallocate(coefficients_temp)
+               end if            
+            end if
+         end do
+
+         ! If we have extra roots we need to resize the coefficients storage
+         if (total_extra > 0) then
+            allocate(coefficients_temp(size(coefficients, 1), size(coefficients, 2)))
+            coefficients_temp(1:size(coefficients, 1), 1:size(coefficients, 2)) = coefficients
+            deallocate(coefficients)
+            allocate(coefficients(size(coefficients_temp, 1) + total_extra, 2))
+            coefficients = 0
+            coefficients(1:size(coefficients_temp, 1), :) = coefficients_temp
+            deallocate(coefficients_temp)
+         end if
       end if
 
       ! Take a copy of the existing roots
       coefficients_temp = coefficients
 
-      ! Add the extra copies of roots, ensuring conjugate pairs we add 
-      ! are next to each other
-      counter = size(extra_pair_roots)+1
-      do i_loc = 1, size(extra_pair_roots)
+      if (add_roots) then
+         
+         ! Add the extra copies of roots, ensuring conjugate pairs we add 
+         ! are next to each other
+         counter = size(extra_pair_roots)+1
+         do i_loc = 1, size(extra_pair_roots)
 
-         ! For each extra root pair to add
-         do j_loc = 1, extra_pair_roots(i_loc)
+            ! For each extra root pair to add
+            do j_loc = 1, extra_pair_roots(i_loc)
 
-            coefficients(counter, :) = coefficients(i_loc, :)
-            ! Add in the conjugate
-            if (coefficients(i_loc, 2) > 0) then
-               coefficients(counter+1, 1) = coefficients(i_loc, 1)
-               coefficients(counter+1, 2) = -coefficients(i_loc, 2)
-            end if
+               coefficients(counter, :) = coefficients(i_loc, :)
+               ! Add in the conjugate
+               if (coefficients(i_loc, 2) > 0) then
+                  coefficients(counter+1, 1) = coefficients(i_loc, 1)
+                  coefficients(counter+1, 2) = -coefficients(i_loc, 2)
+               end if
 
-            ! Store a perturbed root so we have unique values for the leja sort below
-            ! Just peturbing the real value
-            coefficients_temp(counter, 1) = coefficients(i_loc, 1) + j_loc * 5e-8
-            coefficients_temp(counter, 2) = coefficients(i_loc, 2)
-            ! Add in the conjugate
-            if (coefficients(i_loc, 2) > 0) then
-               coefficients_temp(counter+1, 1) = coefficients(i_loc, 1) + j_loc * 5e-8
-               coefficients_temp(counter+1, 2) = -coefficients(i_loc, 2)
-            end if            
+               ! Store a perturbed root so we have unique values for the leja sort below
+               ! Just peturbing the real value
+               coefficients_temp(counter, 1) = coefficients(i_loc, 1) + j_loc * 5e-8
+               coefficients_temp(counter, 2) = coefficients(i_loc, 2)
+               ! Add in the conjugate
+               if (coefficients(i_loc, 2) > 0) then
+                  coefficients_temp(counter+1, 1) = coefficients(i_loc, 1) + j_loc * 5e-8
+                  coefficients_temp(counter+1, 2) = -coefficients(i_loc, 2)
+               end if            
 
-            counter = counter + 1
-            if (coefficients(i_loc, 2) > 0) counter = counter + 1
+               counter = counter + 1
+               if (coefficients(i_loc, 2) > 0) counter = counter + 1
+            end do
          end do
-      end do
+      end if
 
       ! ~~~~~~~~~~~~~~
       ! Now compute a modified leja ordering for stability

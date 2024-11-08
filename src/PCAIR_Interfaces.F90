@@ -189,7 +189,7 @@ module pcair_interfaces
       type(tPC), intent(inout)                           :: pc
       PetscInt, intent(in)                               :: petsc_level
       integer, intent(in)                                :: which_inverse
-      real, dimension(:,:), allocatable, intent(inout)   :: coeffs
+      real, dimension(:,:), pointer, intent(inout)       :: coeffs
       PetscErrorCode, intent(out)                        :: ierr
 
       type(tPC)                             :: pc_shell
@@ -214,7 +214,7 @@ module pcair_interfaces
       if (which_inverse == COEFFS_INV_AFF) then
 
          ! Check sizes
-         if (allocated(coeffs)) then
+         if (associated(coeffs)) then
             if (.NOT. (size(coeffs,1) == size(pc_air_data%air_data%inv_A_ff_poly_data(our_level)%coefficients, 1) .AND. &
                 size(coeffs,2) == size(pc_air_data%air_data%inv_A_ff_poly_data(our_level)%coefficients, 2))) then
 
@@ -222,7 +222,7 @@ module pcair_interfaces
             end if
          end if
 
-         if (.NOT. allocated(coeffs)) then
+         if (.NOT. associated(coeffs)) then
             allocate(coeffs(size(pc_air_data%air_data%inv_A_ff_poly_data(our_level)%coefficients, 1), &
                             size(pc_air_data%air_data%inv_A_ff_poly_data(our_level)%coefficients, 2)))
          end if
@@ -233,7 +233,7 @@ module pcair_interfaces
       else if (which_inverse == COEFFS_INV_AFF_DROPPED) then
 
          ! Check sizes
-         if (allocated(coeffs)) then
+         if (associated(coeffs)) then
             if (.NOT. (size(coeffs,1) == size(pc_air_data%air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients, 1) .AND. &
                 size(coeffs,2) == size(pc_air_data%air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients, 2))) then
 
@@ -241,7 +241,7 @@ module pcair_interfaces
             end if
          end if
 
-         if (.NOT. allocated(coeffs)) then
+         if (.NOT. associated(coeffs)) then
             allocate(coeffs(size(pc_air_data%air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients, 1), &
                             size(pc_air_data%air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients, 2)))
          end if         
@@ -252,7 +252,7 @@ module pcair_interfaces
       else if (which_inverse == COEFFS_INV_ACC) then
 
          ! Check sizes
-         if (allocated(coeffs)) then
+         if (associated(coeffs)) then
             if (.NOT. (size(coeffs,1) == size(pc_air_data%air_data%inv_A_cc_poly_data(our_level)%coefficients, 1) .AND. &
                 size(coeffs,2) == size(pc_air_data%air_data%inv_A_cc_poly_data(our_level)%coefficients, 2))) then
 
@@ -260,7 +260,7 @@ module pcair_interfaces
             end if
          end if
 
-         if (.NOT. allocated(coeffs)) then
+         if (.NOT. associated(coeffs)) then
             allocate(coeffs(size(pc_air_data%air_data%inv_A_cc_poly_data(our_level)%coefficients, 1), &
                             size(pc_air_data%air_data%inv_A_cc_poly_data(our_level)%coefficients, 2)))
          end if          
@@ -271,7 +271,7 @@ module pcair_interfaces
       else if (which_inverse == COEFFS_INV_COARSE) then
 
          ! Check sizes
-         if (allocated(coeffs)) then
+         if (associated(coeffs)) then
             if (.NOT. (size(coeffs,1) == size(pc_air_data%air_data%inv_coarsest_poly_data%coefficients, 1) .AND. &
                 size(coeffs,2) == size(pc_air_data%air_data%inv_coarsest_poly_data%coefficients, 2))) then
 
@@ -279,7 +279,7 @@ module pcair_interfaces
             end if
          end if
 
-         if (.NOT. allocated(coeffs)) then
+         if (.NOT. associated(coeffs)) then
             allocate(coeffs(size(pc_air_data%air_data%inv_coarsest_poly_data%coefficients, 1), &
                             size(pc_air_data%air_data%inv_coarsest_poly_data%coefficients, 2)))
          end if         
@@ -303,7 +303,7 @@ module pcair_interfaces
       type(tPC), intent(inout)                           :: pc
       PetscInt, intent(in)                               :: petsc_level
       integer, intent(in)                                :: which_inverse
-      real, dimension(:,:), intent(in)                   :: coeffs
+      real, dimension(:,:), pointer, intent(in)          :: coeffs
       PetscErrorCode, intent(out)                        :: ierr
 
       type(tPC)                             :: pc_shell
@@ -327,7 +327,7 @@ module pcair_interfaces
       ! Inverse Aff
       if (which_inverse == COEFFS_INV_AFF) then
 
-         if (.NOT. allocated(pc_air_data%air_data%inv_A_ff_poly_data(our_level)%coefficients)) then
+         if (.NOT. associated(pc_air_data%air_data%inv_A_ff_poly_data(our_level)%coefficients)) then
             print *, "PCAIR MG not setup yet"
             call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)            
          end if
@@ -345,7 +345,7 @@ module pcair_interfaces
       ! Inverse dropped Aff
       else if (which_inverse == COEFFS_INV_AFF_DROPPED) then
 
-         if (.NOT. allocated(pc_air_data%air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients)) then
+         if (.NOT. associated(pc_air_data%air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients)) then
             print *, "PCAIR MG not setup yet"
             call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)            
          end if         
@@ -363,7 +363,7 @@ module pcair_interfaces
       ! Inverse Acc
       else if (which_inverse == COEFFS_INV_ACC) then
 
-         if (.NOT. allocated(pc_air_data%air_data%inv_A_cc_poly_data(our_level)%coefficients)) then
+         if (.NOT. associated(pc_air_data%air_data%inv_A_cc_poly_data(our_level)%coefficients)) then
             print *, "PCAIR MG not setup yet"
             call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)            
          end if          
@@ -381,7 +381,7 @@ module pcair_interfaces
       ! Coarsest grid matrix
       else if (which_inverse == COEFFS_INV_COARSE) then
 
-         if (.NOT. allocated(pc_air_data%air_data%inv_coarsest_poly_data%coefficients)) then
+         if (.NOT. associated(pc_air_data%air_data%inv_coarsest_poly_data%coefficients)) then
             print *, "PCAIR MG not setup yet"
             call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)            
          end if          

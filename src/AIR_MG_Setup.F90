@@ -1956,12 +1956,14 @@ module air_mg_setup
                   end if                  
                   air_data%allocated_matrices_A_ff(our_level) = .FALSE.
                   call reset_inverse_mat(air_data%inv_A_ff(our_level))
-                  if (allocated(air_data%inv_A_ff_poly_data(our_level)%coefficients)) then
+                  if (associated(air_data%inv_A_ff_poly_data(our_level)%coefficients)) then
                      deallocate(air_data%inv_A_ff_poly_data(our_level)%coefficients)
+                     air_data%inv_A_ff_poly_data(our_level)%coefficients => null()
                   end if         
-                  if (allocated(air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients)) then
+                  if (associated(air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients)) then
                      deallocate(air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients)
-                  end if                            
+                     air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients => null()
+                  end if
 
                   call VecDestroy(air_data%temp_vecs_fine(1)%array(our_level), ierr)
                   call VecDestroy(air_data%temp_vecs_fine(2)%array(our_level), ierr)
@@ -1991,8 +1993,9 @@ module air_mg_setup
                if (.NOT. reuse) then
                   call MatDestroy(air_data%A_cc(our_level), ierr)
                   call reset_inverse_mat(air_data%inv_A_cc(our_level))
-                  if (allocated(air_data%inv_A_cc_poly_data(our_level)%coefficients)) then
+                  if (associated(air_data%inv_A_cc_poly_data(our_level)%coefficients)) then
                      deallocate(air_data%inv_A_cc_poly_data(our_level)%coefficients)
+                     air_data%inv_A_cc_poly_data(our_level)%coefficients => null()
                   end if
                   air_data%allocated_matrices_A_cc(our_level) = .FALSE.
                end if
@@ -2030,8 +2033,9 @@ module air_mg_setup
             ! Coarse grid solver
             if (.NOT. reuse) then
                call reset_inverse_mat(air_data%inv_A_ff(air_data%no_levels))
-               if (allocated(air_data%inv_coarsest_poly_data%coefficients)) then
+               if (associated(air_data%inv_coarsest_poly_data%coefficients)) then
                   deallocate(air_data%inv_coarsest_poly_data%coefficients)
+                  air_data%inv_coarsest_poly_data%coefficients => null()
                end if         
             end if
             ! If we're not doing full smoothing, we have built a matshell on the top grid

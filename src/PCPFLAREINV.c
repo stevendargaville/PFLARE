@@ -18,7 +18,8 @@ PETSC_EXTERN void calculate_and_build_approximate_inverse_c(Mat *input_mat, Pets
 //
 // PFLAREINV_POWER      - GMRES polynomial with the power basis 
 // PFLAREINV_ARNOLDI    - GMRES polynomial with the arnoldi basis 
-// PFLAREINV_NEWTON     - GMRES polynomial with the newton basis - can only be used matrix-free atm      
+// PFLAREINV_NEWTON     - GMRES polynomial with the newton basis with extra roots for stability - can only be used matrix-free atm      
+// PFLAREINV_NEWTON_NO_EXTRA     - GMRES polynomial with the newton basis without extra roots - can only be used matrix-free atm      
 // PFLAREINV_NEUMANN    - Neumann polynomial
 // PFLAREINV_SAI        - SAI - cannot be used matrix-free atm
 // PFLAREINV_ISAI       - Incomplete SAI - cannot be used matrix-free atm
@@ -308,7 +309,7 @@ static PetscErrorCode PCSetFromOptions_PFLAREINV_c(PetscOptionItems *PetscOption
 #else
    PetscOptionsHead(PetscOptionsObject, "PCPFLAREINV options");
 #endif   
-   const char *const PCPFLAREINVTypes[] = {"POWER", "ARNOLDI", "NEWTON", "NEUMANN", "SAI", "ISAI", "WJACOBI", "JACOBI", "PCPFLAREINVType", "PFLAREINV_", NULL};
+   const char *const PCPFLAREINVTypes[] = {"POWER", "ARNOLDI", "NEWTON", "NEWTON_NO_EXTRA", "NEUMANN", "SAI", "ISAI", "WJACOBI", "JACOBI", "PCPFLAREINVType", "PFLAREINV_", NULL};
    PetscOptionsEnum("-pc_pflareinv_type", "Inverse type", "PCPFLAREINVSetType", PCPFLAREINVTypes, (PetscEnum)deflt, (PetscEnum *)&type, &flg);
    if (flg) PCPFLAREINVSetType(pc, type);
    PetscOptionsBool("-pc_pflareinv_matrix_free", "Apply matrix free", "PCPFLAREINVSetMatrixFree", inv_data->matrix_free, &inv_data->matrix_free, NULL);
@@ -343,7 +344,7 @@ static PetscErrorCode PCSetUp_PFLAREINV_c(PC pc)
    PCPFLAREINVGetType(pc, &type);
 
    // Newton has to be matrix free
-   if (type == PFLAREINV_NEWTON)
+   if (type == PFLAREINV_NEWTON || type == PFLAREINV_NEWTON_NO_EXTRA)
    {
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 17)
       PetscCheck(inv_data->matrix_free, comm, PETSC_ERR_ARG_WRONGSTATE, "GMRES polynomial with Newton basis must be applied matrix-free");
@@ -433,7 +434,11 @@ static PetscErrorCode PCView_PFLAREINV_c(PC pc, PetscViewer viewer)
       }
       else if (type == PFLAREINV_NEWTON)
       {
-         PetscViewerASCIIPrintf(viewer, "  GMRES polynomial, newton basis, order %i \n", inv_data->poly_order);      
+         PetscViewerASCIIPrintf(viewer, "  GMRES polynomial, newton basis with extra roots, order %i \n", inv_data->poly_order); 
+      }
+      else if (type == PFLAREINV_NEWTON_NO_EXTRA)
+      {
+         PetscViewerASCIIPrintf(viewer, "  GMRES polynomial, newton basis without extra roots, order %i \n", inv_data->poly_order);               
       }
       else if (type == PFLAREINV_SAI)
       {

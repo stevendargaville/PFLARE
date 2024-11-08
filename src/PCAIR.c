@@ -709,7 +709,8 @@ PETSC_EXTERN PetscErrorCode PCAIRSetStrongRThreshold(PC pc, PetscReal input_real
 // These are defined by PCPFLAREINVType 
 // "power" - PFLAREINV_POWER - GMRES polynomial with the power basis 
 // "arnoldi" - PFLAREINV_ARNOLDI - GMRES polynomial with the arnoldi basis 
-// "newton" - PFLAREINV_NEWTON - GMRES polynomial with the newton basis - can only be used matrix-free atm      
+// "newton" - PFLAREINV_NEWTON - GMRES polynomial with the newton basis with extra roots for stability - can only be used matrix-free atm   
+// "newton_no_extra" - PFLAREINV_NEWTON_NO_EXTRA - GMRES polynomial with the newton basis with no extra roots - can only be used matrix-free atm      
 // "neumann" - PFLAREINV_NEUMANN - Neumann polynomial
 // "sai" - PFLAREINV_SAI - SAI
 // "isai" - PFLAREINV_ISAI - Incomplete SAI (ie a restricted additive schwartz)
@@ -1128,7 +1129,7 @@ static PetscErrorCode PCSetFromOptions_AIR_c(PetscOptionItems *PetscOptionsObjec
    PetscOptionsInt("-pc_air_coarse_eq_limit", "Minimum number of global unknowns on the coarse grid", "PCAIRSetCoarseEqLimit", old_int, &input_int, NULL);
    PCAIRSetCoarseEqLimit(pc, input_int);   
    // ~~~~ 
-   const char *const PCPFLAREINVTypes[] = {"POWER", "ARNOLDI", "NEWTON", "NEUMANN", "SAI", "ISAI", "WJACOBI", "JACOBI", "PCPFLAREINVType", "PFLAREINV_", NULL};
+   const char *const PCPFLAREINVTypes[] = {"POWER", "ARNOLDI", "NEWTON", "NEWTON_NO_EXTRA", "NEUMANN", "SAI", "ISAI", "WJACOBI", "JACOBI", "PCPFLAREINVType", "PFLAREINV_", NULL};
    PCAIRGetInverseType(pc, &old_type);
    type = old_type;
    PetscOptionsEnum("-pc_air_inverse_type", "Inverse type", "PCPFLAREINVSetType", PCPFLAREINVTypes, (PetscEnum)old_type, (PetscEnum *)&type, &flg);
@@ -1288,7 +1289,11 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
          }
          else if (input_type == PFLAREINV_NEWTON)
          {
-            PetscViewerASCIIPrintf(viewer, "    GMRES polynomial, newton basis, order %"PetscInt_FMT" \n", input_int_two);      
+            PetscViewerASCIIPrintf(viewer, "    GMRES polynomial, newton basis with extra roots, order %"PetscInt_FMT" \n", input_int_two);      
+         }
+         else if (input_type == PFLAREINV_NEWTON_NO_EXTRA)
+         {
+            PetscViewerASCIIPrintf(viewer, "    GMRES polynomial, newton basis without extra roots, order %"PetscInt_FMT" \n", input_int_two);             
          }
          else if (input_type == PFLAREINV_SAI)
          {
@@ -1351,7 +1356,11 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
          }
          else if (input_type == PFLAREINV_NEWTON)
          {
-            PetscViewerASCIIPrintf(viewer, "    F smooth: GMRES polynomial, newton basis, order %"PetscInt_FMT" \n", input_int_two);      
+            PetscViewerASCIIPrintf(viewer, "    F smooth: GMRES polynomial, newton basis with extra roots, order %"PetscInt_FMT" \n", input_int_two);      
+         }
+         else if (input_type == PFLAREINV_NEWTON_NO_EXTRA)
+         {
+            PetscViewerASCIIPrintf(viewer, "    F smooth: GMRES polynomial, newton basis without extra roots, order %"PetscInt_FMT" \n", input_int_two);             
          }
          else if (input_type == PFLAREINV_SAI)
          {
@@ -1405,7 +1414,11 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
             }
             else if (input_type == PFLAREINV_NEWTON)
             {
-               PetscViewerASCIIPrintf(viewer, "    C smooth: GMRES polynomial, newton basis, order %"PetscInt_FMT" \n", input_int_two);      
+               PetscViewerASCIIPrintf(viewer, "    C smooth: GMRES polynomial, newton basis with extra roots, order %"PetscInt_FMT" \n", input_int_two);      
+            }
+            else if (input_type == PFLAREINV_NEWTON_NO_EXTRA)
+            {
+               PetscViewerASCIIPrintf(viewer, "    C smooth: GMRES polynomial, newton basis without extra roots, order %"PetscInt_FMT" \n", input_int_two);                
             }
             else if (input_type == PFLAREINV_SAI)
             {
@@ -1508,7 +1521,11 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
       }
       else if (input_type == PFLAREINV_NEWTON)
       {
-         PetscViewerASCIIPrintf(viewer, "    GMRES polynomial, newton basis, order %"PetscInt_FMT" \n", input_int_two);      
+         PetscViewerASCIIPrintf(viewer, "    GMRES polynomial, newton basis with extra roots, order %"PetscInt_FMT" \n", input_int_two);      
+      }
+      else if (input_type == PFLAREINV_NEWTON_NO_EXTRA)
+      {
+         PetscViewerASCIIPrintf(viewer, "    GMRES polynomial, newton basis without extra roots, order %"PetscInt_FMT" \n", input_int_two);          
       }
       else if (input_type == PFLAREINV_SAI)
       {

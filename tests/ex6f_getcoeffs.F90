@@ -15,7 +15,7 @@ module solve_module
    implicit none
   
    type real_coeffs
-      real, dimension(:, :), allocatable :: coeffs
+      real, dimension(:, :), pointer :: coeffs
    end type real_coeffs   
 
 contains 

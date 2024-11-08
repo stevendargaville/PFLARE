@@ -20,7 +20,8 @@ PFLARE can scalably solve:
    | ------------- | -- | ------------- |
    | power  |  PFLAREINV_POWER  | GMRES polynomial with the power basis  |
    | arnoldi  |  PFLAREINV_ARNOLDI  | GMRES polynomial with the Arnoldi basis  |
-   | newton  |  PFLAREINV_NEWTON  | GMRES polynomial with the Newton basis  |
+   | newton  |  PFLAREINV_NEWTON  | GMRES polynomial with the Newton basis with extra roots for stability  |
+   | newton_no_extra  |  PFLAREINV_NEWTON_NO_EXTRA  | GMRES polynomial with the Newton basis with no extra roots   |
    | neumann  |  PFLAREINV_NEUMANN  | Neumann polynomial  |
    | sai  |  PFLAREINV_SAI  | Sparse approximate inverse  |
    | isai  |  PFLAREINV_ISAI  | Incomplete sparse approximate inverse (equivalent to a one-level RAS)  |

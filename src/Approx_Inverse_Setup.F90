@@ -29,7 +29,8 @@ module approx_inverse_setup
       ! inverse_type:
       ! PFLAREINV_POWER - GMRES polynomial with the power basis 
       ! PFLAREINV_ARNOLDI - GMRES polynomial with the arnoldi basis 
-      ! PFLAREINV_NEWTON - GMRES polynomial with the newton basis - can only be used matrix-free atm      
+      ! PFLAREINV_NEWTON - GMRES polynomial with the newton basis with extra roots for stability - can only be used matrix-free atm      
+      ! PFLAREINV_NEWTON_NO_EXTRA - GMRES polynomial with the newton basis with no extra roots - can only be used matrix-free atm      
       ! PFLAREINV_NEUMANN - Neumann polynomial
       ! PFLAREINV_SAI - SAI
       ! PFLAREINV_ISAI - Incomplete SAI (ie a restricted additive schwartz)
@@ -63,7 +64,7 @@ module approx_inverse_setup
       ! Have to allocate heap memory if matrix-free as the context in inv_matrix
       ! just points at the coefficients
       if (matrix_free) then
-         if (inverse_type == PFLAREINV_NEWTON) then
+         if (inverse_type == PFLAREINV_NEWTON .OR. inverse_type == PFLAREINV_NEWTON_NO_EXTRA) then
             ! Newton basis needs storage for real and imaginary roots
             allocate(coefficients(poly_order + 1, 2))
          else 
@@ -155,7 +156,9 @@ module approx_inverse_setup
       end if
 
       if (buffers%subcomm .AND. &
-            (inverse_type == PFLAREINV_ARNOLDI .OR. inverse_type == PFLAREINV_NEWTON)) then
+            (inverse_type == PFLAREINV_ARNOLDI .OR. &
+            inverse_type == PFLAREINV_NEWTON .OR. &
+            inverse_type == PFLAREINV_NEWTON_NO_EXTRA)) then
 
          ! Create a version of matrix on a subcomm and store it in buffers%matrix
          ! If all ranks have entries, then this just returns a pointer to the original 
@@ -199,11 +202,17 @@ module approx_inverse_setup
             ! Does lots of reductions in parallel
             call calculate_gmres_polynomial_coefficients_arnoldi(buffers%matrix, poly_order, coefficients(:, 1))
 
-         ! Gmres polynomial with Newton basis - Can only use matrix-free
+         ! Gmres polynomial with Newton basis with extra added roots for stability - Can only use matrix-free
          else if (inverse_type == PFLAREINV_NEWTON) then
 
             ! Does lots of reductions in parallel
-            call calculate_gmres_polynomial_roots_newton(buffers%matrix, poly_order, coefficients)
+            call calculate_gmres_polynomial_roots_newton(buffers%matrix, poly_order, .TRUE., coefficients)
+
+         ! Gmres polynomial with Newton basis without extra added roots - Can only use matrix-free
+         else if (inverse_type == PFLAREINV_NEWTON_NO_EXTRA) then
+
+            ! Does lots of reductions in parallel
+            call calculate_gmres_polynomial_roots_newton(buffers%matrix, poly_order, .FALSE., coefficients)            
          end if
       end if
 
@@ -231,7 +240,7 @@ module approx_inverse_setup
                      MPI_COMM_MATRIX, buffers%request, errorcode)
 
          ! Gmres polynomial with Newton basis - Can only use matrix-free
-         else if (inverse_type == PFLAREINV_NEWTON) then
+         else if (inverse_type == PFLAREINV_NEWTON .OR. inverse_type == PFLAREINV_NEWTON_NO_EXTRA) then
 
             ! Have to broadcast the 2D real and imaginary roots
             call MPI_IBcast(coefficients, size(coefficients, 1) * size(coefficients, 2), MPI_DOUBLE, 0, &
@@ -255,7 +264,7 @@ module approx_inverse_setup
       integer, intent(in)                               :: inverse_type, poly_order
       integer, intent(in)                               :: inverse_sparsity_order
       type(tsqr_buffers), intent(inout)                 :: buffers      
-      real, dimension(:, :), pointer, contiguous, intent(inout)  :: coefficients
+      real, dimension(:, :), pointer, intent(inout)     :: coefficients
       logical, intent(in)                               :: matrix_free
       type(tMat), intent(inout)                         :: reuse_mat, inv_matrix
 
@@ -293,7 +302,7 @@ module approx_inverse_setup
                   inverse_sparsity_order, matrix_free, reuse_mat, inv_matrix)  
 
       ! Gmres polynomial with newton basis
-      else if (inverse_type == PFLAREINV_NEWTON) then
+      else if (inverse_type == PFLAREINV_NEWTON .OR. inverse_type == PFLAREINV_NEWTON_NO_EXTRA) then
 
          if (.NOT. matrix_free) then
             print *, "GMRES polynomial with Newton basis must be applied matrix-free"
@@ -369,7 +378,10 @@ module approx_inverse_setup
          ! If its a matshell, make sure to delete its ctx
          if (mat_type==MATSHELL) then
             call MatShellGetContext(matrix, mat_ctx, ierr)
-            if (mat_ctx%own_coefficients) deallocate(mat_ctx%coefficients)
+            if (mat_ctx%own_coefficients) then
+               deallocate(mat_ctx%coefficients)
+               mat_ctx%coefficients => null()
+            end if
             deallocate(mat_ctx)
          end if               
          call MatDestroy(matrix, ierr)
