@@ -54,12 +54,13 @@ module weighted_jacobi
       ! This returns the global index of the local portion of the matrix
       call MatGetOwnershipRange(matrix, global_row_start, global_row_end_plus_one, ierr)        
 
-      call MatDuplicate(matrix, MAT_COPY_VALUES, temp_mat, ierr)          
       call MatCreateVecs(matrix, rhs_copy, diag_vec, ierr)
       call MatGetDiagonal(matrix, diag_vec, ierr)
 
       ! If weighting the Jacobi
       if (weighted) then
+
+         call MatDuplicate(matrix, MAT_COPY_VALUES, temp_mat, ierr)          
 
          ! D^(1/2)
          call VecSqrtAbs(diag_vec, ierr)
