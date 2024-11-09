@@ -30,7 +30,8 @@ module gmres_poly_newton
       integer :: i_loc, k_loc, counter
       integer :: max_loc(1)
       real, dimension(:), allocatable :: magnitude
-      real :: a, b, squares
+      real :: a, b, squares, max_mag
+      logical, dimension(size(real_roots)) :: sorted
 
       ! ~~~~~~    
 
@@ -45,8 +46,11 @@ module gmres_poly_newton
       max_loc = maxloc(magnitude)
       counter = 1
 
+      sorted = .FALSE.
+
       ! That is our first entry
       indices(counter) = max_loc(1)
+      sorted(indices(counter)) = .TRUE.
       counter = counter + 1
       ! If it was imaginary its complex conjugate is next to this one
       if (imag_roots(indices(counter-1)) /= 0.0) then
@@ -58,42 +62,44 @@ module gmres_poly_newton
             ! If negative we know the conjugate is one behind
             indices(counter) = indices(counter - 1) - 1
          end if
+         sorted(indices(counter)) = .TRUE.
          counter = counter + 1
       end if
 
       ! Do while we still have some sorting to do
       do while (counter-1 < size(real_roots))
 
+         max_mag = -huge(0.0)
+
          ! For each value compute a product of differences
          do i_loc = 1, size(real_roots)
 
+            ! Skip any we've already sorted
+            if (sorted(i_loc)) cycle
             magnitude(i_loc) = 1.0
 
             ! Loop over all those we've sorted so far
-            k_loop: do k_loc = 1, counter-1
+            do k_loc = 1, counter-1
                
                ! Distance
                a = real_roots(i_loc) - real_roots(indices(k_loc))
                b = imag_roots(i_loc) - imag_roots(indices(k_loc))
 
                squares = a**2 + b**2
-               ! This is just a test for non zero, as squares can't be negative
-               ! This ensures if we have already added in a complex root, we skip its
-               ! complex conjugate 
-               if (squares > 0) then
-                  magnitude(i_loc) = magnitude(i_loc) + &
-                     log10(sqrt(squares))
-               else
-                  ! Be careful here to use huge(0.0) rather than huge(0)!
-                  magnitude(i_loc) = -huge(0.0)
-                  exit k_loop
-               end if
-            end do k_loop
+               magnitude(i_loc) = magnitude(i_loc) + &
+                  log10(sqrt(squares))
+            end do
+            
+            ! Store the biggest as we're going
+            if (magnitude(i_loc) > max_mag) then
+               max_mag = magnitude(i_loc)
+               max_loc(1) = i_loc
+            end if            
          end do
 
          ! The new index is the biggest in distance 
-         max_loc = maxloc(magnitude)
          indices(counter) = max_loc(1)
+         sorted(indices(counter)) = .TRUE.
          counter = counter + 1
          ! If it was imaginary its complex conjugate is next to this one
          if (imag_roots(indices(counter - 1)) /= 0.0) then
@@ -108,7 +114,8 @@ module gmres_poly_newton
             else
                ! If negative we know the conjugate is one behind
                indices(counter) = indices(counter - 1) - 1
-            end if            
+            end if    
+            sorted(indices(counter)) = .TRUE.
             counter = counter + 1
          end if
       end do
