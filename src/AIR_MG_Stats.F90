@@ -3,6 +3,7 @@ module air_mg_stats
    use petsc
    use petsc_helper
    use air_data_type
+   use gmres_poly
 
 #include "petsc/finclude/petsc.h"
       
@@ -89,7 +90,7 @@ module air_mg_stats
       type(tPC), intent(in)                  :: pcmg
       integer(kind=8), intent(out)           :: nnzs
 
-      integer :: our_level
+      integer :: our_level, i_loc, non_zero_order
       PetscInt :: global_rows, global_cols, maxits, petsc_level
       PetscErrorCode :: ierr
       PCType pc_type
@@ -97,6 +98,7 @@ module air_mg_stats
       real :: rtol, atol, dtol
       integer(kind=8) maxits_long, maxits_aff_long, gmres_size_long, poly_order_long
       MatType:: mat_type
+      logical :: zero_root
 
       ! ~~~~~~    
       
@@ -112,7 +114,26 @@ module air_mg_stats
       call KSPGetTolerances(ksp, rtol, atol, dtol, maxits, ierr)
       ! Round to long
       maxits_long = int(maxits, kind=8)
-      gmres_size_long = int(air_data%options%coarsest_poly_order, kind=8)
+      ! What order is our matrix-free polynomial on the coarse grid
+      non_zero_order = size(air_data%inv_coarsest_poly_data%coefficients,1)
+      ! We may have zero roots with newton that are skipped
+      if (air_data%options%coarsest_inverse_type == PFLAREINV_NEWTON) then
+         do i_loc = 1, size(air_data%inv_coarsest_poly_data%coefficients,1)
+            zero_root = .FALSE.
+            if (air_data%inv_coarsest_poly_data%coefficients(i_loc,2) == 0.0) then
+               if (abs(air_data%inv_coarsest_poly_data%coefficients(i_loc,1)) < 1e-12) zero_root = .TRUE.
+            else
+               if (air_data%inv_coarsest_poly_data%coefficients(i_loc,1)**2 + &
+                        air_data%inv_coarsest_poly_data%coefficients(i_loc,2)**2 < 1e-12) zero_root = .TRUE.
+            end if
+
+            if (zero_root) then
+               non_zero_order = non_zero_order - 1
+            end if
+         end do
+      end if
+
+      gmres_size_long = int(non_zero_order, kind=8)
       poly_order_long = int(air_data%options%poly_order, kind=8)
 
       ! Application of the coarse matrix inverse with richardson
