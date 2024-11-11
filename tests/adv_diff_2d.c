@@ -162,7 +162,6 @@ int main(int argc,char **argv)
   Hy    = 1.0 / (PetscReal)(N);  
 
   // Diagonally scale our matrix 
-  // the rhs is zero so it doesn't need to be scaled
   if (diag_scale) {
    ierr = VecDuplicate(x, &diag_vec);
    ierr = MatGetDiagonal(A, diag_vec);
@@ -172,6 +171,7 @@ int main(int argc,char **argv)
 #else
    ierr = MatDiagonalScale(A, diag_vec, PETSC_NULL);    
 #endif
+   ierr = VecPointwiseMult(b, diag_vec, b); CHKERRQ(ierr);
    ierr = VecDestroy(&diag_vec); CHKERRQ(ierr);
   }
 

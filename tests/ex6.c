@@ -14,11 +14,11 @@ int main(int argc,char **args)
   PetscLogStage  stage1,stage2;
 #endif
   PetscReal      norm;
-  Vec            x,b,u;
+  Vec            x,b,u, diag_vec;
   Mat            A;
   char           file[PETSC_MAX_PATH_LEN];
   PetscViewer    fd;
-  PetscBool      flg,b_in_f = PETSC_TRUE;
+  PetscBool      flg,b_in_f = PETSC_TRUE, diag_scale = PETSC_FALSE;
   KSP            ksp;
   PC             pc;
   KSPConvergedReason reason;
@@ -40,6 +40,7 @@ int main(int argc,char **args)
     ierr = VecSetRandom(b,NULL);CHKERRQ(ierr);
   }
   ierr = PetscViewerDestroy(&fd);CHKERRQ(ierr);
+  PetscOptionsGetBool(NULL, NULL, "-diag_scale", &diag_scale, NULL);
 
   /*
    If the load matrix is larger then the vector, due to being padded
@@ -70,13 +71,32 @@ int main(int argc,char **args)
   ierr = VecDuplicate(b,&x);CHKERRQ(ierr);
   ierr = VecDuplicate(b,&u);CHKERRQ(ierr);
 
-  ierr = VecSet(x,0.0);CHKERRQ(ierr);
+  // If we don't load b, just set x to random and the rhs to zero
+  if (!b_in_f) {
+    ierr = VecSetRandom(x,NULL);CHKERRQ(ierr);
+    ierr = VecSet(b,0.0);CHKERRQ(ierr);
+  }
   ierr = PetscBarrier((PetscObject)A);CHKERRQ(ierr);
+
+  // Diagonally scale our matrix 
+  if (diag_scale) {
+   ierr = VecDuplicate(x, &diag_vec);
+   ierr = MatGetDiagonal(A, diag_vec);
+   ierr = VecReciprocal(diag_vec);
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 19)
+   ierr = MatDiagonalScale(A, diag_vec, PETSC_NULLPTR);    
+#else
+   ierr = MatDiagonalScale(A, diag_vec, PETSC_NULL);    
+#endif
+   ierr = VecPointwiseMult(b, diag_vec, b); CHKERRQ(ierr);
+   ierr = VecDestroy(&diag_vec); CHKERRQ(ierr);
+  }  
 
   ierr = PetscLogStageRegister("mystage 1",&stage1);CHKERRQ(ierr);
   ierr = PetscLogStagePush(stage1);CHKERRQ(ierr);
   ierr = KSPCreate(PETSC_COMM_WORLD,&ksp);CHKERRQ(ierr);
   ierr = KSPSetOperators(ksp,A,A);CHKERRQ(ierr);
+  ierr = KSPSetInitialGuessNonzero(ksp, PETSC_TRUE);
 
   //~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   //       Let's use AIRG as our PC
