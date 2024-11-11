@@ -1315,16 +1315,15 @@ module air_mg_setup
          ! ~~~~~~~~~
          ! Let's smooth near null-space vectors if needed
          ! ~~~~~~~~~
-         call timer_start(TIMER_ID_AIR_CONSTRAIN)
-
          if (air_data%options%constrain_z .OR. air_data%options%constrain_w) then
+            call timer_start(TIMER_ID_AIR_CONSTRAIN)
             call smooth_near_nullspace(air_data%coarse_matrix(our_level), &
                air_data%options%constrain_z, &
                air_data%options%constrain_w, &
                left_null_vecs, right_null_vecs)
+            call timer_finish(TIMER_ID_AIR_CONSTRAIN)
          end if
 
-         call timer_finish(TIMER_ID_AIR_CONSTRAIN)
 
          ! ~~~~~~~~~
          ! Setup the details of our gmres polynomials
