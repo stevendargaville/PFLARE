@@ -85,6 +85,7 @@ module gmres_poly_newton
                a = real_roots(i_loc) - real_roots(indices(k_loc))
                b = imag_roots(i_loc) - imag_roots(indices(k_loc))
 
+               ! If we have repeated roots this will be exactly zero, and magnitude will be -infinity
                squares = a**2 + b**2
                magnitude(i_loc) = magnitude(i_loc) + &
                   log10(sqrt(squares))
@@ -96,6 +97,17 @@ module gmres_poly_newton
                max_loc(1) = i_loc
             end if            
          end do
+
+         ! If we found nothing (ie the only unsorted are repeated roots with zero distance)
+         ! just have the next entry in the list
+         if (max_mag < 0) then
+            do i_loc = 1, size(real_roots)
+               if (.NOT. sorted(i_loc)) then
+                  max_loc(1) = i_loc
+                  exit
+               endif
+            end do
+         end if      
 
          ! The new index is the biggest in distance 
          indices(counter) = max_loc(1)
@@ -110,6 +122,7 @@ module gmres_poly_newton
             ! the positive one first
             if (imag_roots(indices(counter-1)) > 0) then
                ! So if positive we know the conjugate is ahead one
+
                indices(counter) = indices(counter - 1) + 1
             else
                ! If negative we know the conjugate is one behind
