@@ -7,6 +7,7 @@ module gmres_poly
    use tsqr
    use gmres_poly_data_type
    use nonbusywait
+   use petsc_helper
                 
    ! OpenMP module
 #ifdef _OPENMP
@@ -816,7 +817,8 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       ! Copy in the highest unconstrained power
       ! If not re-using
       if (PetscMatIsNull(cmat)) then    
-         call MatDuplicate(matrix_powers(poly_sparsity_order), MAT_COPY_VALUES, cmat, ierr)
+         ! Duplicate & copy the matrix, but ensure there is a diagonal present
+         call mat_duplicate_copy_plus_diag(matrix_powers(poly_sparsity_order), cmat)
       else
          call MatCopy(matrix_powers(poly_sparsity_order), cmat, SAME_NONZERO_PATTERN, ierr)
       end if
@@ -1490,7 +1492,8 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
 
          ! If not re-using
          if (PetscMatIsNull(inv_matrix)) then
-            call MatDuplicate(matrix, MAT_COPY_VALUES, inv_matrix, ierr)
+            ! Duplicate & copy the matrix, but ensure there is a diagonal present
+            call mat_duplicate_copy_plus_diag(matrix, inv_matrix)
          else
             call MatCopy(matrix, inv_matrix, SAME_NONZERO_PATTERN, ierr)
          end if
@@ -1535,7 +1538,8 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       ! Copy in the initial matrix
       reuse_triggered = .FALSE.
       if (PetscMatIsNull(inv_matrix)) then
-         call MatDuplicate(matrix, MAT_COPY_VALUES, inv_matrix, ierr)
+         ! Duplicate & copy the matrix, but ensure there is a diagonal present
+         call mat_duplicate_copy_plus_diag(matrix, inv_matrix)
       else
          ! For the powers > 1 the pattern of the original matrix will be different
          ! to the resulting inverse

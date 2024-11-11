@@ -443,6 +443,169 @@ module petsc_helper
          
    end subroutine remove_from_sparse_match
 
+  !------------------------------------------------------------------------------------------------------------------------
+   
+   subroutine mat_duplicate_copy_plus_diag(input_mat, output_mat)
+
+      ! Duplicates and copies the values from input matrix into the output mat, but ensures
+      ! there are always diagonal entries present that are set to zero if absent
+   
+      ! ~~~~~~~~~~
+      ! Input 
+      type(tMat), intent(in) :: input_mat
+      type(tMat), intent(inout) :: output_mat
+
+      PetscInt :: col, ncols, ifree, max_nnzs
+      PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
+      PetscInt :: global_col_start, global_col_end_plus_one, diagonal_index
+      PetscErrorCode :: ierr
+      integer :: errorcode, comm_size
+      PetscInt, dimension(:), allocatable :: nnzs_row, onzs_row, cols
+      real, dimension(:), allocatable :: vals
+      PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
+      MPI_Comm :: MPI_COMM_MATRIX
+      
+      ! ~~~~~~~~~~
+      ! If the tolerance is 0 we still want to go through this routine and drop the zeros
+
+      call PetscObjectGetComm(input_mat, MPI_COMM_MATRIX, ierr)    
+      ! Get the comm size 
+      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)
+
+      ! Get the local sizes
+      call MatGetLocalSize(input_mat, local_rows, local_cols, ierr)
+      call MatGetSize(input_mat, global_rows, global_cols, ierr)
+      ! This returns the global index of the local portion of the matrix
+      call MatGetOwnershipRange(input_mat, global_row_start, global_row_end_plus_one, ierr)  
+      call MatGetOwnershipRangeColumn(input_mat, global_col_start, global_col_end_plus_one, ierr)  
+      
+      allocate(nnzs_row(local_rows))
+      nnzs_row = 0
+
+      max_nnzs = 0
+      if (comm_size/=1) then
+         allocate(onzs_row(local_rows))
+         onzs_row = 0
+      end if
+
+      do ifree = global_row_start, global_row_end_plus_one-1                  
+
+         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
+         if (ncols > max_nnzs) max_nnzs = ncols
+         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
+      end do
+
+      allocate(cols(max_nnzs))
+      allocate(vals(max_nnzs)) 
+      
+      if (comm_size/=1) then
+         ! Loop over global row indices
+         do ifree = global_row_start, global_row_end_plus_one-1                  
+            ! Get the row
+            call MatGetRow(input_mat, ifree, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
+
+            diagonal_index = -1
+            do col = 1, ncols
+
+               if (cols(col) == ifree) then
+                  diagonal_index = col
+               end if
+
+               ! Have to count the diagonal and off-diagonal nnzs in parallel           
+               if (cols(col) .ge. global_col_start .AND. cols(col) .le. global_col_end_plus_one - 1) then
+                  ! Convert to local row indices
+                  nnzs_row(ifree - global_row_start + 1) = nnzs_row(ifree - global_row_start + 1) + 1
+               else
+                  ! Convert to local row indices
+                  onzs_row(ifree - global_row_start + 1) = onzs_row(ifree - global_row_start + 1) + 1
+               end if
+            end do
+
+            ! If there was no diagonal, we're going to add one in
+            if (diagonal_index == -1) nnzs_row(ifree - global_row_start + 1) = nnzs_row(ifree - global_row_start + 1) + 1
+
+            ! Must call otherwise petsc leaks memory
+            call MatRestoreRow(input_mat, ifree, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
+         end do
+      else
+         ! Loop over global row indices
+         do ifree = global_row_start, global_row_end_plus_one-1                  
+            ! Get the row
+            call MatGetRow(input_mat, ifree, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
+   
+            diagonal_index = -1
+            do col = 1, ncols
+
+               if (cols(col) == ifree) then
+                  diagonal_index = col
+               end if
+
+               ! Convert to local row indices
+               nnzs_row(ifree - global_row_start + 1) = nnzs_row(ifree - global_row_start + 1) + 1
+            end do
+
+            ! If there was no diagonal, we're going to add one in
+            if (diagonal_index == -1) nnzs_row(ifree - global_row_start + 1) = nnzs_row(ifree - global_row_start + 1) + 1
+
+            ! Must call otherwise petsc leaks memory
+            call MatRestoreRow(input_mat, ifree, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
+         end do         
+      end if
+
+      ! Create the output matrix
+      if (comm_size/=1) then
+         call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
+                  global_rows, global_cols, &
+                  nz_ignore, nnzs_row, &
+                  nz_ignore, onzs_row, &
+                  output_mat, ierr)   
+      else
+         call MatCreateSeqAIJ(PETSC_COMM_SELF, global_rows, global_cols, nz_ignore, nnzs_row, &
+                     output_mat, ierr)            
+      end if   
+       
+      ! Don't set any off processor entries so no need for a reduction when assembling
+      call MatSetOption(output_mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)      
+      call MatSetOption(output_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)     
+      
+      ! Now go and fill the new matrix
+      ! Loop over global row indices
+      do ifree = global_row_start, global_row_end_plus_one-1                  
+      
+         ! Get the row
+         call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)  
+         
+         ! Find where the diagonal is
+         diagonal_index = -1
+         do col = 1, ncols
+            if (cols(col) == ifree) then
+               diagonal_index = col
+               exit
+            end if
+         end do            
+
+         ! Much quicker to call setvalues
+         call MatSetValues(output_mat, one, [ifree], ncols, cols, &
+                  vals, INSERT_VALUES, ierr)
+
+         ! Set the diagonal to zero if there isn't one
+         if (diagonal_index == -1) then
+            call MatSetValue(output_mat, ifree, ifree, 0.0, INSERT_VALUES, ierr)
+         end if
+
+         ! Must call otherwise petsc leaks memory
+         call MatRestoreRow(input_mat, ifree, ncols, cols, vals, ierr)   
+      end do           
+      
+      call MatAssemblyBegin(output_mat, MAT_FINAL_ASSEMBLY, ierr)
+
+      deallocate(cols, vals, nnzs_row)
+      if (comm_size/=1) deallocate(onzs_row)
+
+      call MatAssemblyEnd(output_mat, MAT_FINAL_ASSEMBLY, ierr) 
+         
+   end subroutine mat_duplicate_copy_plus_diag   
+
    !------------------------------------------------------------------------------------------------------------------------
    
    subroutine generate_one_point_from_sparse(input_mat, output_mat)

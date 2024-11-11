@@ -60,9 +60,9 @@ OBJS := $(OBJDIR)/NonBusyWait.o \
 		  $(OBJDIR)/C_PETSc_Interfaces.o \
 		  $(OBJDIR)/PCPFLAREINV_Interfaces.o \
 		  $(OBJDIR)/PCAIR_Data_Type.o \
+		  $(OBJDIR)/PETSc_Helper.o \
 		  $(OBJDIR)/Gmres_Poly.o \
 		  $(OBJDIR)/Gmres_Poly_Newton.o \
-		  $(OBJDIR)/PETSc_Helper.o \
 		  $(OBJDIR)/AIR_MG_Stats.o \
 		  $(OBJDIR)/SAI_Z.o \
 		  $(OBJDIR)/Constrain_Z_or_W.o \
