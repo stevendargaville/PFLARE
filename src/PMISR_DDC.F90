@@ -652,6 +652,11 @@ module pmisr_ddc
             ! Bin the entries between 0 and 1
             ! The top bin has entries greater than 0.9 (including greater than 1)
             bin = min(floor(diag_dom_ratio(ifree - a_global_row_start + 1) * size(dom_bins)) + 1, size(dom_bins))
+            ! If the diagonal dominance ratio is really large the expression above will overflow
+            ! the int to negative, so we just stick that in the top bin            
+            if (bin < 0) then
+               bin = size(dom_bins)
+            end if
             dom_bins(bin) = dom_bins(bin) + 1
 
             call MatRestoreRow(Aff, ifree, ncols, cols, vals, ierr)                                 
