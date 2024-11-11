@@ -198,7 +198,7 @@ contains
          do petsc_level = num_levels - 1, 1, -1
             ! Get the inverse Aff coefficients
             ! Note that the fortran interface passes out a *copy* of the coefficeints in the pcair object
-            ! as an allocatable array
+            ! as a pointer array
             ! The C inteface however just returns a pointer to the coefficients within the pcair object 
             ! so if you want to save/restore them later in C you will have to copy the values
             ! The C interface therefore also passes out the sizes of the coefficients array
