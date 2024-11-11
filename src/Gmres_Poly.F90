@@ -90,6 +90,45 @@ module gmres_poly
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
+   subroutine compute_mf_gmres_poly_num_matvecs(inverse_type, coefficients, matvecs)   
+
+      ! Computes how many matvecs we need to apply our matrix-free gmres polynomial
+
+      ! ~~~~~~
+      integer, intent(in)                               :: inverse_type
+      real, dimension(:, :), intent(in)                 :: coefficients
+      integer, intent(out)                              :: matvecs
+
+      integer :: i_loc
+      logical :: zero_root
+      ! ~~~~~~       
+      
+      ! What order is our polynomial
+      matvecs = size(coefficients,1)
+
+      ! We may have zero roots with newton that are skipped
+      if (inverse_type == PFLAREINV_NEWTON) then
+         do i_loc = 1, size(coefficients,1)
+            zero_root = .FALSE.
+            if (coefficients(i_loc,2) == 0.0) then
+               ! The size of the zero check here has to match that in 
+               ! petsc_matvec_gmres_newton_mf 
+               if (abs(coefficients(i_loc,1)) < 1e-12) zero_root = .TRUE.
+            else
+               if (coefficients(i_loc,1)**2 + &
+                        coefficients(i_loc,2)**2 < 1e-12) zero_root = .TRUE.
+            end if
+
+            if (zero_root) then
+               matvecs = matvecs - 1
+            end if
+         end do
+      end if      
+
+   end subroutine compute_mf_gmres_poly_num_matvecs   
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
    subroutine create_temp_space_box_mueller(MPI_COMM_MATRIX, comm_size, comm_rank, &
                   local_rows, global_rows, subspace_size, &
                   K_m_plus_1_data, K_m_plus_1_data_not_zero, K_m_plus_1_pointer, &

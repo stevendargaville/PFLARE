@@ -114,24 +114,13 @@ module air_mg_stats
       call KSPGetTolerances(ksp, rtol, atol, dtol, maxits, ierr)
       ! Round to long
       maxits_long = int(maxits, kind=8)
-      ! What order is our matrix-free polynomial on the coarse grid
-      non_zero_order = size(air_data%inv_coarsest_poly_data%coefficients,1)
-      ! We may have zero roots with newton that are skipped
-      if (air_data%options%coarsest_inverse_type == PFLAREINV_NEWTON) then
-         do i_loc = 1, size(air_data%inv_coarsest_poly_data%coefficients,1)
-            zero_root = .FALSE.
-            if (air_data%inv_coarsest_poly_data%coefficients(i_loc,2) == 0.0) then
-               if (abs(air_data%inv_coarsest_poly_data%coefficients(i_loc,1)) < 1e-12) zero_root = .TRUE.
-            else
-               if (air_data%inv_coarsest_poly_data%coefficients(i_loc,1)**2 + &
-                        air_data%inv_coarsest_poly_data%coefficients(i_loc,2)**2 < 1e-12) zero_root = .TRUE.
-            end if
 
-            if (zero_root) then
-               non_zero_order = non_zero_order - 1
-            end if
-         end do
-      end if
+      ! How many matvecs do we need to apply our coarse grid polynomial inverse
+      ! Normally this is just the size of air_data%inv_coarsest_poly_data%coefficients, but for newton
+      ! we may have zero roots that we skip
+      call compute_mf_gmres_poly_num_matvecs(air_data%options%coarsest_inverse_type, &
+                  air_data%inv_coarsest_poly_data%coefficients, &
+                  non_zero_order)
 
       gmres_size_long = int(non_zero_order, kind=8)
       poly_order_long = int(air_data%options%poly_order, kind=8)
@@ -183,8 +172,14 @@ module air_mg_stats
          
          if (.NOT. air_data%options%full_smoothing_up_and_down) then
 
+            ! MF polynomial order may be different on each level
+            call compute_mf_gmres_poly_num_matvecs(air_data%options%inverse_type, &
+                        air_data%inv_A_ff_poly_data(our_level)%coefficients, &
+                        non_zero_order)    
+            gmres_size_long = int(non_zero_order, kind=8)
+
             if (mat_type==MATSHELL) then
-               nnzs = nnzs + maxits_long * maxits_aff_long * poly_order_long * air_data%A_ff_nnzs(our_level) + maxits_long * (maxits_aff_long) * air_data%A_ff_nnzs(our_level)
+               nnzs = nnzs + maxits_long * maxits_aff_long * gmres_size_long * air_data%A_ff_nnzs(our_level) + maxits_long * (maxits_aff_long) * air_data%A_ff_nnzs(our_level)
             else
                nnzs = nnzs + maxits_long * maxits_aff_long * air_data%inv_A_ff_nnzs(our_level) + maxits_long * (maxits_aff_long) * air_data%A_ff_nnzs(our_level)
             end if
@@ -194,10 +189,17 @@ module air_mg_stats
 
             ! One C-point smooth         
             if (air_data%options%one_c_smooth) then
+
+               ! MF polynomial order may be different on each level
+               call compute_mf_gmres_poly_num_matvecs(air_data%options%c_inverse_type, &
+                           air_data%inv_A_cc_poly_data(our_level)%coefficients, &
+                           non_zero_order)  
+               gmres_size_long = int(non_zero_order, kind=8)
+
                ! Are we mf?
                call MatGetType(air_data%inv_A_cc(our_level), mat_type, ierr)
                if (mat_type==MATSHELL) then  
-                  nnzs = nnzs + maxits_long * poly_order_long * air_data%A_cc_nnzs(our_level) + maxits_long * air_data%A_cc_nnzs(our_level)
+                  nnzs = nnzs + maxits_long * gmres_size_long * air_data%A_cc_nnzs(our_level) + maxits_long * air_data%A_cc_nnzs(our_level)
                else          
                   nnzs = nnzs + maxits_long * air_data%inv_A_cc_nnzs(our_level) + maxits_long * air_data%A_cc_nnzs(our_level)
                end if
@@ -211,9 +213,15 @@ module air_mg_stats
             ! Symmetric GS and up and down
             !nnzs = nnzs + maxits_long * air_data%coarse_matrix_nnzs(our_level) * 2 * 2            
 
+            ! MF polynomial order may be different on each level
+            call compute_mf_gmres_poly_num_matvecs(air_data%options%inverse_type, &
+                        air_data%inv_A_ff_poly_data(our_level)%coefficients, &
+                        non_zero_order)   
+            gmres_size_long = int(non_zero_order, kind=8)                                   
+
             ! The two is because we do up and down smoothing
             if (mat_type==MATSHELL) then
-               nnzs = nnzs + 2 * maxits_long * poly_order_long * air_data%coarse_matrix_nnzs(our_level) + maxits_long  * air_data%coarse_matrix_nnzs(our_level)
+               nnzs = nnzs + 2 * maxits_long * gmres_size_long * air_data%coarse_matrix_nnzs(our_level) + maxits_long  * air_data%coarse_matrix_nnzs(our_level)
             else
                nnzs = nnzs + 2 * maxits_long * air_data%inv_A_ff_nnzs(our_level) + maxits_long * air_data%coarse_matrix_nnzs(our_level)
             end if
