@@ -300,7 +300,7 @@ PetscErrorCode ComputeMat(DM da, Mat A, PetscScalar u, PetscScalar v, PetscScala
   ierr = MatAssemblyEnd(A,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
 
   // Eliminate the zeros that the 5 point stencil may have in it with only advection
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR>=18)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR>=20)
   MatFilter(A, 0.0, PETSC_TRUE, PETSC_TRUE);
 #endif
 
