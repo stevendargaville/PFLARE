@@ -95,6 +95,7 @@ PETSC_INTERN void MatPartitioning_c(Mat *adj, PetscInt new_size, PetscInt *proc_
    MatPartitioning mpart;
    IS proc_is, proc_is_eq_num;
    PetscInt *test;
+   PetscInt comm_size_petsc;
    int size, rank, errorcode;
    // If you want to use the improve, then new_size needs to equal the current size
    // ie you can't reduce the number of active ranks
@@ -104,8 +105,9 @@ PETSC_INTERN void MatPartitioning_c(Mat *adj, PetscInt new_size, PetscInt *proc_
    // Get the comm
    PetscObjectGetComm((PetscObject)*adj, &comm);
    MPI_Comm_size(comm, &size);
+   comm_size_petsc = (PetscInt)size;
    PetscInt* counts;
-   PetscMalloc1(size, &counts);
+   PetscMalloc1(comm_size_petsc, &counts);
    MPI_Comm_rank(comm, &rank);
 
    // Check that new_size <= comm_world/proc_stride
@@ -219,7 +221,7 @@ PETSC_INTERN void MatPartitioning_c(Mat *adj, PetscInt new_size, PetscInt *proc_
    }
 
    // Get how many eqs have been partitioned onto each rank
-   ISPartitioningCount(proc_is, size, counts);
+   ISPartitioningCount(proc_is, comm_size_petsc, counts);
 
    // This turns the rank into a new global numbering
    // ie the number for each local variable in this is the new global numbering
