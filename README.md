@@ -383,7 +383,7 @@ For example, on ARCHER2 (a HPE Cray EX machine) to build PFLARE and the tests wi
      export LDFLAGS="-lgomp"
      make build_tests CC=${CC} FC=${FC} 
 
-Running a test with OpenMP then requires setting the ``OMP_NUM_THREADS`` variable, ensuring the MPI ranks and OpenMP threads are correctly pinned and telling the queueing system that the problem is oversubscribed. For example, the (partial) slurm script to run ex62f on one node is:
+Running a test with OpenMP then requires setting the ``OMP_NUM_THREADS`` variable, ensuring the MPI ranks and OpenMP threads are correctly pinned and telling the queueing system that the problem is oversubscribed. For example, the (partial) slurm script to run adv_diff_2d on one node is:
 
       #SBATCH --time=0:01:0
       #SBATCH --nodes=1
@@ -397,7 +397,7 @@ Running a test with OpenMP then requires setting the ``OMP_NUM_THREADS`` variabl
 
       [ Set the hex mask which describes the pinning ]
 
-      srun --oversubscribe --distribution=block:block --cpu-bind=mask_cpu:$mask ex62f.o
+      srun --oversubscribe --distribution=block:block --cpu-bind=mask_cpu:$mask adv_diff_2d.o -pc_type air
 
 
 ## CF splittings
