@@ -53,10 +53,14 @@ module tsqr
       integer :: errorcode
       ! ~~~~~~    
 
-      ! The commute is true here as the order doesn't matter for QRs
       ! Point at the custom reduction function
       if (.NOT. built_custom_op_tsqr) then
-         call MPI_Op_create(custom_reduction_tsqr, .TRUE., reduction_op_tsqr, errorcode)
+         ! We should be able to set commute as true, as the order doesn't matter for QRs
+         ! But I have bumped into cases where due to rounding (typically in low-rank systems)
+         ! the small entries in the resulting R can differ on different cores
+         ! When we use this as part of our gmres polynomials, this can give 10% difference in some of 
+         ! the coefficients on different cores which is not acceptable
+         call MPI_Op_create(custom_reduction_tsqr, .FALSE., reduction_op_tsqr, errorcode)
          built_custom_op_tsqr = .true.
       end if
       
