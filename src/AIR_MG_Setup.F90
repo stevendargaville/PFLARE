@@ -1437,6 +1437,18 @@ module air_mg_setup
                   ! proc_stride is fed into the polynomial inverse assembly to tell it how many
                   ! idle ranks we have, so we can use them as threads in omp if it is enabled
                   proc_stride = proc_stride * air_data%options%processor_agglom_factor
+
+                  ! Let's check the size of the coarse matrix
+                  call MatGetSize(air_data%coarse_matrix(our_level_coarse), global_rows_repart, global_cols_repart, ierr)
+                  ! If we don't have at least 2 unknowns per core (on average), then we need to be more aggressive
+                  ! with our processor agglomeration, otherwise we may be trying to partition n unknowns onto >n cores
+                  ! We'll just keep increasing the stride until we have more than 2 unknowns per core
+                  do while (global_rows_repart < 2 * no_active_cores)
+                     proc_stride = proc_stride * air_data%options%processor_agglom_factor
+                     ! Stolen from calculate_repartition, make sure they match!
+                     no_active_cores = floor(real(comm_size)/real(proc_stride))                     
+                  end do                  
+
                   ! If we agglomerate down to one processor
                   if (proc_stride > comm_size) proc_stride = comm_size
 
