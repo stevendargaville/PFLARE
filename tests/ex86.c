@@ -13,11 +13,12 @@ static char help[] = "Solves a one-dimensional steady upwind advection system wi
 
 int main(int argc, char **args)
 {
-  Vec         x, b, work_vec; /* approx solution, RHS, work vector */
+  Vec         x, b; /* approx solution, RHS, work vector */
   Mat         A;              /* linear system matrix */
   KSP         ksp;            /* linear solver context */
   PC          pc;             /* preconditioner context */
-  PetscInt    i, j, n = 10, col[2], its;
+  PetscInt    i, j, n = 10, col[2], its, global_row_start, global_row_end_plus_one;
+  PetscInt    start_assign;
   PetscScalar work_scalar, value[2];
   PetscRandom r;
   KSPConvergedReason reason;
@@ -44,7 +45,6 @@ int main(int argc, char **args)
   VecSetSizes(x, PETSC_DECIDE, n);
   VecSetFromOptions(x);
   VecDuplicate(x, &b);
-  VecDuplicate(x, &work_vec);
 
   /*
      Create matrix.  When using MatCreate(), the matrix format can
@@ -57,37 +57,51 @@ int main(int argc, char **args)
   MatCreate(PETSC_COMM_WORLD, &A);
   MatSetSizes(A, PETSC_DECIDE, PETSC_DECIDE, n, n);
   MatSetFromOptions(A);
+  MatSeqAIJSetPreallocation(A,2,NULL);
+  MatMPIAIJSetPreallocation(A,2,NULL,1,NULL);
   MatSetUp(A);
+
+  MatGetOwnershipRange(A, &global_row_start, &global_row_end_plus_one);
+
+  // Dirichlet condition on left boundary
+  if (global_row_start == 0)
+  {
+      start_assign = 1;
+      i           = 0;
+      j           = 0;
+      work_scalar = 1;
+      MatSetValues(A, 1, &i, 1, &j, &work_scalar, INSERT_VALUES);   
+  }
+  else{
+      start_assign = global_row_start;
+  }
 
   /*
      Assemble matrix
   */
   value[0] = -1.0;
   value[1] = 1.0;
-  for (i = 1; i < n; i++) {
+  for (i = start_assign; i < global_row_end_plus_one; i++) {
     col[0] = i - 1;
     col[1] = i;
     MatSetValues(A, 1, &i, 2, col, value, INSERT_VALUES);
   }
-  i           = 0;
-  j           = 0;
-  work_scalar = 1;
-  MatSetValues(A, 1, &i, 1, &j, &work_scalar, INSERT_VALUES);
+
   MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY);
 
   /*
-     Create x, b
+     Create x, b - random initial guess and zero rhs
   */
   PetscRandomCreate(PETSC_COMM_WORLD, &r);
   VecSetRandom(x, r);
-  VecSetRandom(work_vec, r);
-  MatMult(A, work_vec, b);
+  VecSet(b, 0.0);
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
                 Create the linear solver and set various options
      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
   KSPCreate(PETSC_COMM_WORLD, &ksp);
+  KSPSetInitialGuessNonzero(ksp, PETSC_TRUE);
 
   /*
      Set operators. Here the matrix that defines the linear system
@@ -136,7 +150,6 @@ int main(int argc, char **args)
   */
   VecDestroy(&x);
   VecDestroy(&b);
-  VecDestroy(&work_vec);
   MatDestroy(&A);
   KSPDestroy(&ksp);
   PetscRandomDestroy(&r);
