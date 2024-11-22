@@ -1421,9 +1421,14 @@ module air_mg_setup
                   call compute_mat_ratio_local_nonlocal_nnzs(air_data%coarse_matrix(our_level_coarse), no_active_cores, ratio_local_nnzs_off_proc)
                end if
 
+               ! Let's check the size of the coarse matrix
+               call MatGetSize(air_data%coarse_matrix(our_level_coarse), global_rows_repart, global_cols_repart, ierr)               
+
                ! If we are reusing and we know we have to repartition this level, or 
+               ! we have not very many unknowns per core (on average) or
                ! if we get a local to off-processor ratio of less than processor_agglom_ratio
                trigger_proc_agglom = .NOT. PetscISIsNull(air_data%reuse(our_level)%reuse_is(IS_REPARTITION)) .OR. &
+                           (global_rows_repart/no_active_cores < air_data%options%process_eq_limit .AND. no_active_cores /= 1) .OR. &
                            (ratio_local_nnzs_off_proc .le. air_data%options%processor_agglom_ratio &
                            .AND. ratio_local_nnzs_off_proc /= 0.0)
                                  
@@ -1438,8 +1443,6 @@ module air_mg_setup
                   ! idle ranks we have, so we can use them as threads in omp if it is enabled
                   proc_stride = proc_stride * air_data%options%processor_agglom_factor
 
-                  ! Let's check the size of the coarse matrix
-                  call MatGetSize(air_data%coarse_matrix(our_level_coarse), global_rows_repart, global_cols_repart, ierr)
                   ! If we don't have at least 2 unknowns per core (on average), then we need to be more aggressive
                   ! with our processor agglomeration, otherwise we may be trying to partition n unknowns onto >n cores
                   ! We'll just keep increasing the stride until we have more than 2 unknowns per core
@@ -2096,6 +2099,7 @@ module air_mg_setup
       air_data%options%processor_agglom = .TRUE.
       air_data%options%processor_agglom_ratio = 2
       air_data%options%processor_agglom_factor = 2
+      air_data%options%process_eq_limit = 50
       air_data%options%subcomm = .FALSE.
 
       air_data%options%strong_threshold = 0.5

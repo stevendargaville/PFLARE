@@ -136,7 +136,24 @@ module pcair_c_fortran_bindings
       pc%v = pc_ptr
       call PCAIRGetProcessorAgglomFactor(pc, factor, ierr)
 
-   end subroutine PCAIRGetProcessorAgglomFactor_c   
+   end subroutine PCAIRGetProcessorAgglomFactor_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetProcessEqLimit_c(pc_ptr, limit) bind(C, name='PCAIRGetProcessEqLimit_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, intent(out)        :: limit
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetProcessEqLimit(pc, limit, ierr)
+
+   end subroutine PCAIRGetProcessEqLimit_c   
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
@@ -866,7 +883,24 @@ module pcair_c_fortran_bindings
       pc%v = pc_ptr
       call PCAIRSetProcessorAgglomFactor(pc, factor, ierr)
 
-   end subroutine PCAIRSetProcessorAgglomFactor_c   
+   end subroutine PCAIRSetProcessorAgglomFactor_c
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetProcessEqLimit_c(pc_ptr, limit) bind(C, name='PCAIRSetProcessEqLimit_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, value, intent(in)         :: limit
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetProcessEqLimit(pc, limit, ierr)
+
+   end subroutine PCAIRSetProcessEqLimit_c     
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 

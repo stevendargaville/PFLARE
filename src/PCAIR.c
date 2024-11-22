@@ -20,6 +20,7 @@ PETSC_EXTERN PetscErrorCode PCAIRGetNumLevels_c(PC *pc, PetscInt *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetProcessorAgglom_c(PC *pc, PetscBool *input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRGetProcessorAgglomRatio_c(PC *pc, PetscReal *input_real);
 PETSC_EXTERN PetscErrorCode PCAIRGetProcessorAgglomFactor_c(PC *pc, PetscInt *input_int);
+PETSC_EXTERN PetscErrorCode PCAIRGetProcessEqLimit_c(PC *pc, PetscInt *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetSubcomm_c(PC *pc, PetscBool *input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRGetStrongThreshold_c(PC *pc, PetscReal *input_real);
 PETSC_EXTERN PetscErrorCode PCAIRGetDDCFraction_c(PC *pc, PetscReal *input_real);
@@ -61,6 +62,7 @@ PETSC_EXTERN PetscErrorCode PCAIRSetCoarseEqLimit_c(PC *pc, PetscInt input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglom_c(PC *pc, PetscBool input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglomRatio_c(PC *pc, PetscReal input_real);
 PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglomFactor_c(PC *pc, PetscInt input_int);
+PETSC_EXTERN PetscErrorCode PCAIRSetProcessEqLimit_c(PC *pc, PetscInt input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetSubcomm_c(PC *pc, PetscBool input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRSetStrongThreshold_c(PC *pc, PetscReal input_real);
 PETSC_EXTERN PetscErrorCode PCAIRSetDDCFraction_c(PC *pc, PetscReal input_real);
@@ -210,6 +212,12 @@ PETSC_EXTERN PetscErrorCode PCAIRGetProcessorAgglomFactor(PC pc, PetscInt *input
 {
    PetscFunctionBegin;
    PCAIRGetProcessorAgglomFactor_c(&pc, input_int);
+   PetscFunctionReturn(0);
+}
+PETSC_EXTERN PetscErrorCode PCAIRGetProcessEqLimit(PC pc, PetscInt *input_int)
+{
+   PetscFunctionBegin;
+   PCAIRGetProcessEqLimit_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 PETSC_EXTERN PetscErrorCode PCAIRGetSubcomm(PC pc, PetscBool *input_bool)
@@ -502,6 +510,20 @@ PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglomFactor(PC pc, PetscInt input_
    if (old_int == input_int) PetscFunctionReturn(0);
    PCReset_AIR_c(pc);    
    PCAIRSetProcessorAgglomFactor_c(&pc, input_int);
+   PetscFunctionReturn(0);
+}
+// If on average there are fewer than this number of equations per rank
+// processor agglomeration will be triggered
+// Default: 50
+// -pc_air_process_eq_limit
+PETSC_EXTERN PetscErrorCode PCAIRSetProcessEqLimit(PC pc, PetscInt input_int)
+{
+   PetscFunctionBegin;
+   PetscInt old_int;
+   PCAIRGetProcessEqLimit(pc, &old_int);
+   if (old_int == input_int) PetscFunctionReturn(0);
+   PCReset_AIR_c(pc);    
+   PCAIRSetProcessEqLimit_c(&pc, input_int);
    PetscFunctionReturn(0);
 }
 // If we are doing processor agglomeration, then we have 
@@ -1193,7 +1215,12 @@ static PetscErrorCode PCSetFromOptions_AIR_c(PetscOptionItems *PetscOptionsObjec
    input_int = old_int;
    PetscOptionsInt("-pc_air_processor_agglom_factor", "Factor to reduce MPI ranks by", "PCAIRSetProcessorAgglomFactor", old_int, &input_int, NULL);
    PCAIRSetProcessorAgglomFactor(pc, input_int);   
-   // ~~~~                                                          
+   // ~~~~        
+   PCAIRGetProcessEqLimit(pc, &old_int);
+   input_int = old_int;
+   PetscOptionsInt("-pc_air_process_eq_limit", "Trigger process agglomeration if fewer eqs/core", "PCAIRSetProcessEqLimit", old_int, &input_int, NULL);
+   PCAIRSetProcessEqLimit(pc, input_int);   
+   // ~~~~                                                       
 
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 18)
    PetscOptionsHeadEnd();
@@ -1242,7 +1269,8 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
       ierr =  PCAIRGetProcessorAgglom(pc, &flg);
       ierr =  PCAIRGetProcessorAgglomRatio(pc, &input_real);
       ierr =  PCAIRGetProcessorAgglomFactor(pc, &input_int);
-      if (flg) PetscViewerASCIIPrintf(viewer, "  Processor agglomeration with factor=%"PetscInt_FMT" and ratio %f \n", input_int, input_real);      
+      ierr =  PCAIRGetProcessEqLimit(pc, &input_int_two);
+      if (flg) PetscViewerASCIIPrintf(viewer, "  Processor agglomeration with factor=%"PetscInt_FMT", ratio %f and eq limit=%"PetscInt_FMT" \n", input_int, input_real, input_int_two);      
       ierr =  PCAIRGetSubcomm(pc, &flg);
       if (flg) PetscViewerASCIIPrintf(viewer, "  Polynomial coefficients calculated on subcomm \n");      
       

@@ -507,7 +507,8 @@ A brief description of the available options in PFLARE are given below and their
    | ------------- | -- | ------------- | --- |
    | ``-pc_air_processor_agglom``  |  PCAIRGetProcessorAgglom  PCAIRSetProcessorAgglom  | Whether to use a graph partitioner to repartition the coarse grids and reduce the number of active MPI ranks  | true |
    | ``-pc_air_processor_agglom_ratio``  |  PCAIRGetProcessorAgglomRatio  PCAIRSetProcessorAgglomRatio  | The local to non-local nnzs ratio that is used to trigger processor agglomeration on all levels  | 2.0 | 
-   | ``-pc_air_processor_agglom_factor``  |  PCAIRGetProcessorAgglomFactor  PCAIRSetProcessorAgglomFactor  | What factor to reduce the number of active MPI ranks by each time when doing processor agglomeration  | 2.0 | 
+   | ``-pc_air_processor_agglom_factor``  |  PCAIRGetProcessorAgglomFactor  PCAIRSetProcessorAgglomFactor  | What factor to reduce the number of active MPI ranks by each time when doing processor agglomeration  | 2 | 
+   | ``-pc_air_process_eq_limit``  |  PCAIRGetProcessEqLimit  PCAIRSetProcessEqLimit  | If on average there are fewer than this number of equations per rank processor agglomeration will be triggered  | 50 |    
    | ``-pc_air_subcomm``  |  PCAIRGetSubcomm  PCAIRSetSubcomm  | If computing a polynomial inverse with type arnoldi or newton and we have performed processor agglomeration, we can exclude the MPI ranks with no non-zeros from reductions in parallel by moving onto a subcommunicator | false |  
 
 #### CF splitting options

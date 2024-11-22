@@ -22,8 +22,7 @@ module air_data_type
    ! These defaults are reasonable settings for time independent 
    ! advection equations (ie purely hyperbolic) on a 2D unstructured
    ! triangular mesh
-   ! Can be changed by altering the values in this structure before
-   ! calling setup_air_pcmg or via command line arguments
+   ! Can be changed via command line arguments
    type air_options
 
       ! Print out stats and timings
@@ -41,8 +40,9 @@ module air_data_type
 
       ! Perform processor agglomeration throughout the hierarchy
       ! This reduces the number of active MPI ranks as we coarsen
-      ! by a factor of processor_agglom_factor, whenever the 
-      ! local to non-local ratio of nnzs is processor_agglom_ratio
+      ! by a factor of processor_agglom_factor, whenever either there 
+      ! are fewer unkowns per core (on average) than process_eq_limit or
+      ! the local to non-local ratio of nnzs is < processor_agglom_ratio
       ! The entire hierarchy stays on comm_world however
       ! Only happens where necessary, not on every level
       ! -pc_air_processor_agglom
@@ -54,7 +54,11 @@ module air_data_type
       ! What factor to reduce the number of active MPI ranks by
       ! each time when doing processor agglomeration
       ! -pc_air_processor_agglom_ratio
-      integer :: processor_agglom_factor = 2      
+      integer :: processor_agglom_factor = 2   
+      ! If on average there are fewer than this number of equations per rank
+      ! processor agglomeration will be triggered
+      ! -pc_air_process_eq_limit
+      integer :: process_eq_limit = 50  
       ! If we are doing processor agglomeration, then we have 
       ! some ranks with no rows
       ! If computing a gmres polynomial inverse 

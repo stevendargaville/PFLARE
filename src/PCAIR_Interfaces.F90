@@ -464,7 +464,26 @@ module pcair_interfaces
       factor = options%processor_agglom_factor
       ierr = 0
 
-   end subroutine PCAIRGetProcessorAgglomFactor   
+   end subroutine PCAIRGetProcessorAgglomFactor  
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetProcessEqLimit(pc, limit, ierr) 
+
+      ! ~~~~~~~~
+      type(tPC), intent(inout)      :: pc
+      PetscInt, intent(out)         :: limit
+      PetscErrorCode, intent(out)   :: ierr
+
+      type(air_options), pointer :: options
+      ! ~~~~~~~~
+
+      ! Get the options
+      call PCAIRGetOptions(pc, options)    
+      limit = options%process_eq_limit
+      ierr = 0
+
+   end subroutine PCAIRGetProcessEqLimit      
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
@@ -1192,7 +1211,26 @@ module pcair_interfaces
       options%processor_agglom_factor = factor
       ierr = 0
 
-   end subroutine PCAIRSetProcessorAgglomFactor   
+   end subroutine PCAIRSetProcessorAgglomFactor
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetProcessEqLimit(pc, limit, ierr) 
+
+      ! ~~~~~~~~
+      type(tPC), intent(inout)      :: pc
+      PetscInt, intent(in)          :: limit
+      PetscErrorCode, intent(out)   :: ierr
+
+      type(air_options), pointer :: options
+      ! ~~~~~~~~
+
+      ! Set the options
+      call PCAIRGetOptions(pc, options)    
+      options%process_eq_limit = limit
+      ierr = 0
+
+   end subroutine PCAIRSetProcessEqLimit    
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
