@@ -1443,10 +1443,10 @@ module air_mg_setup
                   ! idle ranks we have, so we can use them as threads in omp if it is enabled
                   proc_stride = proc_stride * air_data%options%processor_agglom_factor
 
-                  ! If we don't have at least 2 unknowns per core (on average), then we need to be more aggressive
-                  ! with our processor agglomeration, otherwise we may be trying to partition n unknowns onto >n cores
-                  ! We'll just keep increasing the stride until we have more than 2 unknowns per core
-                  do while (global_rows_repart < 2 * no_active_cores)
+                  ! If we don't have at least process_eq_limit unknowns per core (on average)
+                  ! then we need to be more aggressive with our processor agglomeration
+                  ! We'll just keep increasing the stride until we have more than process_eq_limit unknowns per core
+                  do while (global_rows_repart < air_data%options%process_eq_limit * no_active_cores)
                      proc_stride = proc_stride * air_data%options%processor_agglom_factor
                      ! Stolen from calculate_repartition, make sure they match!
                      no_active_cores = floor(real(comm_size)/real(proc_stride))                     
