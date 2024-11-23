@@ -210,9 +210,11 @@ run_tests:
 # 
 	@echo ""
 	@echo "Test AIRG on steady 1D advection"
-	./ex86.o -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right 
+	./ex86.o -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right \
+	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys
 	@echo "Test AIRG on steady 1D advection in parallel"
-	$(MPIEXEC) -n 2 ./ex86.o -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right 	
+	$(MPIEXEC) -n 2 ./ex86.o -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right \
+	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys
 # 
 	@echo ""
 	@echo "Test lAIR on steady 2D structured advection"
