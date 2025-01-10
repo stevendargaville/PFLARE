@@ -24,9 +24,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   make \
   openssl \
   pkg-config \
-  python3-distutils \
   ripgrep \
   zlib1g-dev \
+  python3-virtualenv \
+  python3.10-venv \
+  python3.10-dev \
+  wget \
   && rm -rf /var/lib/apt/lists/*
 
 RUN locale-gen en_US.UTF-8 && update-locale LANG=en_US.UTF-8
@@ -54,13 +57,9 @@ RUN \
   rm -rf /build/mpich-${MPICH_VERSION} && \
   ldconfig
 
+# Hide irrelevant MPICH output warnings
+ENV HWLOC_HIDE_ERRORS=2
 ARG PETSC_GIT_BRANCH=release
-
-# Install the python we need
-RUN apt-get update \
- && apt-get install wget \
- && apt-get install -y python3.10-venv \
- && apt-get install -y python3.10-dev
 
 # Have to build a venv for python as pip/numpy now complain
 ENV VIRTUAL_ENV=/my-venv
@@ -69,7 +68,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Install python packages (should be in the venv not globally)
 RUN wget https://bootstrap.pypa.io/get-pip.py \
- && python3 ./get-pip.py && pip install numpy && pip install Cython
+ && python3 ./get-pip.py && pip install numpy && pip install Cython && pip install setuptools
 
 # Install petsc
 ENV PETSC_DIR=/build/petsc
@@ -78,7 +77,6 @@ RUN git clone --depth=1 --branch=$PETSC_GIT_BRANCH https://gitlab.com/petsc/pets
   cd petsc && \
   OPT='-O2 -march=haswell -ffp-contract=fast'; \
   python3 configure \
-    --with-cxx-dialect=C++14 \
     --with-debugging=0 COPTFLAGS="$OPT" CXXOPTFLAGS="$OPT" FOPTFLAGS="$OPT" \
     --with-mpi-dir=/usr/local \
     --download-metis \
@@ -95,8 +93,6 @@ RUN git clone --depth=1 --branch=$PETSC_GIT_BRANCH https://gitlab.com/petsc/pets
 RUN git clone https://github.com/stevendargaville/PFLARE.git
 RUN cd PFLARE && make && make tests && make python && make tests_python
 
-RUN useradd -ms /bin/bash pflare
-USER pflare
 WORKDIR /build/PFLARE
 
 LABEL maintainer='Steven Dargaville'
