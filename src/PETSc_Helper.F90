@@ -552,17 +552,25 @@ module petsc_helper
          end do         
       end if
 
-      ! Create the output matrix
-      if (comm_size/=1) then
-         call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                  global_rows, global_cols, &
-                  nz_ignore, nnzs_row, &
-                  nz_ignore, onzs_row, &
-                  output_mat, ierr)   
-      else
-         call MatCreateSeqAIJ(PETSC_COMM_SELF, global_rows, global_cols, nz_ignore, nnzs_row, &
-                     output_mat, ierr)            
-      end if   
+      ! ! Create the output matrix
+      ! if (comm_size/=1) then
+      !    call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
+      !             global_rows, global_cols, &
+      !             nz_ignore, nnzs_row, &
+      !             nz_ignore, onzs_row, &
+      !             output_mat, ierr)   
+      ! else
+      !    call MatCreateSeqAIJ(PETSC_COMM_SELF, global_rows, global_cols, nz_ignore, nnzs_row, &
+      !                output_mat, ierr)            
+      ! end if   
+
+      call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
+      call MatSetSizes(output_mat, local_rows, local_cols, &
+                       global_rows, global_cols, ierr)
+      call MatSetFromOptions(output_mat, ierr)
+      call MatMPIAIJSetPreallocation(output_mat,nz_ignore,nnzs_row,nz_ignore,onzs_row,ierr)
+      call MatSeqAIJSetPreallocation(output_mat,nz_ignore,nnzs_row,ierr)
+      call MatSetUp(output_mat, ierr)     
        
       ! Don't set any off processor entries so no need for a reduction when assembling
       call MatSetOption(output_mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)      
