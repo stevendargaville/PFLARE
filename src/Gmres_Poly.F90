@@ -130,38 +130,36 @@ module gmres_poly
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine create_temp_space_box_mueller(MPI_COMM_MATRIX, comm_size, comm_rank, &
-                  local_rows, global_rows, subspace_size, &
-                  K_m_plus_1_data, K_m_plus_1_data_not_zero, K_m_plus_1_pointer, &
-                  K_m_plus_one)
+   subroutine create_temp_space_box_mueller(matrix, subspace_size, V_n)
       
       ! Creates some temporary space and computes box mueller random numbers
       ! in the first column
 
       ! ~~~~~~
-      MPI_Comm, intent(in)                                        :: MPI_COMM_MATRIX
-      integer, intent(in)                                         :: comm_size, comm_rank, subspace_size
-      PetscInt, intent(in)                                        :: local_rows, global_rows
-      real, dimension(:, :), allocatable, target, intent(inout)   :: K_m_plus_1_data, K_m_plus_1_data_not_zero
-      real, dimension(:, :), pointer, intent(out)                 :: K_m_plus_1_pointer
-      type(tVec), dimension(:)                                    :: K_m_plus_one
+      type(tMat), intent(in)                                      :: matrix
+      integer, intent(in)                                         :: subspace_size
+      type(tVec), dimension(:)                                    :: V_n
 
       ! Local variables
-      integer :: i_loc, seed_size
+      MPI_Comm :: MPI_COMM_MATRIX
+      PetscInt :: local_rows, local_cols, global_rows, global_cols
+      integer :: i_loc, seed_size, comm_size, comm_rank, errorcode
       PetscErrorCode :: ierr      
       integer, dimension(:), allocatable :: seed
-      real, dimension(:), contiguous, pointer :: data_ptr
+      real, dimension(:, :), allocatable, target   :: random_data
       PetscInt, parameter :: one=1, zero=0
       ! ~~~~~~    
 
-      ! Just a guard for when there are zero local rows
-      ! We still need to allocate something given we are creating petsc vecs with arrays
-      allocate(K_m_plus_1_data(local_rows, subspace_size+1))
-      K_m_plus_1_pointer => K_m_plus_1_data
-      if (local_rows == 0) then
-         allocate(K_m_plus_1_data_not_zero(1, subspace_size+1))
-         K_m_plus_1_pointer => K_m_plus_1_data_not_zero
-      end if     
+      ! We might want to call the gmres poly creation on a sub communicator
+      ! so let's get the comm attached to the matrix and make sure to use that 
+      call PetscObjectGetComm(matrix, MPI_COMM_MATRIX, ierr)  
+      ! Get the comm size 
+      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)     
+      ! Get the comm rank
+      call MPI_Comm_rank(MPI_COMM_MATRIX, comm_rank, errorcode)     
+      ! Get the matrix sizes
+      call MatGetSize(matrix, global_rows, global_cols, ierr)
+      call MatGetLocalSize(matrix, local_rows, local_cols, ierr)      
 
       ! ~~~~~~~~~~
       ! Create random vector
@@ -180,13 +178,14 @@ module gmres_poly
       ! We should remove the u = 0 (ie epsilon) case, but we don't need a perfect
       ! normal distribution here     
       ! Get two sets of random numbers 
-      call random_number(K_m_plus_1_pointer(:, 1:2))
+      allocate(random_data(local_rows, 2))
+      call random_number(random_data(:, 1:2))
 
       ! We want our random rhs to be a normal distribution with zero mean as that preserves
       ! white noise in the eigenspace (ie it is rotation invariant to unitary transforms)
       ! Do a box-muller to take two numbers with uniform distribution and produce a number
       ! that is normally distributed       
-      K_m_plus_1_pointer(:, 1) = sqrt(-2 * log(K_m_plus_1_pointer(:, 1))) * cos(2 * pi * K_m_plus_1_pointer(:, 2))
+      random_data(:, 1) = sqrt(-2 * log(random_data(:, 1))) * cos(2 * pi * random_data(:, 2))
       deallocate(seed)
 
       ! ~~~~~~~~~~
@@ -194,17 +193,17 @@ module gmres_poly
       ! ~~~~~~~~~~ 
       ! Create vectors pointing at the columns in K_m+1
       do i_loc = 1, subspace_size+1
-         ! There is now an interface to VecCreateSeqWithArray in PETSc >=3.18
-         ! that requires a 1D array
-         data_ptr => K_m_plus_1_pointer(1:local_rows,i_loc)
-         if (comm_size==1) then
-            call VecCreateSeqWithArray(PETSC_COMM_SELF, one, &
-               local_rows, data_ptr, K_m_plus_one(i_loc), ierr)  
-         else
-            call VecCreateMPIWithArray(MPI_COMM_MATRIX, one, &
-               local_rows, global_rows, data_ptr, K_m_plus_one(i_loc), ierr)            
-         end if
+         call MatCreateVecs(matrix, V_n(i_loc), PETSC_NULL_VEC, ierr)         
       end do         
+
+      ! Set the random values into the first vector
+      do i_loc = 1, local_rows
+         call VecSetValuesLocal(V_n(1), one, [i_loc-1], [random_data(i_loc, 1)], INSERT_VALUES, ierr)
+      end do
+      call VecAssemblyBegin(V_n(1), ierr)
+      call VecAssemblyEnd(V_n(1), ierr)   
+      
+      deallocate(random_data)
 
       ! ~~~~~~~~~~~~
 
@@ -344,38 +343,25 @@ module gmres_poly
       real, dimension(poly_order+1) :: least_squares_sol
       real, dimension(:), allocatable :: work
       real :: beta
-      real, dimension(:), pointer :: v_one, v_two
-      real, dimension(:, :), allocatable, target :: K_m_plus_1_data, K_m_plus_1_data_not_zero
-      real, dimension(:, :), pointer :: K_m_plus_1_pointer
       type(tVec) :: w_j
       type(tVec), dimension(poly_order+2) :: V_n
-      real, dimension(:), pointer :: data_ptr
       integer, dimension(:), allocatable :: iwork
       real :: rcond = -1.0
 
       ! ~~~~~~    
 
       ! This is how many columns we have in K_m
-      subspace_size = poly_order + 1
+      subspace_size = poly_order + 1   
+      ! Get the matrix sizes
+      call MatGetSize(matrix, global_rows, global_cols, ierr)
 
       ! ~~~~~~~~~~~~~
       ! We're basically just writing a simple GMRES here with no restart, the reason we can't use the petsc one
       ! is we need access to the unrotated hessenberg matrix, and the orthogonalised vectors
       ! to compute the gmres polynomial
       ! See Nachtigal et al 1992 for details on how we generate the gmres polynomial 
-      ! coefficients in the power basis using the Arnoldi basis
+      ! coefficients using the Arnoldi basis
       ! ~~~~~~~~~~~~~
-
-      ! We might want to call the gmres poly creation on a sub communicator
-      ! so let's get the comm attached to the matrix and make sure to use that 
-      call PetscObjectGetComm(matrix, MPI_COMM_MATRIX, ierr)  
-      ! Get the comm size 
-      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)     
-      ! Get the comm rank
-      call MPI_Comm_rank(MPI_COMM_MATRIX, comm_rank, errorcode)     
-      ! Get the matrix sizes
-      call MatGetSize(matrix, global_rows, global_cols, ierr)
-      call MatGetLocalSize(matrix, local_rows, local_cols, ierr)
 
       if (subspace_size > global_rows) then
          print *, "The input subspace size is greater than the matrix size"
@@ -384,14 +370,9 @@ module gmres_poly
 
       ! ~~~~~~~~~~
       ! Allocate space and create random numbers 
-      ! There are individual petsc vecs built in V_n that point at 
-      ! the data in K_m_plus_1_data
       ! The first vec has random numbers in it
       ! ~~~~~~~~~~ 
-      call create_temp_space_box_mueller(MPI_COMM_MATRIX, comm_size, comm_rank, &
-               local_rows, global_rows, subspace_size, &
-               K_m_plus_1_data, K_m_plus_1_data_not_zero, K_m_plus_1_pointer, &
-               V_n)
+      call create_temp_space_box_mueller(matrix, subspace_size, V_n)
       
       ! Create an extra vector for storage
       call VecDuplicate(V_n(1), w_j, ierr)         
@@ -444,8 +425,6 @@ module gmres_poly
                least_squares_sol, 1, &
                0.0, coefficients(1), 1) 
 
-      deallocate(K_m_plus_1_data)
-      if (allocated(K_m_plus_1_data_not_zero)) deallocate(K_m_plus_1_data_not_zero)
       do i_loc = 1, subspace_size+1
          call VecDestroy(V_n(i_loc), ierr)
       end do
@@ -474,13 +453,14 @@ module gmres_poly
 
       ! Local variables
       PetscInt :: global_rows, global_cols, local_rows, local_cols
+      PetscInt :: global_row_start, global_row_end_plus_one, row_i
+      PetscInt, dimension(:), allocatable :: global_indices
       integer :: comm_size, subspace_size, comm_rank, i_loc
       integer :: errorcode
       PetscErrorCode :: ierr      
       MPI_Comm :: MPI_COMM_MATRIX
-      real, dimension(:, :), allocatable, target :: K_m_plus_1_data, K_m_plus_1_data_not_zero
-      real, dimension(:, :), pointer :: K_m_plus_1_pointer
-      type(tVec), dimension(poly_order+2) :: K_m_plus_one
+      real, dimension(:, :), allocatable, target :: K_m_plus_1_data
+      type(tVec), dimension(poly_order+2) :: V_n
       ! ~~~~~~    
 
       ! This is how many columns we have in K_m
@@ -527,27 +507,40 @@ module gmres_poly
 
       ! ~~~~~~~~~~
       ! Allocate space and create random numbers 
-      ! There are individual petsc vecs built in K_m_plus_one that point at 
-      ! the data in K_m_plus_1_data
       ! The first vec has random numbers in it
       ! ~~~~~~~~~~      
-      call create_temp_space_box_mueller(MPI_COMM_MATRIX, comm_size, comm_rank, &
-               local_rows, global_rows, subspace_size, &
-               K_m_plus_1_data, K_m_plus_1_data_not_zero, K_m_plus_1_pointer, &
-               K_m_plus_one)
+      call create_temp_space_box_mueller(matrix, subspace_size, V_n)
 
       ! ~~~~~~~~~~~~
 
       ! Now loop through and build the power basis K_m+1
       do i_loc = 1, subspace_size
 
-         ! Compute K_m_plus_1_data(j+1) = A * K_m_plus_1_data(j)
+         ! Compute V_n(j+1) = A * V_n(j)
          ! Could do this with a matrix-power kernel with less comms if desired, except
          ! that we only ever need this once for very low order so that would prob result in more comms overall
          call MatMult(matrix, &
-                  K_m_plus_one(i_loc), &
-                  K_m_plus_one(i_loc+1), ierr)  
+                  V_n(i_loc), &
+                  V_n(i_loc+1), ierr)  
       end do      
+
+      ! Need to copy the individual vectors into a dense slab of memory
+      ! Used to just have a dense slab of memory and then
+      ! place the pointers into the vecs, but that 
+      ! became cumbersome when supporting different vec types (eg cuda on a gpu)
+      allocate(K_m_plus_1_data(local_rows, subspace_size+1))
+      allocate(global_indices(local_rows))
+      call MatGetOwnershipRange(matrix, global_row_start, global_row_end_plus_one, ierr)  
+      do row_i = 1, local_rows
+         global_indices(row_i) = global_row_start + row_i - 1
+      end do
+        
+      ! Copy into K_m_plus_1_data and then destroy the vecs
+      do i_loc = 1, subspace_size+1
+         ! Have to use vecgetvalues interface as the getf90 pointer doesn't work for gpus
+         call VecGetValues(V_n(i_loc), local_rows, global_indices, K_m_plus_1_data(:, i_loc), ierr)
+         call VecDestroy(V_n(i_loc), ierr)
+      end do         
 
       ! ~~~~~~~~~~~~~
       ! Start the tall-skinny QR factorisation of the power basis
@@ -561,11 +554,7 @@ module gmres_poly
       ! ~~~~~
       ! ~~~~~
 
-      deallocate(K_m_plus_1_data)
-      if (allocated(K_m_plus_1_data_not_zero)) deallocate(K_m_plus_1_data_not_zero)
-      do i_loc = 1, subspace_size+1
-         call VecDestroy(K_m_plus_one(i_loc), ierr)
-      end do       
+      deallocate(K_m_plus_1_data, global_indices)    
 
    end subroutine start_gmres_polynomial_coefficients_power 
 

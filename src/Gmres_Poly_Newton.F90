@@ -175,10 +175,7 @@ module gmres_poly_newton
       real, dimension(:), allocatable :: work
       real, dimension(:,:), allocatable :: VL, VR
       real :: beta, div_real, div_imag, a, b, c, d, div_mag
-      real, dimension(:), pointer :: v_one, v_two
-      real, dimension(:, :), allocatable, target :: K_m_plus_1_data, K_m_plus_1_data_not_zero
       real, dimension(:, :), allocatable :: coefficients_temp
-      real, dimension(:, :), pointer :: K_m_plus_1_pointer
       type(tVec) :: w_j
       type(tVec), dimension(poly_order+2) :: V_n
       character(1) :: equed
@@ -208,14 +205,9 @@ module gmres_poly_newton
 
       ! ~~~~~~~~~~
       ! Allocate space and create random numbers 
-      ! There are individual petsc vecs built in V_n that point at 
-      ! the data in K_m_plus_1_data
       ! The first vec has random numbers in it
       ! ~~~~~~~~~~ 
-      call create_temp_space_box_mueller(MPI_COMM_MATRIX, comm_size, comm_rank, &
-               local_rows, global_rows, subspace_size, &
-               K_m_plus_1_data, K_m_plus_1_data_not_zero, K_m_plus_1_pointer, &
-               V_n)
+      call create_temp_space_box_mueller(matrix, subspace_size, V_n)
       
       ! Create an extra vector for storage
       call VecDuplicate(V_n(1), w_j, ierr)      
@@ -471,8 +463,6 @@ module gmres_poly_newton
 
       ! Cleanup
       deallocate(coefficients_temp)
-      deallocate(K_m_plus_1_data)
-      if (allocated(K_m_plus_1_data_not_zero)) deallocate(K_m_plus_1_data_not_zero)
       do i_loc = 1, subspace_size+1
          call VecDestroy(V_n(i_loc), ierr)
       end do
