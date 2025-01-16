@@ -142,7 +142,7 @@ module gmres_poly
 
       ! Local variables
       MPI_Comm :: MPI_COMM_MATRIX
-      PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
+      PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one, row_i
       integer :: i_loc, seed_size, comm_size, comm_rank, errorcode
       PetscErrorCode :: ierr      
       integer, dimension(:), allocatable :: seed
@@ -198,8 +198,8 @@ module gmres_poly
       end do         
 
       ! Set the random values into the first vector
-      do i_loc = 1, local_rows
-         call VecSetValues(V_n(1), one, [global_row_start + i_loc-1], [random_data(i_loc, 1)], INSERT_VALUES, ierr)
+      do row_i = 1, local_rows
+         call VecSetValues(V_n(1), one, [global_row_start + row_i-1], [random_data(row_i, 1)], INSERT_VALUES, ierr)
       end do
       call VecAssemblyBegin(V_n(1), ierr)
       call VecAssemblyEnd(V_n(1), ierr)   
