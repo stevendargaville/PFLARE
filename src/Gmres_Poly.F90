@@ -538,13 +538,15 @@ module gmres_poly
         
       ! Copy into K_m_plus_1_data and then destroy the vecs
       do i_loc = 1, subspace_size+1
-         ! Have to use vecgetvalues interface as the getf90 pointer doesn't work for gpus
+         ! Have to use vecgetvalues interface for gpus
+         ! This does a copy of the vec from gpu to cpu if necessary
          call VecGetValues(V_n(i_loc), local_rows, global_indices, K_m_plus_1_data(:, i_loc), ierr)
          call VecDestroy(V_n(i_loc), ierr)
       end do         
 
       ! ~~~~~~~~~~~~~
-      ! Start the tall-skinny QR factorisation of the power basis
+      ! Start the tall-skinny QR factorisation of the power basis - this all happens
+      ! on the cpu
       ! ~~~~~~~~~~~~~
       call start_tsqr(MPI_COMM_MATRIX, K_m_plus_1_data, buffers)
 
