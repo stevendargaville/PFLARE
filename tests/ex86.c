@@ -17,8 +17,8 @@ int main(int argc, char **args)
   Mat         A;              /* linear system matrix */
   KSP         ksp;            /* linear solver context */
   PC          pc;             /* preconditioner context */
-  PetscInt    i, j, n = 10, col[2], its, global_row_start, global_row_end_plus_one;
-  PetscInt    start_assign;
+  PetscInt    i, j, n = 10, col[2], its, global_row_start, global_row_end_plus_one, local_size;
+  PetscInt    start_assign, counter;
   PetscScalar work_scalar, value[2];
   PetscRandom r;
   KSPConvergedReason reason;
@@ -45,6 +45,13 @@ int main(int argc, char **args)
   VecSetSizes(x, PETSC_DECIDE, n);
   VecSetFromOptions(x);
   VecDuplicate(x, &b);
+  VecGetLocalSize(x, &local_size);
+  VecGetOwnershipRange(x, &global_row_start, &global_row_end_plus_one);
+
+  // Row and column indices for COO assembly
+  PetscInt *oor, *ooc;
+  // Values for COO assembly
+  PetscScalar *v;  
 
   /*
      Create matrix.  When using MatCreate(), the matrix format can
@@ -57,44 +64,57 @@ int main(int argc, char **args)
   MatCreate(PETSC_COMM_WORLD, &A);
   MatSetSizes(A, PETSC_DECIDE, PETSC_DECIDE, n, n);
   MatSetFromOptions(A);
-  MatSeqAIJSetPreallocation(A,2,NULL);
-  MatMPIAIJSetPreallocation(A,2,NULL,1,NULL);
-  MatSetUp(A);
 
-  MatGetOwnershipRange(A, &global_row_start, &global_row_end_plus_one);
+  // Going to do assembly in the COO interface so assembly happens on the gpu when needed
+  // Allocate memory for the coordinates
+  PetscMalloc2(2 * local_size, &oor, 2 * local_size, &ooc);
+  PetscMalloc1(2 * local_size, &v);
 
+  counter = 0;
   // Dirichlet condition on left boundary
   if (global_row_start == 0)
   {
       start_assign = 1;
-      i           = 0;
-      j           = 0;
-      work_scalar = 1;
-      MatSetValues(A, 1, &i, 1, &j, &work_scalar, INSERT_VALUES);   
+      oor[counter] = 0;
+      ooc[counter] = 0;
+      v[counter] = 1;
+      counter = counter + 1;  
   }
   else{
       start_assign = global_row_start;
   }
 
-  /*
-     Assemble matrix
-  */
-  value[0] = -1.0;
-  value[1] = 1.0;
+  // Let's write the COO format 
   for (i = start_assign; i < global_row_end_plus_one; i++) {
-    col[0] = i - 1;
-    col[1] = i;
-    MatSetValues(A, 1, &i, 2, col, value, INSERT_VALUES);
+    // Upwinded dimensionless uniform grid finite difference operator
+    oor[counter] = i;
+    ooc[counter] = i - 1;
+    v[counter] = -1.0;
+
+    oor[counter + 1] = i;
+    ooc[counter + 1] = i;
+    v[counter + 1] = 1.0;
+
+    counter = counter + 2;
   }
 
-  MatAssemblyBegin(A, MAT_FINAL_ASSEMBLY);
-  MatAssemblyEnd(A, MAT_FINAL_ASSEMBLY);
+  // Set the indices
+  MatSetPreallocationCOO(A, counter, oor, ooc);
+  // Can delete oor and ooc now
+  PetscFree2(oor, ooc);
+  // Set the values
+  MatSetValuesCOO(A, v, INSERT_VALUES);
+  PetscFree(v);
 
   /*
      Create x, b - random initial guess and zero rhs
   */
   PetscRandomCreate(PETSC_COMM_WORLD, &r);
-  VecSetRandom(x, r);
+  //VecSetRandom(x, r);
+  // VecSetRandom doesn't yet happen on the gpu, and I would like this example 
+  // to do the minimum number of copies to the gpu for reference
+  // so let's just set the rhs to 1.0 for now
+  VecSet(x, 1.0);
   VecSet(b, 0.0);
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
