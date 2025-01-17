@@ -62,7 +62,7 @@ int main(int argc, char **args)
      performance. See the matrix chapter of the users manual for details.
   */
   MatCreate(PETSC_COMM_WORLD, &A);
-  MatSetSizes(A, PETSC_DECIDE, PETSC_DECIDE, n, n);
+  MatSetSizes(A, local_size, local_size, n, n);
   MatSetFromOptions(A);
 
   // Going to do assembly in the COO interface so assembly happens on the gpu when needed
