@@ -699,6 +699,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       PetscInt, parameter :: one = 1, zero = 0
       CHARACTER(len=255) :: omp_threads_env_char
       integer :: omp_threads_env
+      MatType:: mat_type     
       
       ! ~~~~~~~~~~  
 
@@ -751,18 +752,16 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          ! If not re-using
          if (PetscMatIsNull(cmat)) then
 
-            ! Now rhs_copy should have our diagonal polynomial approximation
-            if (comm_size/=1) then
-               call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                        global_rows, global_cols, &
-                        one, PETSC_NULL_INTEGER_ARRAY, &
-                        zero, PETSC_NULL_INTEGER_ARRAY, &
-                        cmat, ierr)   
-            else
-               call MatCreateSeqAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                        one, PETSC_NULL_INTEGER_ARRAY, &
-                        cmat, ierr)            
-            end if 
+            call MatCreate(MPI_COMM_MATRIX, cmat, ierr)
+            call MatSetSizes(cmat, local_rows, local_cols, &
+                             global_rows, global_cols, ierr)
+            ! Match the output type
+            call MatGetType(matrix, mat_type, ierr)
+            call MatSetType(cmat, mat_type, ierr)
+            call MatMPIAIJSetPreallocation(cmat,one,PETSC_NULL_INTEGER_ARRAY,zero,PETSC_NULL_INTEGER_ARRAY,ierr)
+            call MatSeqAIJSetPreallocation(cmat,one,PETSC_NULL_INTEGER_ARRAY,ierr)
+            call MatSetUp(cmat, ierr)              
+
          end if
 
          ! Don't set any off processor entries so no need for a reduction when assembling
@@ -1394,6 +1393,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       type(mat_ctxtype), pointer :: mat_ctx
       PetscInt :: one=1, zero=0
       logical :: reuse_triggered
+      MatType:: mat_type
 
       ! ~~~~~~       
 
@@ -1454,17 +1454,16 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          ! If not re-using
          if (PetscMatIsNull(inv_matrix)) then
 
-            if (comm_size/=1) then
-               call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                        global_rows, global_cols, &
-                        one, PETSC_NULL_INTEGER_ARRAY, &
-                        zero, PETSC_NULL_INTEGER_ARRAY, &
-                        inv_matrix, ierr)   
-            else
-               call MatCreateSeqAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                        one, PETSC_NULL_INTEGER_ARRAY, &
-                        inv_matrix, ierr)            
-            end if 
+            call MatCreate(MPI_COMM_MATRIX, inv_matrix, ierr)
+            call MatSetSizes(inv_matrix, local_rows, local_cols, &
+                             global_rows, global_cols, ierr)
+            ! Match the output type
+            call MatGetType(matrix, mat_type, ierr)
+            call MatSetType(inv_matrix, mat_type, ierr)
+            call MatMPIAIJSetPreallocation(inv_matrix,one,PETSC_NULL_INTEGER_ARRAY,zero,PETSC_NULL_INTEGER_ARRAY,ierr)
+            call MatSeqAIJSetPreallocation(inv_matrix,one,PETSC_NULL_INTEGER_ARRAY,ierr)
+            call MatSetUp(inv_matrix, ierr)                
+
          end if        
 
          ! Don't set any off processor entries so no need for a reduction when assembling
