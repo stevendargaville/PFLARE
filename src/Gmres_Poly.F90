@@ -146,13 +146,8 @@ module gmres_poly
       integer :: i_loc, seed_size, comm_size, comm_rank, errorcode
       PetscErrorCode :: ierr      
       integer, dimension(:), allocatable :: seed
-      real, dimension(:), allocatable   :: random_data
+      real, dimension(:, :), allocatable, target   :: random_data
       PetscInt, parameter :: one=1, zero=0
-#if PETSC_VERSION_MINOR >= 15
-      type(tPetscRandom) :: rctx
-#else      
-      PetscRandom :: rctx
-#endif            
       ! ~~~~~~    
 
       ! We might want to call the gmres poly creation on a sub communicator
@@ -170,46 +165,6 @@ module gmres_poly
       ! ~~~~~~~~~~
       ! Create random vector
       ! ~~~~~~~~~~      
-      ! We want random numbers
-      call PetscRandomCreate(MPI_COMM_MATRIX, rctx, ierr)
-      ! Ensure we seed the same so subsequent runs get the same random
-      call PetscRandomSetSeed(rctx, 1.0, ierr)
-      call PetscRandomSeed(rctx, ierr)      
-
-      ! ~~~~~~~~~~
-      ! Create some petsc vecs
-      ! ~~~~~~~~~~ 
-      do i_loc = 1, subspace_size+1
-         call MatCreateVecs(matrix, V_n(i_loc), PETSC_NULL_VEC, ierr)         
-      end do         
-
-      ! We want our random rhs to be a normal distribution with zero mean as that preserves
-      ! white noise in the eigenspace (ie it is rotation invariant to unitary transforms)
-      ! Do a box-muller to take two numbers with uniform distribution and produce a number
-      ! that is normally distributed  
-      ! Box muller does sqrt(-2 * log(random_data(:, 1))) * cos(2 * pi * random_data(:, 2))      
-
-      ! Compute uniform random numbers
-      call VecSetRandom(V_n(1), rctx, ierr)
-
-      ! Temporarily set V_n(2) to 1.0 
-      call VecSet(V_n(2), 1.0, ierr)      
-      ! We need to change V_n from [0,1) to (0,1], which we need for the log  
-      ! V_n(1) = 1 - V_n(1)
-      call VecAYPX(V_n(1), -1.0, V_n(2), ierr)
-      call VecLog(V_n(1), ierr)
-      call VecScale(V_n(1), -2.0, ierr)
-      ! V_n(1) now has in it sqrt(-2 * log(random_data(:, 1)))
-      call VecSqrtAbs(V_n(1), ierr)
-
-      ! Now we need to do cos(2 * pi * random_data(:, 2))      
-      ! We don't have petsc way to do the cos, hence we don't have portability across
-      ! cpus and gpus (given all the different gpu frameworks too)
-      ! So I generate the random numbers myself, cos them and then set values 
-      ! This means only one copy to the gpu (rather than generate the random
-      ! numbers on the gpu, do a copy to the host, then cos, then a copy back)
-      ! Could just call the specialised gpu trig routines, but that would require cuda/kokkos
-      ! specific calls which we're trying to avoid
 
       call random_seed(size=seed_size)
       allocate(seed(seed_size))
@@ -220,29 +175,37 @@ module gmres_poly
       end do   
       call random_seed(put=seed)    
 
-      ! ! Gives a random number between 0 <= u < 1
-      ! ! We should remove the u = 0 (ie epsilon) case, but we don't need a perfect
-      ! ! normal distribution here     
-      ! ! Get two sets of random numbers 
-      allocate(random_data(local_rows))
-      call random_number(random_data)
+      ! Gives a random number between 0 <= u < 1
+      ! We should remove the u = 0 (ie epsilon) case, but we don't need a perfect
+      ! normal distribution here     
+      ! Get two sets of random numbers 
+      allocate(random_data(local_rows, 2))
+      call random_number(random_data(:, 1:2))
 
-      ! Compute the trig function
-      random_data = cos(2 * pi * random_data)
-      deallocate(seed)          
+      ! We want our random rhs to be a normal distribution with zero mean as that preserves
+      ! white noise in the eigenspace (ie it is rotation invariant to unitary transforms)
+      ! Do a box-muller to take two numbers with uniform distribution and produce a number
+      ! that is normally distributed       
+      random_data(:, 1) = sqrt(-2 * log(random_data(:, 1))) * cos(2 * pi * random_data(:, 2))
+      deallocate(seed)
 
-      ! Copy the values into V_n(2)
+      ! ~~~~~~~~~~
+      ! Create some petsc vecs and assign the data in them to point at K_m+1
+      ! ~~~~~~~~~~ 
+      ! Create vectors pointing at the columns in K_m+1
+      do i_loc = 1, subspace_size+1
+         call MatCreateVecs(matrix, V_n(i_loc), PETSC_NULL_VEC, ierr)         
+      end do         
+
+      ! Set the random values into the first vector
       do row_i = 1, local_rows
-         call VecSetValues(V_n(2), one, [global_row_start + row_i-1], [random_data(row_i)], INSERT_VALUES, ierr)
+         call VecSetValues(V_n(1), one, [global_row_start + row_i-1], [random_data(row_i, 1)], INSERT_VALUES, ierr)
       end do
-      call VecAssemblyBegin(V_n(2), ierr)
-      call VecAssemblyEnd(V_n(2), ierr) 
+      call VecAssemblyBegin(V_n(1), ierr)
+      call VecAssemblyEnd(V_n(1), ierr)   
+      
       deallocate(random_data)
-      call PetscRandomDestroy(rctx, ierr)
-      
-      ! Now do the pointwise mult
-      call VecPointwiseMult(V_n(1), V_n(1), V_n(2), ierr)
-      
+
       ! ~~~~~~~~~~~~
 
    end subroutine create_temp_space_box_mueller   
