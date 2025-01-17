@@ -163,7 +163,11 @@ module gmres_poly
       call MatGetOwnershipRange(matrix, global_row_start, global_row_end_plus_one, ierr)  
 
       ! ~~~~~~~~~~
-      ! Create random vector
+      ! Create random vector - this happens on the cpu
+      ! We could do most of the box-muller on the gpu, but currently the random numbers in petsc 
+      ! are still generated on the host (and we don't have portable trig functions in petsc across the different
+      ! gpu vec types), so that would cause more copies to/from the gpu     
+      ! If that changes this should be rewritten so this all happens on the gpu  
       ! ~~~~~~~~~~      
 
       call random_seed(size=seed_size)
@@ -199,6 +203,7 @@ module gmres_poly
       end do         
 
       ! Set the random values into the first vector
+      ! V_n(1) data will be copied to the gpu when needed
       do row_i = 1, local_rows
          call VecSetValues(V_n(1), one, [global_row_start + row_i-1], [random_data(row_i, 1)], INSERT_VALUES, ierr)
       end do
