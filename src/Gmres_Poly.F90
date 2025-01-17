@@ -187,7 +187,7 @@ module gmres_poly
 
       ! Remove the u = 0 (ie epsilon) case
       ! to change from [0,1) to (0,1], which we need for the log */
-      ! random_data(:, 1) = 1.0 - random_data(:, 1)
+      random_data(:, 1) = 1.0 - random_data(:, 1)
 
       ! We want our random rhs to be a normal distribution with zero mean as that preserves
       ! white noise in the eigenspace (ie it is rotation invariant to unitary transforms)
