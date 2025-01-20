@@ -19,7 +19,7 @@ module matshell_data_type
       real, dimension(:), pointer :: real_roots => null()
       real, dimension(:), pointer :: imag_roots => null()
       type(tMat) :: mat
-      type(tVec) :: vec
+      type(tVec) :: vec, temp_vec
       type(air_multigrid_data), pointer :: air_data => null()
 
    end type mat_ctxtype

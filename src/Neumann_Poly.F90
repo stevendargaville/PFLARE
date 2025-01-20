@@ -134,7 +134,7 @@ module neumann_poly
 
       ! and now we call the horner method to apply our polynomial
       ! q(I - D^-1 A) to rhs_copy (D^-1 x)
-      call petsc_horner(ida_mat, mat_ctx_input%coefficients, rhs_copy, y)
+      call petsc_horner(ida_mat, mat_ctx_input%coefficients, mat_ctx_input%temp_vec, rhs_copy, y)
 
       ! Cleanup
       call VecDestroy(rhs_copy, ierr)
@@ -210,7 +210,10 @@ module neumann_poly
                         MATOP_MULT, petsc_matvec_neumann_poly_mf, ierr)
 
             call MatAssemblyBegin(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)
-            call MatAssemblyEnd(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)  
+            call MatAssemblyEnd(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)
+            
+            ! Create temporary vector we use during horner
+            call MatCreateVecs(inv_matrix, mat_ctx%temp_vec, PETSC_NULL_VEC, ierr)             
 
          ! Reusing 
          else

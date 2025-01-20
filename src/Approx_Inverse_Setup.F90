@@ -382,6 +382,7 @@ module approx_inverse_setup
                deallocate(mat_ctx%coefficients)
                mat_ctx%coefficients => null()
             end if
+            call VecDestroy(mat_ctx%temp_vec, ierr)
             deallocate(mat_ctx)
          end if               
          call MatDestroy(matrix, ierr)

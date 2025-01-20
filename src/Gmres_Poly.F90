@@ -1258,7 +1258,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine petsc_horner(mat, coefficients, x, y)
+   subroutine petsc_horner(mat, coefficients, temp_vec, x, y)
 
       ! Uses a horner iteration to apply
       ! y = (coeff(1) + coeff(2) * A + coeff(3) * A^2 + ...) x
@@ -1268,13 +1268,12 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       ! Input
       type(tMat), intent(in)    :: mat
       real, dimension(:)        :: coefficients
-      type(tVec)                :: x
+      type(tVec)                :: x, temp_vec
       type(tVec)                :: y
 
       ! Local
       integer :: order
       PetscErrorCode :: ierr      
-      type(tVec) :: temp_result
 
       ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1303,28 +1302,23 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
                x, ierr)
 
       ! If we are doing a first order polynomial or above, we have to do an extra matvec per order
-      if (size(coefficients, 1) > 1) then
-
-         ! Duplicate y to store the temporary copy
-         call VecDuplicate(y, temp_result, ierr)       
+      if (size(coefficients, 1) > 1) then     
 
          ! Loop down from the second highest order term down to the constant
          do order = size(coefficients, 1)-1, 1, -1
 
-            ! Copy y into temp_result
-            call VecCopy(y, temp_result, ierr)             
+            ! Copy y into temp_vec
+            call VecCopy(y, temp_vec, ierr)             
 
-            ! Now do y = A * temp_result
-            call MatMult(mat, temp_result, y, ierr)
+            ! Now do y = A * temp_vec
+            call MatMult(mat, temp_vec, y, ierr)
 
-            ! Compute y = A * temp_result + alpha_n-i-1 r_0
+            ! Compute y = A * temp_vec + alpha_n-i-1 r_0
             call VecAXPBY(y, &
                      coefficients(order), &
                      1.0, &
                      x, ierr)
          end do
-
-         call VecDestroy(temp_result, ierr)
       end if
 
    end subroutine petsc_horner     
@@ -1359,7 +1353,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       end if
 
       ! Call the Horner iteration
-      call petsc_horner(mat_ctx%mat, mat_ctx%coefficients, x, y)
+      call petsc_horner(mat_ctx%mat, mat_ctx%coefficients, mat_ctx%temp_vec, x, y)
 
    end subroutine petsc_matvec_poly_mf      
 
@@ -1430,6 +1424,9 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
 
             call MatAssemblyBegin(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)
             call MatAssemblyEnd(inv_matrix, MAT_FINAL_ASSEMBLY, ierr) 
+
+            ! Create temporary vector we use during horner
+            call MatCreateVecs(inv_matrix, mat_ctx%temp_vec, PETSC_NULL_VEC, ierr)         
 
          ! Reusing 
          else
