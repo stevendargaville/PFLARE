@@ -1414,6 +1414,9 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
 
             ! Have to dynamically allocate this
             allocate(mat_ctx)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
+            mat_ctx%mat_ida = PETSC_NULL_MAT
+#endif             
 
             ! We pass in the polynomial coefficients as the context
             call MatCreateShell(MPI_COMM_MATRIX, local_rows, local_cols, global_rows, global_cols, &

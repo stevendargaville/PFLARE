@@ -370,7 +370,7 @@ module approx_inverse_setup
 
       PetscErrorCode :: ierr
       MatType:: mat_type
-      type(mat_ctxtype), pointer :: mat_ctx
+      type(mat_ctxtype), pointer :: mat_ctx, mat_ctx_ida
       ! ~~~~~~
 
       if (.NOT. PetscMatIsNull(matrix)) then
@@ -383,6 +383,15 @@ module approx_inverse_setup
                mat_ctx%coefficients => null()
             end if
             call VecDestroy(mat_ctx%temp_vec, ierr)
+            ! Neumann polynomial has extra context that needs deleting
+            if (.NOT. PetscMatIsNull(mat_ctx%mat_ida)) then
+               call MatShellGetContext(mat_ctx%mat_ida, mat_ctx_ida, ierr)
+               deallocate(mat_ctx_ida)
+               call MatDestroy(mat_ctx%mat_ida, ierr)
+               call VecDestroy(mat_ctx%rhs_copy, ierr)
+               call VecDestroy(mat_ctx%diag_vec, ierr)
+               call VecDestroy(mat_ctx%vec, ierr)
+            end if
             deallocate(mat_ctx)
          end if               
          call MatDestroy(matrix, ierr)

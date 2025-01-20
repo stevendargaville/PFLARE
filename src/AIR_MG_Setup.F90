@@ -1662,6 +1662,9 @@ module air_mg_setup
          allocate(mat_ctx)
          mat_ctx%our_level = our_level
          mat_ctx%air_data => air_data
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
+         mat_ctx%mat_ida = PETSC_NULL_MAT
+#endif         
 
          if (.NOT. air_data%options%full_smoothing_up_and_down) then
             call MatCreateShell(MPI_COMM_MATRIX, local_rows, local_cols, global_rows, global_cols, &
@@ -1934,7 +1937,6 @@ module air_mg_setup
       integer :: our_level
       PetscErrorCode :: ierr
       MatType:: mat_type
-      type(mat_ctxtype), pointer :: mat_ctx
       integer :: i_loc
       logical :: reuse
       ! ~~~~~~    
@@ -2086,7 +2088,6 @@ module air_mg_setup
 
       integer :: our_level
       MatType:: mat_type
-      type(mat_ctxtype), pointer :: mat_ctx
       ! ~~~~~~    
 
       call reset_air_data(air_data)

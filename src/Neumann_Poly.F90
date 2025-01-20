@@ -20,7 +20,7 @@ module neumann_poly
 
    subroutine petsc_matvec_ida_neumann_poly_mf(mat, x, y)
 
-      ! Applies a I-D^-1 A matrix-free
+      ! Applies I-D^-1 A matrix-free
       ! y = A x
 
       ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -33,21 +33,21 @@ module neumann_poly
       ! Local
       PetscErrorCode :: ierr
       type(tVec) :: rhs_copy, diag_vec
-      type(mat_ctxtype), pointer :: mat_ctx => null()
+      type(mat_ctxtype), pointer :: mat_ctx_ida => null()
 
       ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-      call MatShellGetContext(mat, mat_ctx, ierr)
+      call MatShellGetContext(mat, mat_ctx_ida, ierr)
 
       ! ~~~~~~~~~~~~
       ! We want to apply (I-D^-1 A) x
       ! ~~~~~~~~~~~~
 
       ! Multiply by A
-      call MatMult(mat_ctx%mat, x, y, ierr)
+      call MatMult(mat_ctx_ida%mat, x, y, ierr)
 
       ! Doing D^-1 on the result
-      call VecPointwiseDivide(y, y, mat_ctx%vec, ierr)
+      call VecPointwiseDivide(y, y, mat_ctx_ida%diag_vec, ierr)
 
       ! Now do x - D^-1 A x
       call VecAXPBY(y, &
@@ -73,19 +73,14 @@ module neumann_poly
       type(tVec) :: y
 
       ! Local
-      integer :: comm_size, errorcode
+      integer :: errorcode
       PetscErrorCode :: ierr      
-      MPI_Comm :: MPI_COMM_MATRIX
-      PetscInt :: local_rows, local_cols, global_rows, global_cols
-      type(mat_ctxtype), pointer :: mat_ctx_input => null()
-      type(mat_ctxtype), pointer :: mat_ctx_ida => null()
-      type(tMat) :: ida_mat
-      type(tVec) :: rhs_copy, diag_vec
+      type(mat_ctxtype), pointer :: mat_ctx => null()
 
       ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-      call MatShellGetContext(mat, mat_ctx_input, ierr)
-      if (.NOT. associated(mat_ctx_input%coefficients)) then
+      call MatShellGetContext(mat, mat_ctx, ierr)
+      if (.NOT. associated(mat_ctx%coefficients)) then
          print *, "Polynomial coefficients in context aren't found"
          call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
       end if
@@ -94,53 +89,12 @@ module neumann_poly
       ! We want to apply q(I-D^-1 A) D^-1 with coefficients=1
       ! ~~~~~~~~~~~~
 
-      ! Create D
-      call MatCreateVecs(mat_ctx_input%mat, rhs_copy, diag_vec, ierr)
-      call MatGetDiagonal(mat_ctx_input%mat, diag_vec, ierr)    
-
       ! Doing rhs_copy = D^-1 x 
-      call VecPointwiseDivide(rhs_copy, x, diag_vec, ierr)
-
-      ! ~~~~~~~~~~~~
-      ! Now we need to build a matrix-free mat that does I-D^-1 A
-      ! ~~~~~~~~~~~~
-      call PetscObjectGetComm(mat_ctx_input%mat, MPI_COMM_MATRIX, ierr)    
-      ! Get the comm size 
-      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)        
-
-      ! Get the local sizes
-      call MatGetLocalSize(mat_ctx_input%mat, local_rows, local_cols, ierr)
-      call MatGetSize(mat_ctx_input%mat, global_rows, global_cols, ierr)         
-
-      ! Have to dynamically allocate this
-      allocate(mat_ctx_ida)
-      mat_ctx_ida%coefficients => mat_ctx_input%coefficients
-      ! This is the matrix whose inverse we are applying (just copying the pointer here)
-      mat_ctx_ida%mat = mat_ctx_input%mat 
-      ! Send in the diagonal too
-      mat_ctx_ida%vec = diag_vec
-
-      ! Create the matshell
-      call MatCreateShell(MPI_COMM_MATRIX, local_rows, local_cols, global_rows, global_cols, &
-                  mat_ctx_ida, ida_mat, ierr)
-      ! The subroutine petsc_matvec_ida_neumann_poly_mf applies I - D^-1 A
-      call MatShellSetOperation(ida_mat, &
-                  MATOP_MULT, petsc_matvec_ida_neumann_poly_mf, ierr)
-
-      call MatAssemblyBegin(ida_mat, MAT_FINAL_ASSEMBLY, ierr)
-      call MatAssemblyEnd(ida_mat, MAT_FINAL_ASSEMBLY, ierr)   
-      
-      ! ~~~~~~~~~~~~~~~~~~~
+      call VecPointwiseDivide(mat_ctx%rhs_copy, x, mat_ctx%diag_vec, ierr)
 
       ! and now we call the horner method to apply our polynomial
       ! q(I - D^-1 A) to rhs_copy (D^-1 x)
-      call petsc_horner(ida_mat, mat_ctx_input%coefficients, mat_ctx_input%temp_vec, rhs_copy, y)
-
-      ! Cleanup
-      call VecDestroy(rhs_copy, ierr)
-      call VecDestroy(diag_vec, ierr) 
-      deallocate(mat_ctx_ida)
-      call MatDestroy(ida_mat, ierr)       
+      call petsc_horner(mat_ctx%mat_ida, mat_ctx%coefficients, mat_ctx%temp_vec, mat_ctx%rhs_copy, y)      
 
    end subroutine petsc_matvec_neumann_poly_mf      
 
@@ -173,7 +127,7 @@ module neumann_poly
       PetscInt :: local_rows, local_cols, global_rows, global_cols
       type(tMat) :: temp_mat
       type(tVec) :: rhs_copy, diag_vec
-      type(mat_ctxtype), pointer :: mat_ctx
+      type(mat_ctxtype), pointer :: mat_ctx, mat_ctx_ida
 
       ! ~~~~~~    
 
@@ -200,7 +154,7 @@ module neumann_poly
             ! Have to dynamically allocate this
             allocate(mat_ctx)
             ! A Neumann polynomial has coefficients of 1
-            mat_ctx%coefficients => coefficients            
+            mat_ctx%coefficients => coefficients                      
 
             ! Create the matshell
             call MatCreateShell(MPI_COMM_MATRIX, local_rows, local_cols, global_rows, global_cols, &
@@ -213,16 +167,48 @@ module neumann_poly
             call MatAssemblyEnd(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)
             
             ! Create temporary vector we use during horner
-            call MatCreateVecs(inv_matrix, mat_ctx%temp_vec, PETSC_NULL_VEC, ierr)             
+            call MatCreateVecs(inv_matrix, mat_ctx%temp_vec, PETSC_NULL_VEC, ierr) 
+
+            ! ~~~~~~~~~~~~~
+            ! Now we allocate a new matshell that applies a diagonally scaled version of 
+            ! the matrix minus I
+            ! ~~~~~~~~~~~~~
+
+            ! Have to dynamically allocate this
+            allocate(mat_ctx_ida)
+            mat_ctx_ida%coefficients => coefficients
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
+            mat_ctx_ida%mat_ida = PETSC_NULL_MAT
+#endif                        
+            
+            ! Create the matshell
+            call MatCreateShell(MPI_COMM_MATRIX, local_rows, local_cols, global_rows, global_cols, &
+                        mat_ctx_ida, mat_ctx%mat_ida, ierr)
+            ! The subroutine petsc_matvec_ida_neumann_poly_mf applies I - D^-1 A
+            call MatShellSetOperation(mat_ctx%mat_ida, &
+                        MATOP_MULT, petsc_matvec_ida_neumann_poly_mf, ierr)
+
+            call MatAssemblyBegin(mat_ctx%mat_ida, MAT_FINAL_ASSEMBLY, ierr)
+            call MatAssemblyEnd(mat_ctx%mat_ida, MAT_FINAL_ASSEMBLY, ierr)    
+            
+            ! Create temporary vector we use during horner
+            call MatCreateVecs(mat_ctx%mat_ida, mat_ctx%vec, PETSC_NULL_VEC, ierr)       
+            call MatCreateVecs(mat_ctx%mat_ida, mat_ctx%rhs_copy, mat_ctx%diag_vec, ierr)       
 
          ! Reusing 
          else
             call MatShellGetContext(inv_matrix, mat_ctx, ierr)
+            call MatShellGetContext(mat_ctx%mat_ida, mat_ctx_ida, ierr)
 
          end if
 
          ! This is the matrix whose inverse we are applying (just copying the pointer here)
          mat_ctx%mat = matrix 
+         mat_ctx_ida%mat = matrix 
+
+         ! Get the diagonal
+         call MatGetDiagonal(matrix, mat_ctx%diag_vec, ierr)    
+         mat_ctx_ida%diag_vec = mat_ctx%diag_vec
 
       ! If not matrix free
       else

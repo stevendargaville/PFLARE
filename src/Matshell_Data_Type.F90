@@ -18,8 +18,8 @@ module matshell_data_type
       logical                     :: own_coefficients = .FALSE.
       real, dimension(:), pointer :: real_roots => null()
       real, dimension(:), pointer :: imag_roots => null()
-      type(tMat) :: mat
-      type(tVec) :: vec, temp_vec
+      type(tMat) :: mat, mat_ida
+      type(tVec) :: vec, temp_vec, diag_vec, rhs_copy
       type(air_multigrid_data), pointer :: air_data => null()
 
    end type mat_ctxtype
