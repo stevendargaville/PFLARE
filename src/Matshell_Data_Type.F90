@@ -12,9 +12,9 @@ module matshell_data_type
    ! This has to be in a separate file to matshell
 
    ! Indices into mf_temp_vec
-   integer, parameter :: MF_VEC_TEMP_VEC = 1
+   integer, parameter :: MF_VEC_TEMP = 1
    integer, parameter :: MF_VEC_DIAG = 2
-   integer, parameter :: MF_VEC_RHS_COPY = 3
+   integer, parameter :: MF_VEC_RHS = 3
    
    type :: mat_ctxtype
 

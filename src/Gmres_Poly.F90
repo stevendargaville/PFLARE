@@ -1353,7 +1353,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       end if
 
       ! Call the Horner iteration
-      call petsc_horner(mat_ctx%mat, mat_ctx%coefficients, mat_ctx%mf_temp_vec(MF_VEC_TEMP_VEC), x, y)
+      call petsc_horner(mat_ctx%mat, mat_ctx%coefficients, mat_ctx%mf_temp_vec(MF_VEC_TEMP), x, y)
 
    end subroutine petsc_matvec_poly_mf      
 
@@ -1429,7 +1429,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
             call MatAssemblyEnd(inv_matrix, MAT_FINAL_ASSEMBLY, ierr) 
 
             ! Create temporary vector we use during horner
-            call MatCreateVecs(inv_matrix, mat_ctx%mf_temp_vec(MF_VEC_TEMP_VEC), PETSC_NULL_VEC, ierr)         
+            call MatCreateVecs(inv_matrix, mat_ctx%mf_temp_vec(MF_VEC_TEMP), PETSC_NULL_VEC, ierr)         
 
          ! Reusing 
          else

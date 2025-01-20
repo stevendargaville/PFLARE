@@ -382,14 +382,22 @@ module approx_inverse_setup
                deallocate(mat_ctx%coefficients)
                mat_ctx%coefficients => null()
             end if
-            call VecDestroy(mat_ctx%mf_temp_vec(MF_VEC_TEMP_VEC), ierr)
+            call VecDestroy(mat_ctx%mf_temp_vec(MF_VEC_TEMP), ierr)
+
+            ! Both newton and neumann polynomials use some extra temporary vectors
+            if (.NOT. PetscMatIsNull(mat_ctx%mat_ida) .OR. &
+                     associated(mat_ctx%real_roots)) then
+               
+               call VecDestroy(mat_ctx%mf_temp_vec(MF_VEC_RHS), ierr)
+               call VecDestroy(mat_ctx%mf_temp_vec(MF_VEC_DIAG), ierr)
+            end if
+
             ! Neumann polynomial has extra context that needs deleting
             if (.NOT. PetscMatIsNull(mat_ctx%mat_ida)) then
                call MatShellGetContext(mat_ctx%mat_ida, mat_ctx_ida, ierr)
                deallocate(mat_ctx_ida)
                call MatDestroy(mat_ctx%mat_ida, ierr)
-               call VecDestroy(mat_ctx%mf_temp_vec(MF_VEC_RHS_COPY), ierr)
-               call VecDestroy(mat_ctx%mf_temp_vec(MF_VEC_DIAG), ierr)
+
             end if
             deallocate(mat_ctx)
          end if               

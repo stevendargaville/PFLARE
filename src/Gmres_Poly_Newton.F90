@@ -490,7 +490,6 @@ module gmres_poly_newton
       integer :: order, errorcode
       PetscErrorCode :: ierr      
       type(mat_ctxtype), pointer :: mat_ctx => null()
-      type(tVec) :: prod, temp_result, temp
 
       ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -500,11 +499,8 @@ module gmres_poly_newton
          call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
       end if
 
-      ! prod = x
-      call VecDuplicate(x, prod, ierr)     
-      call VecDuplicate(x, temp_result, ierr)         
-      call VecDuplicate(x, temp, ierr)         
-      call VecCopy(x, prod, ierr)
+      ! MF_VEC_TEMP = x
+      call VecCopy(x, mat_ctx%mf_temp_vec(MF_VEC_TEMP), ierr)
       ! y = 0
       call VecSet(y, 0.0, ierr)
 
@@ -524,19 +520,20 @@ module gmres_poly_newton
                cycle
             end if
 
-            ! y = y + theta_i * prod
+            ! y = y + theta_i * MF_VEC_TEMP
             call VecAXPBY(y, &
                      1.0/mat_ctx%real_roots(order), &
                      1.0, &
-                     prod, ierr)   
+                     mat_ctx%mf_temp_vec(MF_VEC_TEMP), ierr)   
                                           
-            ! temp_result = A * prod
-            call MatMult(mat_ctx%mat, prod, temp_result, ierr)
-            ! prod = prod - theta_i * temp_result
-            call VecAXPBY(prod, &
+            ! MF_VEC_DIAG = A * MF_VEC_TEMP
+            ! MF_VEC_DIAG isn't actually a diagonal here, we're just using this vec as temporary storage
+            call MatMult(mat_ctx%mat, mat_ctx%mf_temp_vec(MF_VEC_TEMP), mat_ctx%mf_temp_vec(MF_VEC_DIAG), ierr)
+            ! MF_VEC_TEMP = MF_VEC_TEMP - theta_i * MF_VEC_DIAG
+            call VecAXPBY(mat_ctx%mf_temp_vec(MF_VEC_TEMP), &
                      -1.0/mat_ctx%real_roots(order), &
                      1.0, &
-                     temp_result, ierr) 
+                     mat_ctx%mf_temp_vec(MF_VEC_DIAG), ierr) 
 
             order = order + 1
 
@@ -551,29 +548,29 @@ module gmres_poly_newton
                cycle
             end if            
 
-            ! temp_result = A * prod
-            call MatMult(mat_ctx%mat, prod, temp_result, ierr)    
-            ! temp_result = 2 * Re(theta_i) * prod - temp_result
-            call VecAXPBY(temp_result, &
+            ! MF_VEC_DIAG = A * MF_VEC_TEMP
+            call MatMult(mat_ctx%mat, mat_ctx%mf_temp_vec(MF_VEC_TEMP), mat_ctx%mf_temp_vec(MF_VEC_DIAG), ierr)    
+            ! MF_VEC_DIAG = 2 * Re(theta_i) * MF_VEC_TEMP - MF_VEC_DIAG
+            call VecAXPBY(mat_ctx%mf_temp_vec(MF_VEC_DIAG), &
                   2 * mat_ctx%real_roots(order), &
                   -1.0, &
-                  prod, ierr)
+                  mat_ctx%mf_temp_vec(MF_VEC_TEMP), ierr)
 
-            ! y = y + 1/(Re(theta_i)^2 + Imag(theta_i)^2) * temp_result
+            ! y = y + 1/(Re(theta_i)^2 + Imag(theta_i)^2) * MF_VEC_DIAG
             call VecAXPBY(y, &
                      1.0/(mat_ctx%real_roots(order)**2 + mat_ctx%imag_roots(order)**2), &
                      1.0, &
-                     temp_result, ierr)  
+                     mat_ctx%mf_temp_vec(MF_VEC_DIAG), ierr)  
                      
             if (order .le. size(mat_ctx%real_roots) - 2) then
-               ! temp = A * temp_result
-               call MatMult(mat_ctx%mat, temp_result, temp, ierr)    
+               ! MF_VEC_RHS = A * MF_VEC_DIAG
+               call MatMult(mat_ctx%mat, mat_ctx%mf_temp_vec(MF_VEC_DIAG), mat_ctx%mf_temp_vec(MF_VEC_RHS), ierr)    
 
-               ! prod = prod - 1/(Re(theta_i)^2 + Imag(theta_i)^2) * temp
-               call VecAXPBY(prod, &
+               ! MF_VEC_TEMP = MF_VEC_TEMP - 1/(Re(theta_i)^2 + Imag(theta_i)^2) * MF_VEC_RHS
+               call VecAXPBY(mat_ctx%mf_temp_vec(MF_VEC_TEMP), &
                         -1.0/(mat_ctx%real_roots(order)**2 + mat_ctx%imag_roots(order)**2), &
                         1.0, &
-                        temp, ierr)               
+                        mat_ctx%mf_temp_vec(MF_VEC_RHS), ierr)               
             end if
 
             ! Skip two evals
@@ -588,17 +585,13 @@ module gmres_poly_newton
          ! Skips eigenvalues that are numerically zero
          if (abs(mat_ctx%real_roots(order)) > 1e-12) then
 
-            ! y = y + theta_i * prod
+            ! y = y + theta_i * MF_VEC_TEMP
             call VecAXPBY(y, &
                      1.0/mat_ctx%real_roots(order), &
                      1.0, &
-                     prod, ierr) 
+                     mat_ctx%mf_temp_vec(MF_VEC_TEMP), ierr) 
          end if
       end if
-
-      call VecDestroy(temp_result, ierr)
-      call VecDestroy(prod, ierr)
-      call VecDestroy(temp, ierr)
 
    end subroutine petsc_matvec_gmres_newton_mf      
 
@@ -658,7 +651,11 @@ module gmres_poly_newton
                      MATOP_MULT, petsc_matvec_gmres_newton_mf, ierr)
 
          call MatAssemblyBegin(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)
-         call MatAssemblyEnd(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)         
+         call MatAssemblyEnd(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)
+         
+         ! Create temporary vectors we use during application
+         call MatCreateVecs(inv_matrix, mat_ctx%mf_temp_vec(MF_VEC_TEMP), PETSC_NULL_VEC, ierr)          
+         call MatCreateVecs(inv_matrix, mat_ctx%mf_temp_vec(MF_VEC_RHS), mat_ctx%mf_temp_vec(MF_VEC_DIAG), ierr)                
 
       ! Reusing 
       else
