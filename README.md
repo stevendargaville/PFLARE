@@ -3,7 +3,7 @@
 # PFLARE library
 ### Author: Steven Dargaville
 
-This library contains methods which can be used to solve linear systems in parallel with PETSc, with interfaces in C/Fortran/Python.
+This library contains methods which can be used to solve linear systems in parallel with PETSc, with interfaces in C/Fortran/Python and GPU support.
    
 PFLARE can scalably solve:
 1) Hyperbolic problems implicitly without Gauss-Seidel methods, such as advection equations, streaming operators from Boltzmann transport applications, multigrid in time discretisations, etc. This includes time dependent or independent equations, with structured or unstructured grids, with lower triangular structure or without.
@@ -53,7 +53,7 @@ PFLARE can scalably solve:
 
 ## Building PFLARE
 
-This library depends on MPI, BLAS, LAPACK (>= 3.4) and PETSc (3.14 to 3.22) configured with a graph partitioner (e.g., ParMETIS). Please compile PETSc directly from the source code, as PFLARE requires access to some of the PETSc types only available in the source.
+This library depends on MPI, BLAS, LAPACK (>= 3.4) and PETSc (3.15 to 3.22) configured with a graph partitioner (e.g., ParMETIS). Please compile PETSc directly from the source code, as PFLARE requires access to some of the PETSc types only available in the source.
 
 1) Set `PETSC_DIR` and `PETSC_ARCH` environmental variables.
 2) Call ``make`` in the top level directory (you may need to modify the Makefile).
@@ -399,6 +399,17 @@ Running a test with OpenMP then requires setting the ``OMP_NUM_THREADS`` variabl
 
       srun --oversubscribe --distribution=block:block --cpu-bind=mask_cpu:$mask adv_diff_2d.o -pc_type air
 
+## GPU support           
+
+If PETSc has been configured with GPU support (e.g., CUDA, Kokkos, etc) then the solve phase with PCPFLAREINV or PCAIR occurs on the GPU. This relies on the matrix and vector types being set correctly by the user, which is typically this is done through command line options. For example, if we solve the 1D advection problem ``tests/ex86`` by using a 30th order GMRES polynomial applied matrix-free:
+
+``./ex86.o -n 100000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30``
+
+this solve will occur on the CPU by default. Whereas if PETSc has been configured with CUDA support for example, we specify the matrix and vector type as CUDA and hence the solve happens on the GPU:
+
+``./ex86.o -n 100000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijcusparse -vec_type cuda``
+
+The option ``-log_view`` can also be used to show how many copies to/from the CPU/GPU occur during the setup and solve. The majority of the FLOPs performed during the setup also occur on the GPU for both PCPFLAREINV and PCAIR, depending on the options used. We should note however that many of the solver options have not necessarily been fully optimised on the GPUs. 
 
 ## CF splittings
 
