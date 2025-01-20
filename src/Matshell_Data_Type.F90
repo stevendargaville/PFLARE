@@ -10,6 +10,11 @@ module matshell_data_type
    ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~       
    ! This is our context type for matshells
    ! This has to be in a separate file to matshell
+
+   ! Indices into mf_temp_vec
+   integer, parameter :: MF_VEC_TEMP_VEC = 1
+   integer, parameter :: MF_VEC_DIAG = 2
+   integer, parameter :: MF_VEC_RHS_COPY = 3
    
    type :: mat_ctxtype
 
@@ -19,7 +24,8 @@ module matshell_data_type
       real, dimension(:), pointer :: real_roots => null()
       real, dimension(:), pointer :: imag_roots => null()
       type(tMat) :: mat, mat_ida
-      type(tVec) :: vec, temp_vec, diag_vec, rhs_copy
+      ! Temporary vectors we use
+      type(tVec), dimension(3) :: mf_temp_vec
       type(air_multigrid_data), pointer :: air_data => null()
 
    end type mat_ctxtype

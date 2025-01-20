@@ -47,7 +47,7 @@ module neumann_poly
       call MatMult(mat_ctx_ida%mat, x, y, ierr)
 
       ! Doing D^-1 on the result
-      call VecPointwiseDivide(y, y, mat_ctx_ida%diag_vec, ierr)
+      call VecPointwiseDivide(y, y, mat_ctx_ida%mf_temp_vec(MF_VEC_DIAG), ierr)
 
       ! Now do x - D^-1 A x
       call VecAXPBY(y, &
@@ -90,11 +90,13 @@ module neumann_poly
       ! ~~~~~~~~~~~~
 
       ! Doing rhs_copy = D^-1 x 
-      call VecPointwiseDivide(mat_ctx%rhs_copy, x, mat_ctx%diag_vec, ierr)
+      call VecPointwiseDivide(mat_ctx%mf_temp_vec(MF_VEC_RHS_COPY), x, &
+               mat_ctx%mf_temp_vec(MF_VEC_DIAG), ierr)
 
       ! and now we call the horner method to apply our polynomial
       ! q(I - D^-1 A) to rhs_copy (D^-1 x)
-      call petsc_horner(mat_ctx%mat_ida, mat_ctx%coefficients, mat_ctx%temp_vec, mat_ctx%rhs_copy, y)      
+      call petsc_horner(mat_ctx%mat_ida, mat_ctx%coefficients, mat_ctx%mf_temp_vec(MF_VEC_TEMP_VEC), &
+                  mat_ctx%mf_temp_vec(MF_VEC_RHS_COPY), y)      
 
    end subroutine petsc_matvec_neumann_poly_mf      
 
@@ -167,7 +169,7 @@ module neumann_poly
             call MatAssemblyEnd(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)
             
             ! Create temporary vector we use during horner
-            call MatCreateVecs(inv_matrix, mat_ctx%temp_vec, PETSC_NULL_VEC, ierr) 
+            call MatCreateVecs(inv_matrix, mat_ctx%mf_temp_vec(MF_VEC_TEMP_VEC), PETSC_NULL_VEC, ierr) 
 
             ! ~~~~~~~~~~~~~
             ! Now we allocate a new matshell that applies a diagonally scaled version of 
@@ -192,8 +194,7 @@ module neumann_poly
             call MatAssemblyEnd(mat_ctx%mat_ida, MAT_FINAL_ASSEMBLY, ierr)    
             
             ! Create temporary vector we use during horner
-            call MatCreateVecs(mat_ctx%mat_ida, mat_ctx%vec, PETSC_NULL_VEC, ierr)       
-            call MatCreateVecs(mat_ctx%mat_ida, mat_ctx%rhs_copy, mat_ctx%diag_vec, ierr)       
+            call MatCreateVecs(mat_ctx%mat_ida, mat_ctx%mf_temp_vec(MF_VEC_RHS_COPY), mat_ctx%mf_temp_vec(MF_VEC_DIAG), ierr)       
 
          ! Reusing 
          else
@@ -207,8 +208,8 @@ module neumann_poly
          mat_ctx_ida%mat = matrix 
 
          ! Get the diagonal
-         call MatGetDiagonal(matrix, mat_ctx%diag_vec, ierr)    
-         mat_ctx_ida%diag_vec = mat_ctx%diag_vec
+         call MatGetDiagonal(matrix, mat_ctx%mf_temp_vec(MF_VEC_DIAG), ierr)    
+         mat_ctx_ida%mf_temp_vec(MF_VEC_DIAG) = mat_ctx%mf_temp_vec(MF_VEC_DIAG)
 
       ! If not matrix free
       else
