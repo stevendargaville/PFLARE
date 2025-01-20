@@ -1429,7 +1429,8 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
             call MatAssemblyEnd(inv_matrix, MAT_FINAL_ASSEMBLY, ierr) 
 
             ! Create temporary vector we use during horner
-            call MatCreateVecs(inv_matrix, mat_ctx%mf_temp_vec(MF_VEC_TEMP), PETSC_NULL_VEC, ierr)         
+            ! Make sure to use matrix here to get the right type (as the shell doesn't know about gpus)            
+            call MatCreateVecs(matrix, mat_ctx%mf_temp_vec(MF_VEC_TEMP), PETSC_NULL_VEC, ierr)         
 
          ! Reusing 
          else

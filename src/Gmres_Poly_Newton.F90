@@ -654,8 +654,9 @@ module gmres_poly_newton
          call MatAssemblyEnd(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)
          
          ! Create temporary vectors we use during application
-         call MatCreateVecs(inv_matrix, mat_ctx%mf_temp_vec(MF_VEC_TEMP), PETSC_NULL_VEC, ierr)          
-         call MatCreateVecs(inv_matrix, mat_ctx%mf_temp_vec(MF_VEC_RHS), mat_ctx%mf_temp_vec(MF_VEC_DIAG), ierr)                
+         ! Make sure to use matrix here to get the right type (as the shell doesn't know about gpus)
+         call MatCreateVecs(matrix, mat_ctx%mf_temp_vec(MF_VEC_TEMP), PETSC_NULL_VEC, ierr)          
+         call MatCreateVecs(matrix, mat_ctx%mf_temp_vec(MF_VEC_RHS), mat_ctx%mf_temp_vec(MF_VEC_DIAG), ierr)                
 
       ! Reusing 
       else
