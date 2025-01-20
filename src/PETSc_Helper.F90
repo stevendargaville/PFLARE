@@ -46,6 +46,7 @@ module petsc_helper
       logical :: rel_row_tol_logical, lump_entries, drop_diag
       real :: rel_row_tol, lump_sum
       MPI_Comm :: MPI_COMM_MATRIX
+      MatType:: mat_type
       
       ! ~~~~~~~~~~
       ! If the tolerance is 0 we still want to go through this routine and drop the zeros
@@ -149,17 +150,15 @@ module petsc_helper
          end do         
       end if
 
-      ! Create the output matrix
-      if (comm_size/=1) then
-         call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                  global_rows, global_cols, &
-                  nz_ignore, nnzs_row, &
-                  nz_ignore, onzs_row, &
-                  output_mat, ierr)   
-      else
-         call MatCreateSeqAIJ(PETSC_COMM_SELF, global_rows, global_cols, nz_ignore, nnzs_row, &
-                     output_mat, ierr)            
-      end if   
+      call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
+      call MatSetSizes(output_mat, local_rows, local_cols, &
+                       global_rows, global_cols, ierr)
+      ! Match the output type
+      call MatGetType(input_mat, mat_type, ierr)
+      call MatSetType(output_mat, mat_type, ierr)
+      call MatMPIAIJSetPreallocation(output_mat,nz_ignore,nnzs_row,nz_ignore,onzs_row,ierr)
+      call MatSeqAIJSetPreallocation(output_mat,nz_ignore,nnzs_row,ierr)
+      call MatSetUp(output_mat, ierr) 
        
       ! Just in case there are some zeros in the input mat, ignore them
       call MatSetOption(output_mat, MAT_IGNORE_ZERO_ENTRIES, PETSC_TRUE, ierr)     
@@ -628,6 +627,7 @@ module petsc_helper
       integer :: max_loc(1)
       integer :: comm_size, errorcode
       MPI_Comm :: MPI_COMM_MATRIX
+      MatType:: mat_type
       
       ! ~~~~~~~~~~
 
@@ -682,19 +682,21 @@ module petsc_helper
 
             ! Must call otherwise petsc leaks memory
             call MatRestoreRow(input_mat, ifree, ncols, cols, vals, ierr)
-         end do
-
-         ! Create the output matrix
-         call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                  global_rows, global_cols, &
-                  nz_ignore, nnzs_row, &
-                  nz_ignore, onzs_row, &
-                  output_mat, ierr)   
-
-      else
-         call MatCreateSeqAIJ(PETSC_COMM_SELF, global_rows, global_cols, one, PETSC_NULL_INTEGER_ARRAY, &
-                     output_mat, ierr)            
+         end do         
       end if    
+
+      call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
+      call MatSetSizes(output_mat, local_rows, local_cols, &
+                       global_rows, global_cols, ierr)
+      ! Match the output type
+      call MatGetType(input_mat, mat_type, ierr)
+      call MatSetType(output_mat, mat_type, ierr)
+      if (comm_size/=1) then
+         call MatMPIAIJSetPreallocation(output_mat,nz_ignore,nnzs_row,nz_ignore,onzs_row,ierr)
+      else
+         call MatSeqAIJSetPreallocation(output_mat,one, PETSC_NULL_INTEGER_ARRAY,ierr)
+      end if
+      call MatSetUp(output_mat, ierr)      
       
       ! Just in case there are some zeros in the input mat, ignore them
       call MatSetOption(output_mat, MAT_IGNORE_ZERO_ENTRIES, PETSC_TRUE, ierr)   
@@ -749,6 +751,7 @@ module petsc_helper
       integer :: max_loc(1)
       integer :: comm_size, errorcode
       MPI_Comm :: MPI_COMM_MATRIX
+      MatType:: mat_type
       
       ! ~~~~~~~~~~
 
@@ -803,19 +806,22 @@ module petsc_helper
 
             ! Must call otherwise petsc leaks memory
             call MatRestoreRow(input_mat, ifree, ncols, cols, vals, ierr)
-         end do
-
-         ! Create the output matrix
-         call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                  global_rows, global_cols, &
-                  nz_ignore, nnzs_row, &
-                  nz_ignore, onzs_row, &
-                  output_mat, ierr)   
-
-      else
-         call MatCreateSeqAIJ(PETSC_COMM_SELF, global_rows, global_cols, one, PETSC_NULL_INTEGER_ARRAY, &
-                     output_mat, ierr)            
+         end do         
       end if    
+
+      ! ! Create the output matrix
+      call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
+      call MatSetSizes(output_mat, local_rows, local_cols, &
+                       global_rows, global_cols, ierr)
+      ! Match the output type
+      call MatGetType(input_mat, mat_type, ierr)
+      call MatSetType(output_mat, mat_type, ierr)
+      if (comm_size/=1) then
+         call MatMPIAIJSetPreallocation(output_mat,nz_ignore,nnzs_row,nz_ignore,onzs_row,ierr)
+      else
+         call MatSeqAIJSetPreallocation(output_mat,one, PETSC_NULL_INTEGER_ARRAY,ierr)
+      end if      
+      call MatSetUp(output_mat, ierr)      
       
       ! Just in case there are some zeros in the input mat, ignore them
       call MatSetOption(output_mat, MAT_IGNORE_ZERO_ENTRIES, PETSC_TRUE, ierr)   
@@ -872,6 +878,7 @@ module petsc_helper
       real, dimension(:), allocatable :: vals
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       PetscInt, dimension(:), pointer :: is_pointer_coarse, is_pointer_fine
+      MatType:: mat_type
 
       ! ~~~~~~~~~~
 
@@ -943,16 +950,15 @@ module petsc_helper
             end do
          end if
 
-         if (comm_size /= 1) then
-            call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols_coarse, global_rows, global_cols_coarse, &
-                        nz_ignore, nnzs_row, &
-                        nz_ignore, onzs_row, &
-                        P, ierr)           
-         else
-            call MatCreateSeqAIJ(MPI_COMM_MATRIX, local_rows, local_rows_coarse, &
-                              nz_ignore, nnzs_row, &
-                              P, ierr)          
-         end if
+         call MatCreate(MPI_COMM_MATRIX, P, ierr)
+         call MatSetSizes(P, local_rows, local_cols_coarse, &
+                          global_rows, global_cols_coarse, ierr)
+         ! Match the output type
+         call MatGetType(W, mat_type, ierr)
+         call MatSetType(P, mat_type, ierr)
+         call MatMPIAIJSetPreallocation(P,nz_ignore,nnzs_row,nz_ignore,onzs_row,ierr)
+         call MatSeqAIJSetPreallocation(P,nz_ignore,nnzs_row,ierr)
+         call MatSetUp(P, ierr)         
       end if
 
       ! Just in case there are some zeros in the input mat, ignore them
@@ -1032,6 +1038,7 @@ module petsc_helper
       type(tIS) :: col_indices
       PetscInt, dimension(:), pointer :: is_pointer_orig_fine_col, is_pointer_coarse, is_pointer_fine
       integer(c_long_long) :: A_array
+      MatType:: mat_type
 
       ! ~~~~~~~~~~
 
@@ -1164,18 +1171,18 @@ module petsc_helper
          ! Identity
          do i_loc = 1, local_rows_coarse
             nnzs_row(i_loc) = nnzs_row(i_loc) + 1
-         end do         
+         end do       
 
-         if (comm_size /= 1) then
-            call MatCreateAIJ(MPI_COMM_MATRIX, local_rows_coarse, local_cols, global_rows_coarse, global_cols, &
-                        nz_ignore, nnzs_row, &
-                        nz_ignore, onzs_row, &
-                        R, ierr)           
-         else
-            call MatCreateSeqAIJ(MPI_COMM_MATRIX, local_rows_coarse, local_cols, &
-                                 nz_ignore, nnzs_row, &
-                                 R, ierr)        
-         end if    
+         call MatCreate(MPI_COMM_MATRIX, R, ierr)
+         call MatSetSizes(R, local_rows_coarse, local_cols, &
+                           global_rows_coarse, global_cols, ierr)
+         ! Match the output type
+         call MatGetType(Z, mat_type, ierr)
+         call MatSetType(R, mat_type, ierr)
+         call MatMPIAIJSetPreallocation(R,nz_ignore,nnzs_row,nz_ignore,onzs_row,ierr)
+         call MatSeqAIJSetPreallocation(R,nz_ignore,nnzs_row,ierr)
+         call MatSetUp(R, ierr) 
+
       end if
 
       ! Just in case there are some zeros in the input mat, ignore them

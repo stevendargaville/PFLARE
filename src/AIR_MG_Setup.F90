@@ -1212,32 +1212,7 @@ module air_mg_setup
             ! Output stats on the coarsening
             if (air_data%options%print_stats_timings .AND. comm_rank == 0) print *, "~~~~~~~~~~~~ Level ", our_level
             if (air_data%options%print_stats_timings  .AND. comm_rank == 0) print *, "Global rows", global_rows, "Global F-points", global_fine_is_size, "Global C-points", global_coarse_is_size   
-
-            ! ~~~~~~~
-            ! Temporary vecs we use in the smoother
-            ! ~~~~~~~
-            ! If we haven't built them already
-            if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then
-               if (comm_size /= 1) then
-                  call VecCreateMPI(MPI_COMM_MATRIX, local_fine_is_size, &
-                           global_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)     
-                  call VecCreateMPI(MPI_COMM_MATRIX, local_coarse_is_size, &
-                           global_coarse_is_size, air_data%temp_vecs_coarse(1)%array(our_level), ierr)                                                                      
-                  ! We need this to trigger the coarse solver
-                  if (our_level == no_levels - 1) then
-                     call VecCreateMPI(MPI_COMM_MATRIX, local_coarse_is_size, &
-                              global_coarse_is_size, air_data%temp_vecs_fine(1)%array(our_level+1), ierr)                      
-                  end if                  
-               else
-                  call VecCreateSeq(PETSC_COMM_SELF, local_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)          
-                  call VecCreateSeq(PETSC_COMM_SELF, local_coarse_is_size, air_data%temp_vecs_coarse(1)%array(our_level), ierr) 
-                  ! We need this to trigger the coarse solver
-                  if (our_level == no_levels - 1) then
-                     call VecCreateSeq(PETSC_COMM_SELF, local_coarse_is_size, air_data%temp_vecs_fine(1)%array(our_level+1), ierr)          
-                  end if
-               end if
-            end if
-               
+       
          ! If this coarse grid is smaller than our minimum, then we are done coarsening
          else
 
@@ -1253,15 +1228,19 @@ module air_mg_setup
                   call ISGetSize(air_data%IS_coarse_index(our_level-1), global_fine_is_size, ierr)
                   call ISGetLocalSize(air_data%IS_coarse_index(our_level-1), local_fine_is_size, ierr)
                end if
-               call VecCreateMPI(MPI_COMM_MATRIX, local_fine_is_size, &
-                        global_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)  
+               call MatCreateVecs(air_data%A_fc(our_level-1), &
+                        air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)               
+               !call VecCreateMPI(MPI_COMM_MATRIX, local_fine_is_size, &
+               !         global_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)  
             else
                if (our_level == 1) then
                   global_fine_is_size = global_rows
                else
                   call ISGetSize(air_data%IS_coarse_index(our_level-1), global_fine_is_size, ierr)
                end if
-               call VecCreateSeq(PETSC_COMM_SELF, global_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)    
+               call MatCreateVecs(air_data%A_fc(our_level-1), &
+                        air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)                
+               !call VecCreateSeq(PETSC_COMM_SELF, global_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)    
             end if
 
             if (air_data%options%constrain_z) then
@@ -1287,26 +1266,6 @@ module air_mg_setup
             exit level_loop
 
          end if    
-
-         ! ~~~~~~~~~~~~~~
-         ! If we got here then we want to generate a new coarse matrix
-         ! ~~~~~~~~~~~~~~
-
-         ! Generate the temporary vectors we use to smooth with
-         ! If we haven't built them already
-         if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then         
-            call VecDuplicate(air_data%temp_vecs_fine(1)%array(our_level), air_data%temp_vecs_fine(2)%array(our_level), ierr)
-            call VecDuplicate(air_data%temp_vecs_fine(1)%array(our_level), air_data%temp_vecs_fine(3)%array(our_level), ierr)
-            call VecDuplicate(air_data%temp_vecs_fine(1)%array(our_level), air_data%temp_vecs_fine(4)%array(our_level), ierr)        
-
-            ! If we're doing C point smoothing we need some extra temporaries
-            if (air_data%options%one_c_smooth .AND. &
-                     .NOT. air_data%options%full_smoothing_up_and_down) then
-               call VecDuplicate(air_data%temp_vecs_coarse(1)%array(our_level), air_data%temp_vecs_coarse(2)%array(our_level), ierr)
-               call VecDuplicate(air_data%temp_vecs_coarse(1)%array(our_level), air_data%temp_vecs_coarse(3)%array(our_level), ierr)
-               call VecDuplicate(air_data%temp_vecs_coarse(1)%array(our_level), air_data%temp_vecs_coarse(4)%array(our_level), ierr)         
-            end if
-         end if
 
          ! ~~~~~~~~~~~~~~     
          ! Now let's go and build all our operators
@@ -1365,7 +1324,68 @@ module air_mg_setup
          ! Extract the submatrices and start the comms to compute the approximate inverses
          ! ~~~~~~~~~         
          call get_submatrices_start_poly_coeff_comms(air_data%coarse_matrix(our_level), &
-               our_level, air_data)          
+               our_level, air_data)         
+               
+         ! ~~~~~~~
+         ! Temporary vecs we use in the smoother
+         ! ~~~~~~~
+         ! If we haven't built them already
+         if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then
+            if (comm_size /= 1) then
+
+               call MatCreateVecs(air_data%A_ff(our_level), &
+                        air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)
+               call MatCreateVecs(air_data%A_fc(our_level), &
+                        air_data%temp_vecs_coarse(1)%array(our_level), PETSC_NULL_VEC, ierr)                           
+
+               !call VecCreateMPI(MPI_COMM_MATRIX, local_fine_is_size, &
+               !         global_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)     
+               !call VecCreateMPI(MPI_COMM_MATRIX, local_coarse_is_size, &
+               !         global_coarse_is_size, air_data%temp_vecs_coarse(1)%array(our_level), ierr)                                                                      
+               ! We need this to trigger the coarse solver
+               if (our_level == no_levels - 1) then
+                  call MatCreateVecs(air_data%A_fc(our_level), PETSC_NULL_VEC, &
+                           air_data%temp_vecs_fine(1)%array(our_level+1), ierr)                      
+
+                  !call VecCreateMPI(MPI_COMM_MATRIX, local_coarse_is_size, &
+                  !         global_coarse_is_size, air_data%temp_vecs_fine(1)%array(our_level+1), ierr)                      
+               end if                  
+            else
+               call MatCreateVecs(air_data%A_ff(our_level), &
+                        air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)
+               call MatCreateVecs(air_data%A_fc(our_level), &
+                        air_data%temp_vecs_coarse(1)%array(our_level), PETSC_NULL_VEC, ierr)  
+
+               !call VecCreateSeq(PETSC_COMM_SELF, local_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)          
+               !call VecCreateSeq(PETSC_COMM_SELF, local_coarse_is_size, air_data%temp_vecs_coarse(1)%array(our_level), ierr) 
+               ! We need this to trigger the coarse solver
+               if (our_level == no_levels - 1) then
+                  call MatCreateVecs(air_data%A_fc(our_level), &
+                           air_data%temp_vecs_fine(1)%array(our_level+1), PETSC_NULL_VEC, ierr)                       
+                  !call VecCreateSeq(PETSC_COMM_SELF, local_coarse_is_size, air_data%temp_vecs_fine(1)%array(our_level+1), ierr)          
+               end if
+            end if
+         end if   
+         
+         ! ~~~~~~~~~~~~~~
+         ! If we got here then we want to generate a new coarse matrix
+         ! ~~~~~~~~~~~~~~
+
+         ! Generate the temporary vectors we use to smooth with
+         ! If we haven't built them already
+         if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then         
+            call VecDuplicate(air_data%temp_vecs_fine(1)%array(our_level), air_data%temp_vecs_fine(2)%array(our_level), ierr)
+            call VecDuplicate(air_data%temp_vecs_fine(1)%array(our_level), air_data%temp_vecs_fine(3)%array(our_level), ierr)
+            call VecDuplicate(air_data%temp_vecs_fine(1)%array(our_level), air_data%temp_vecs_fine(4)%array(our_level), ierr)        
+
+            ! If we're doing C point smoothing we need some extra temporaries
+            if (air_data%options%one_c_smooth .AND. &
+                     .NOT. air_data%options%full_smoothing_up_and_down) then
+               call VecDuplicate(air_data%temp_vecs_coarse(1)%array(our_level), air_data%temp_vecs_coarse(2)%array(our_level), ierr)
+               call VecDuplicate(air_data%temp_vecs_coarse(1)%array(our_level), air_data%temp_vecs_coarse(3)%array(our_level), ierr)
+               call VecDuplicate(air_data%temp_vecs_coarse(1)%array(our_level), air_data%temp_vecs_coarse(4)%array(our_level), ierr)         
+            end if
+         end if         
 
          ! ~~~~~~~~~
          ! Finish the non-blocking comms and build the approximate inverse, then the 
