@@ -237,19 +237,21 @@ module air_data_type
    integer, parameter :: MAT_INV_ACC = 17
    integer, parameter :: MAT_SAI_SUB = 18
    integer, parameter :: MAT_AFC_FULL = 19
+   integer, parameter :: MAT_AFF_FULL = 20
 
    ! Indices into reuse_is
    integer, parameter :: IS_REPARTITION = 1
    integer, parameter :: IS_R_Z_FINE_COLS = 2
-   integer, parameter :: IS_R_Z_COARSE_COLS = 3
+   integer, parameter :: IS_AFC_COARSE_COLS = 3
+   integer, parameter :: IS_AFF_FINE_COLS = 4
    
    ! Stores temporary data we use for re-use
    ! The things stored in these structures 
    ! would normally be destroyed during the setup
    type air_reuse_data
 
-      type(tMat), dimension(19) :: reuse_mat
-      type(tIS), dimension(3) :: reuse_is
+      type(tMat), dimension(20) :: reuse_mat
+      type(tIS), dimension(4) :: reuse_is
 
    end type air_reuse_data
    

@@ -731,6 +731,57 @@ module petsc_helper
 
    !------------------------------------------------------------------------------------------------------------------------
    
+   subroutine generate_identity(input_mat, output_mat)
+
+      ! Returns an assembled identity of matching dimension/type to the input
+   
+      ! ~~~~~~~~~~
+      ! Input 
+      type(tMat), intent(in) :: input_mat
+      type(tMat), intent(inout) :: output_mat
+      
+      PetscInt :: i_loc, local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
+      PetscErrorCode :: ierr
+      PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
+      MPI_Comm :: MPI_COMM_MATRIX
+      MatType:: mat_type
+      
+      ! ~~~~~~~~~~
+
+      call PetscObjectGetComm(input_mat, MPI_COMM_MATRIX, ierr)   
+
+      ! Get the local sizes
+      call MatGetLocalSize(input_mat, local_rows, local_cols, ierr)
+      call MatGetSize(input_mat, global_rows, global_cols, ierr)
+      ! This returns the global index of the local portion of the matrix
+      call MatGetOwnershipRange(input_mat, global_row_start, global_row_end_plus_one, ierr)  
+
+      call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
+      call MatSetSizes(output_mat, local_rows, local_cols, &
+                       global_rows, global_cols, ierr)
+      ! Match the output type
+      call MatGetType(input_mat, mat_type, ierr)
+      call MatSetType(output_mat, mat_type, ierr)
+      call MatMPIAIJSetPreallocation(output_mat,one,PETSC_NULL_INTEGER_ARRAY,zero,PETSC_NULL_INTEGER_ARRAY,ierr)
+      call MatSeqAIJSetPreallocation(output_mat,one, PETSC_NULL_INTEGER_ARRAY,ierr)
+      call MatSetUp(output_mat, ierr) 
+      
+      ! Don't set any off processor entries so no need for a reduction when assembling
+      call MatSetOption(output_mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)
+      call MatSetOption(output_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)          
+
+      ! Set the diagonal
+      do i_loc = global_row_start, global_row_end_plus_one-1
+         call MatSetValue(output_mat, i_loc, i_loc, &
+               1.0, INSERT_VALUES, ierr)
+      end do
+      call MatAssemblyBegin(output_mat, MAT_FINAL_ASSEMBLY, ierr)
+      call MatAssemblyEnd(output_mat, MAT_FINAL_ASSEMBLY, ierr)        
+         
+   end subroutine generate_identity   
+
+   !------------------------------------------------------------------------------------------------------------------------
+   
    subroutine generate_one_point_with_one_entry_from_sparse(input_mat, output_mat)
 
       ! Returns a copy of a sparse matrix, but with only one in the spot of the biggest entry
@@ -1020,9 +1071,10 @@ module petsc_helper
       logical, intent(in) :: identity, reuse
 
       PetscInt :: global_row_start_Z, global_row_end_plus_one_Z, global_col_start_Z, global_col_end_plus_one_Z
-      PetscInt :: local_rows_coarse, local_rows_fine, local_rows, local_cols, local_cols_coarse, max_ncols, i_loc, ncols
-      PetscInt :: global_cols, global_rows, global_rows_coarse, global_cols_coarse
-      PetscInt :: col, cols_z, rows_z, rows_ao, cols_ao, rows_ad, cols_ad, size_cols
+      PetscInt :: local_coarse_size, local_fine_size, local_rows, local_full_cols, max_ncols, i_loc, ncols
+      PetscInt :: global_coarse_size, global_fine_size, global_full_cols
+      PetscInt :: col, rows_ao, cols_ao, rows_ad, cols_ad, size_cols, global_rows_z, global_cols_z
+      PetscInt :: local_rows_z, local_cols_z
       integer :: comm_size, comm_size_world, errorcode, comm_rank
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX      
@@ -1050,19 +1102,17 @@ module petsc_helper
       call ISGetIndicesF90(is_fine, is_pointer_fine, ierr)
       call ISGetIndicesF90(is_coarse, is_pointer_coarse, ierr)      
 
-      call IsGetLocalSize(is_coarse, local_rows_coarse, ierr)
-      call IsGetLocalSize(is_fine, local_rows_fine, ierr)
+      call IsGetLocalSize(is_coarse, local_coarse_size, ierr)
+      call IsGetLocalSize(is_fine, local_fine_size, ierr)
+      call IsGetSize(is_coarse, global_coarse_size, ierr)
+      call IsGetSize(is_fine, global_fine_size, ierr)      
 
-      local_cols_coarse = local_rows_coarse
-      local_cols = local_rows_coarse + local_rows_fine
-      local_rows = local_cols
+      local_full_cols = local_coarse_size + local_fine_size
+      global_full_cols = global_coarse_size + global_fine_size
 
-      call MatGetSize(Z, rows_z, cols_z, ierr) 
+      call MatGetLocalSize(Z, local_rows_z, local_cols_z, ierr) 
+      call MatGetSize(Z, global_rows_z, global_cols_z, ierr) 
       
-      global_cols = rows_z + cols_z
-      global_rows = global_cols
-      global_rows_coarse = rows_z
-      global_cols_coarse = rows_z      
       call MatGetOwnershipRange(Z, global_row_start_Z, global_row_end_plus_one_Z, ierr)  
       call MatGetOwnershipRangeColumn(Z, global_col_start_Z, global_col_end_plus_one_Z, ierr)   
 
@@ -1132,8 +1182,8 @@ module petsc_helper
       ! Get the indices
       call ISGetIndicesF90(orig_fine_col_indices, is_pointer_orig_fine_col, ierr)
 
-      allocate(nnzs_row(local_rows_coarse))
-      allocate(onzs_row(local_rows_coarse))
+      allocate(nnzs_row(local_rows_z))
+      allocate(onzs_row(local_rows_z))
       nnzs_row = 0
       onzs_row = 0
       ! Z
@@ -1169,13 +1219,16 @@ module petsc_helper
          end do
 
          ! Identity
-         do i_loc = 1, local_rows_coarse
+         do i_loc = 1, local_rows_z
             nnzs_row(i_loc) = nnzs_row(i_loc) + 1
          end do       
 
          call MatCreate(MPI_COMM_MATRIX, R, ierr)
-         call MatSetSizes(R, local_rows_coarse, local_cols, &
-                           global_rows_coarse, global_cols, ierr)
+         ! Taking care here to use the row sizes of Z, but the full size for cols
+         ! as we use this routine to stick Afc and Aff in full sizes column arrays
+         ! and hence the row size of the input Z won't always equal the same sizes as the input is's
+         call MatSetSizes(R, local_rows_z, local_full_cols, &
+                             global_rows_z, global_full_cols, ierr)
          ! Match the output type
          call MatGetType(Z, mat_type, ierr)
          call MatSetType(R, mat_type, ierr)
@@ -1194,7 +1247,7 @@ module petsc_helper
       ! Z - do Ad and Ao separately, as that way we have local indices into is_pointer_orig_fine_col
       ! to give us the original column numbers 
       ! Let's start with Ad - remember Ad and Ao are serial
-      do i_loc = 1, local_rows_coarse
+      do i_loc = 1, local_rows_z
          call MatGetRow(Ad, i_loc-1, &
                   ncols, cols, vals, ierr)
          call MatSetValues(R,&
@@ -1206,7 +1259,7 @@ module petsc_helper
       end do
       if (comm_size /= 1) then
          ! Then Ao
-         do i_loc = 1, local_rows_coarse
+         do i_loc = 1, local_rows_z
             call MatGetRow(Ao, i_loc-1, &
                      ncols, cols, vals, ierr)
             call MatSetValues(R,&
@@ -1220,7 +1273,7 @@ module petsc_helper
 
       ! If we want the identity block or just leave it zero
       if (identity) then
-         do i_loc = 1, local_rows_coarse
+         do i_loc = 1, local_rows_z
             call MatSetValue(R, &
                      i_loc - 1 + global_row_start_Z, &
                      is_pointer_coarse(i_loc), &
