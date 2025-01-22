@@ -764,7 +764,28 @@ module air_mg_setup
             call VecDestroy(left_null_vecs_f(i_loc), ierr)       
          end do             
          deallocate(left_null_vecs_f)
-      end if   
+      end if     
+
+      ! ~~~~~~~~~
+      ! Previously to F point smooth we just did 
+      ! VecISCopy(x, IS_coarse_index, x_c)
+      ! MatMult(Afc, x_c)
+      ! to compute Afc * x_c
+      ! but VecISCopy involves a copy from gpu to cpu
+      ! So instead we now just build the matrix [Afc 0]
+      ! so we can compute with a single matvec
+      ! Afc * x_c = [Afc 0] * x
+      ! ~~~~~~~~~              
+      ! Thankfully we have a routine to put Afc into [Afc 0] - we use the routine 
+      ! for sticking Z in R, but with the coarse and fine indices swapped
+      ! remembering that the indices here are *not* the repartitioned ones, they are 
+      ! the indices in the original ordering on this level
+      call compute_R_from_Z(air_data%A_fc(our_level), global_row_start, &
+               air_data%IS_coarse_index(our_level), air_data%IS_fine_index(our_level), &
+               air_data%reuse(our_level)%reuse_is(IS_R_Z_COARSE_COLS), &
+               .FALSE., &
+               .NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_AFC_FULL)), &
+               air_data%reuse(our_level)%reuse_mat(MAT_AFC_FULL))        
 
       ! ~~~~~~~~~~~~~~~~~~~
       ! ~~~~~~~~~~~~~~~~~~~
@@ -773,12 +794,12 @@ module air_mg_setup
       ! ~~~~~~~~~~~~~~~~~~~    
       call compute_R_from_Z(air_data%reuse(our_level)%reuse_mat(MAT_Z_DROP), global_row_start, &
                air_data%IS_fine_index(our_level), air_data%IS_coarse_index(our_level), &
-               air_data%reuse(our_level)%reuse_is(IS_R_Z_COLS), &
+               air_data%reuse(our_level)%reuse_is(IS_R_Z_FINE_COLS), &
                .TRUE., &
                reuse_grid_transfer, &
                air_data%restrictors(our_level))
 
-      call timer_finish(TIMER_ID_AIR_RESTRICT)     
+      call timer_finish(TIMER_ID_AIR_RESTRICT)      
       
       ! Delete temporary if not reusing
       if (.NOT. air_data%options%reuse_sparsity) then
@@ -787,10 +808,14 @@ module air_mg_setup
          air_data%reuse(our_level)%reuse_mat(MAT_Z_DROP) = PETSC_NULL_MAT
 #endif         
 
-         call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_R_Z_COLS), ierr)
+         call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_R_Z_FINE_COLS), ierr)
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)         
-         air_data%reuse(our_level)%reuse_is(IS_R_Z_COLS) = PETSC_NULL_IS
+         air_data%reuse(our_level)%reuse_is(IS_R_Z_FINE_COLS) = PETSC_NULL_IS
 #endif
+      call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_R_Z_COARSE_COLS), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)         
+               air_data%reuse(our_level)%reuse_is(IS_R_Z_COARSE_COLS) = PETSC_NULL_IS
+#endif  
       end if      
       
       ! Delete temporary if not reusing
@@ -998,12 +1023,12 @@ module air_mg_setup
 
          ! Get out just the fine points from x - this is x_f^0
          call VecISCopy(x, air_data%is_fine_index(our_level), SCATTER_REVERSE, air_data%temp_vecs_fine(1)%array(our_level), ierr)
-         ! ! Get the coarse points from x - this is x_c^0
-         call VecISCopy(x, air_data%is_coarse_index(our_level), SCATTER_REVERSE, air_data%temp_vecs_coarse(1)%array(our_level), ierr)         
-         
+
          ! Compute Afc * x_c^0 - this never changes
-         call MatMult(air_data%A_fc(our_level), air_data%temp_vecs_coarse(1)%array(our_level), &
+         ! where MAT_AFC_FULL is [Afc 0]
+         call MatMult(air_data%reuse(our_level)%reuse_mat(MAT_AFC_FULL), x, &
                      air_data%temp_vecs_fine(2)%array(our_level), ierr)
+         
          ! This is b_f - A_fc * x_c^0 - this never changes
          call VecAXPY(air_data%temp_vecs_fine(4)%array(our_level), -1.0, air_data%temp_vecs_fine(2)%array(our_level), ierr)                      
 
