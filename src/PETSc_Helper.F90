@@ -782,6 +782,70 @@ module petsc_helper
 
    !------------------------------------------------------------------------------------------------------------------------
    
+   subroutine generate_identity_is(input_mat, indices, output_mat)
+
+      ! Returns an assembled identity of matching dimension/type to the input
+      ! but with ones only in the diagonals of the input IS
+      ! We use this to do the equivalent of veciscopy that doesn't have to be 
+      ! copied back to the cpu from the gpu
+   
+      ! ~~~~~~~~~~
+      ! Input 
+      type(tMat), intent(in)     :: input_mat
+      type(tIS), intent(in)      :: indices
+      type(tMat), intent(inout)  :: output_mat
+      
+      PetscInt :: i_loc, local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
+      PetscInt :: local_indices_size
+      PetscErrorCode :: ierr
+      PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
+      MPI_Comm :: MPI_COMM_MATRIX
+      MatType:: mat_type
+      PetscInt, dimension(:), pointer :: is_pointer
+      
+      ! ~~~~~~~~~~
+
+      call PetscObjectGetComm(input_mat, MPI_COMM_MATRIX, ierr)   
+
+      ! Get the local sizes
+      call IsGetLocalSize(indices, local_indices_size, ierr)
+
+      call MatGetLocalSize(input_mat, local_rows, local_cols, ierr)
+      call MatGetSize(input_mat, global_rows, global_cols, ierr)
+      ! This returns the global index of the local portion of the matrix
+      call MatGetOwnershipRange(input_mat, global_row_start, global_row_end_plus_one, ierr)  
+
+      call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
+      call MatSetSizes(output_mat, local_rows, local_cols, &
+                       global_rows, global_cols, ierr)
+      ! Match the output type
+      call MatGetType(input_mat, mat_type, ierr)
+      call MatSetType(output_mat, mat_type, ierr)
+      call MatMPIAIJSetPreallocation(output_mat,one,PETSC_NULL_INTEGER_ARRAY,zero,PETSC_NULL_INTEGER_ARRAY,ierr)
+      call MatSeqAIJSetPreallocation(output_mat,one, PETSC_NULL_INTEGER_ARRAY,ierr)
+      call MatSetUp(output_mat, ierr) 
+      
+      ! Don't set any off processor entries so no need for a reduction when assembling
+      call MatSetOption(output_mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)
+      call MatSetOption(output_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)  
+      
+      ! Get the indices we need
+      call ISGetIndicesF90(indices, is_pointer, ierr)
+
+      ! Set the diagonal
+      do i_loc = 1, local_indices_size
+         call MatSetValue(output_mat, is_pointer(i_loc), is_pointer(i_loc), &
+               1.0, INSERT_VALUES, ierr)
+      end do
+      call ISRestoreIndicesF90(indices, is_pointer, ierr)       
+      call MatAssemblyBegin(output_mat, MAT_FINAL_ASSEMBLY, ierr)
+      call MatAssemblyEnd(output_mat, MAT_FINAL_ASSEMBLY, ierr)   
+           
+         
+   end subroutine generate_identity_is      
+
+   !------------------------------------------------------------------------------------------------------------------------
+   
    subroutine generate_one_point_with_one_entry_from_sparse(input_mat, output_mat)
 
       ! Returns a copy of a sparse matrix, but with only one in the spot of the biggest entry

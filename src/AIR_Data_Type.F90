@@ -238,6 +238,7 @@ module air_data_type
    integer, parameter :: MAT_SAI_SUB = 18
    integer, parameter :: MAT_AFC_FULL = 19
    integer, parameter :: MAT_AFF_FULL = 20
+   integer, parameter :: MAT_I_COARSE_FULL = 21
 
    ! Indices into reuse_is
    integer, parameter :: IS_REPARTITION = 1
@@ -250,7 +251,7 @@ module air_data_type
    ! would normally be destroyed during the setup
    type air_reuse_data
 
-      type(tMat), dimension(20) :: reuse_mat
+      type(tMat), dimension(21) :: reuse_mat
       type(tIS), dimension(4) :: reuse_is
 
    end type air_reuse_data
@@ -301,6 +302,7 @@ module air_data_type
 
       ! Temporary storage
       type(petsc_vec_array), dimension(4) :: temp_vecs_fine, temp_vecs_coarse 
+      type(petsc_vec_array), dimension(1) :: temp_vecs
 
       ! Temporary reuse
       type(air_reuse_data), allocatable, dimension(:) :: reuse
@@ -379,6 +381,7 @@ module air_data_type
       allocate(air_data%temp_vecs_coarse(2)%array(air_data%options%max_levels))
       allocate(air_data%temp_vecs_coarse(3)%array(air_data%options%max_levels))
       allocate(air_data%temp_vecs_coarse(4)%array(air_data%options%max_levels))
+      allocate(air_data%temp_vecs(1)%array(air_data%options%max_levels))
 
       ! Reuse 
       allocate(air_data%reuse(air_data%options%max_levels))

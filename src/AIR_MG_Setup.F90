@@ -767,16 +767,12 @@ module air_mg_setup
       end if     
 
       ! ~~~~~~~~~
-      ! Previously to F point smooth we just did 
+      ! Previously to F point smooth we just did things like (see dba0a996be147698d7f9ce07741e7d925001ea66)
       ! VecISCopy(x, IS_coarse_index, x_c)
       ! MatMult(Afc, x_c)
-      ! to compute Afc * x_c
+      ! for example to compute Afc * x_c
       ! but VecISCopy involves a copy from gpu to cpu
-      ! So instead we now just build the matrix [Afc 0]
-      ! which is the f rows of our matrix on this level, but with the 
-      ! fine-fine component set to zero
-      ! so we can compute with a single matvec
-      ! Afc * x_c = [Afc 0] * x
+      ! So instead we now just build the equivalent matrices and do matvecs
       ! ~~~~~~~~~              
       ! Thankfully we have a routine to put Afc into a matrix f x (f+c) => [Afc 0] - we use the routine 
       ! for sticking Z in R, but with the coarse and fine indices swapped and taking
@@ -801,6 +797,9 @@ module air_mg_setup
                air_data%reuse(our_level)%reuse_mat(MAT_AFF_FULL)) 
                
       call MatDestroy(temp_identity, ierr)
+
+      call generate_identity_is(A, air_data%IS_coarse_index(our_level), &
+               air_data%reuse(our_level)%reuse_mat(MAT_I_COARSE_FULL))
 
       ! ~~~~~~~~~~~~~~~~~~~
       ! ~~~~~~~~~~~~~~~~~~~
@@ -1036,7 +1035,7 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
       air_data => mat_ctx%air_data
 
       ! ~~~~~~~~~
-      ! Previously to F point smooth we just did things like
+      ! Previously to F point smooth we just did things like (see dba0a996be147698d7f9ce07741e7d925001ea66)
       ! VecISCopy(x, IS_coarse_index, x_c)
       ! MatMult(Afc, x_c)
       ! for example to compute Afc * x_c
@@ -1047,6 +1046,11 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
       ! Get out just the fine points from b - this is b_f
       call MatMult(air_data%reuse(our_level)%reuse_mat(MAT_AFF_FULL), b, &
                         air_data%temp_vecs_fine(4)%array(our_level), ierr)  
+
+      ! Copy x but only the non-coarse points from x are non-zero
+      ! ie get x_c but in a vec of full size 
+      call MatMult(air_data%reuse(our_level)%reuse_mat(MAT_I_COARSE_FULL), x, &
+                        air_data%temp_vecs(1)%array(our_level), ierr)                         
 
       if (.NOT. guess_zero) then 
 
@@ -1095,7 +1099,12 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
 
       ! Reverse put fine x_f back into x
       ! If we're just doing F point smoothing, don't change the coarse points    
-      call VecISCopy(x, air_data%is_fine_index(our_level), SCATTER_FORWARD, air_data%temp_vecs_fine(1)%array(our_level), ierr)      
+      !call VecISCopy(x, air_data%is_fine_index(our_level), SCATTER_FORWARD, air_data%temp_vecs_fine(1)%array(our_level), ierr)      
+
+      call MatMultTransposeAdd(air_data%reuse(our_level)%reuse_mat(MAT_AFF_FULL), &
+            air_data%temp_vecs_fine(1)%array(our_level), &
+            air_data%temp_vecs(1)%array(our_level), &
+            x, ierr)
 
       ! ~~~~~~~~~~~~~~~~
       ! If we want to let's do a single C-point smooth
@@ -1284,7 +1293,7 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
                   call ISGetLocalSize(air_data%IS_coarse_index(our_level-1), local_fine_is_size, ierr)
                end if
                call MatCreateVecs(air_data%A_fc(our_level-1), &
-                        air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)               
+                        air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)                                        
                !call VecCreateMPI(MPI_COMM_MATRIX, local_fine_is_size, &
                !         global_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)  
             else
@@ -1294,7 +1303,7 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
                   call ISGetSize(air_data%IS_coarse_index(our_level-1), global_fine_is_size, ierr)
                end if
                call MatCreateVecs(air_data%A_fc(our_level-1), &
-                        air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)                
+                        air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)                                        
                !call VecCreateSeq(PETSC_COMM_SELF, global_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)    
             end if
 
@@ -1391,7 +1400,9 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
                call MatCreateVecs(air_data%A_ff(our_level), &
                         air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)
                call MatCreateVecs(air_data%A_fc(our_level), &
-                        air_data%temp_vecs_coarse(1)%array(our_level), PETSC_NULL_VEC, ierr)                           
+                        air_data%temp_vecs_coarse(1)%array(our_level), PETSC_NULL_VEC, ierr)  
+               call MatCreateVecs(air_data%coarse_matrix(our_level), &
+                        air_data%temp_vecs(1)%array(our_level), PETSC_NULL_VEC, ierr)                                                  
 
                !call VecCreateMPI(MPI_COMM_MATRIX, local_fine_is_size, &
                !         global_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)     
@@ -1409,7 +1420,9 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
                call MatCreateVecs(air_data%A_ff(our_level), &
                         air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)
                call MatCreateVecs(air_data%A_fc(our_level), &
-                        air_data%temp_vecs_coarse(1)%array(our_level), PETSC_NULL_VEC, ierr)  
+                        air_data%temp_vecs_coarse(1)%array(our_level), PETSC_NULL_VEC, ierr) 
+               call MatCreateVecs(air_data%coarse_matrix(our_level), &
+                        air_data%temp_vecs(1)%array(our_level), PETSC_NULL_VEC, ierr)                          
 
                !call VecCreateSeq(PETSC_COMM_SELF, local_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)          
                !call VecCreateSeq(PETSC_COMM_SELF, local_coarse_is_size, air_data%temp_vecs_coarse(1)%array(our_level), ierr) 
@@ -2056,6 +2069,7 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
                      air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients => null()
                   end if
 
+                  call VecDestroy(air_data%temp_vecs(1)%array(our_level), ierr)
                   call VecDestroy(air_data%temp_vecs_fine(1)%array(our_level), ierr)
                   call VecDestroy(air_data%temp_vecs_fine(2)%array(our_level), ierr)
                   call VecDestroy(air_data%temp_vecs_fine(3)%array(our_level), ierr)
@@ -2246,6 +2260,7 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
          deallocate(air_data%allocated_is)
          deallocate(air_data%allocated_coarse_matrix)         
     
+         deallocate(air_data%temp_vecs(1)%array)
          deallocate(air_data%temp_vecs_fine(1)%array)
          deallocate(air_data%temp_vecs_fine(2)%array)
          deallocate(air_data%temp_vecs_fine(3)%array)
