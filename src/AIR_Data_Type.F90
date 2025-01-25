@@ -237,8 +237,8 @@ module air_data_type
    integer, parameter :: MAT_INV_ACC = 17
    integer, parameter :: MAT_SAI_SUB = 18
    integer, parameter :: MAT_AFC_FULL = 19
-   integer, parameter :: MAT_AFF_FULL = 20
-   integer, parameter :: MAT_I_COARSE_FULL = 21
+   integer, parameter :: MAT_I_FINE_FULL = 20
+   integer, parameter :: MAT_I_COARSE_FULL_FULL = 21
 
    ! Indices into reuse_is
    integer, parameter :: IS_REPARTITION = 1
