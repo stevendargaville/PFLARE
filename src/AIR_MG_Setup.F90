@@ -2038,6 +2038,20 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
          call PCSetUp(pc_coarse_solver, ierr)
          call KSPSetUp(ksp_coarse_solver, ierr)   
 
+         ! Set the temporary storage in the PCMG for the coarsest grid
+         if (.NOT. reusing_temp_mg_vecs) then
+            call MatCreateVecs(air_data%coarse_matrix(no_levels), &
+                     air_data%temp_vecs_b(no_levels), PETSC_NULL_VEC, ierr)                 
+            call VecDuplicate(air_data%temp_vecs_b(no_levels), air_data%temp_vecs_x(no_levels), ierr)             
+
+            ! Don't need r on the coarsest grid
+            call PCMGSetRhs(pcmg, petsc_level, air_data%temp_vecs_b(no_levels), ierr)
+            call VecDestroy(air_data%temp_vecs_b(no_levels), ierr)
+            call PCMGSetX(pcmg, petsc_level, air_data%temp_vecs_x(no_levels), ierr)
+            call VecDestroy(air_data%temp_vecs_x(no_levels), ierr)            
+         end if
+
+
       ! If we've only got one level just precondition with jacobi
       else
          call PCSetType(pcmg, PCJACOBI, ierr)
