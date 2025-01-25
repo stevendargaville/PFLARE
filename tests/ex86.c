@@ -22,6 +22,7 @@ int main(int argc, char **args)
   PetscScalar work_scalar, value[2];
   PetscRandom r;
   KSPConvergedReason reason;
+  PetscLogStage setup, gpu_copy;
 
   PetscFunctionBeginUser;
   PetscInitialize(&argc, &args, (char*)0, help);
@@ -30,6 +31,9 @@ int main(int argc, char **args)
 
   // Register the pflare types
   PCRegister_PFLARE();
+
+  PetscLogStageRegister("Setup", &setup);
+  PetscLogStageRegister("GPU copy stage - triggered by one PCApply", &gpu_copy);  
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
          Compute the matrix and right-hand-side vector that define
@@ -110,11 +114,6 @@ int main(int argc, char **args)
      Create x, b - random initial guess and zero rhs
   */
   PetscRandomCreate(PETSC_COMM_WORLD, &r);
-  //VecSetRandom(x, r);
-  // VecSetRandom doesn't yet happen on the gpu, and I would like this example 
-  // to do the minimum number of copies to the gpu for reference
-  // so let's just set the rhs to 1.0 for now
-  VecSet(x, 1.0);
   VecSet(b, 0.0);
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -149,6 +148,19 @@ int main(int argc, char **args)
     routines.
   */
   KSPSetFromOptions(ksp);
+
+  // Setup the ksp
+  PetscLogStagePush(setup);
+  KSPSetUp(ksp);
+  PetscLogStagePop();
+
+  // Do a single PC apply so all the copies to the gpu happen
+  KSPGetPC(ksp, &pc);
+  PetscLogStagePush(gpu_copy);
+  VecSet(x, 1.0);  
+  PCApply(pc, b, x);
+  PetscLogStagePop();
+  VecSetRandom(x, r);
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
                       Solve the linear system

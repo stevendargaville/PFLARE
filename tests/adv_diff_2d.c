@@ -36,6 +36,7 @@ extern PetscErrorCode ComputeMat(DM,Mat,PetscScalar,PetscScalar, PetscScalar, Pe
 int main(int argc,char **argv)
 {
   KSP            ksp;
+  PC             pc;
   DM             da;
   PetscErrorCode ierr;
   PetscInt its, M, N;
@@ -45,6 +46,7 @@ int main(int argc,char **argv)
   Vec x, b, diag_vec;
   Mat A;
   KSPConvergedReason reason;
+  PetscLogStage setup, gpu_copy;
 
   ierr = PetscInitialize(&argc,&argv,(char*)0,help);if (ierr) return ierr;
 
@@ -54,6 +56,9 @@ int main(int argc,char **argv)
 
   // Register the pflare types
   PCRegister_PFLARE();
+
+  PetscLogStageRegister("Setup", &setup);
+  PetscLogStageRegister("GPU copy stage - triggered by one PCApply", &gpu_copy);
 
   ierr = KSPCreate(PETSC_COMM_WORLD,&ksp);CHKERRQ(ierr);
   ierr = DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE,DMDA_STENCIL_STAR,11,11,PETSC_DECIDE,PETSC_DECIDE,1,1,NULL,NULL,&da);CHKERRQ(ierr);
@@ -70,8 +75,6 @@ int main(int argc,char **argv)
 
   // Random initial guess
   PetscRandomCreate(PETSC_COMM_WORLD,&rctx);
-  VecSetRandom(x, rctx);
-  PetscRandomDestroy(&rctx);  
 
   // Zero rhs
   VecSet(b, 0.0);
@@ -176,7 +179,17 @@ int main(int argc,char **argv)
   }
 
   // Setup the ksp
+  ierr = PetscLogStagePush(setup);
   ierr = KSPSetUp(ksp);CHKERRQ(ierr);
+  ierr = PetscLogStagePop();
+
+  ierr = KSPGetPC(ksp, &pc);
+  ierr = PetscLogStagePush(gpu_copy);
+  ierr = VecSet(x, 1.0);
+  ierr = PCApply(pc, b, x);CHKERRQ(ierr);
+  ierr = PetscLogStagePop();
+  VecSetRandom(x, rctx);
+  PetscRandomDestroy(&rctx);    
 
   // Solve
   ierr = KSPSolve(ksp,b,x);CHKERRQ(ierr);
