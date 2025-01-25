@@ -1175,7 +1175,7 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
       PetscErrorCode      :: ierr
       MPI_Comm            :: MPI_COMM_MATRIX
       real                :: ratio_local_nnzs_off_proc
-      logical             :: big_enough, trigger_proc_agglom, proc_agglom_exists
+      logical             :: big_enough, trigger_proc_agglom, proc_agglom_exists, reusing_temp_mg_vecs
       type(tMat)          :: coarse_matrix_temp
       type(tKSP)          :: ksp_smoother_up, ksp_smoother_down, ksp_coarse_solver
       type(tPC)           :: pc_smoother_up, pc_smoother_down, pc_coarse_solver
@@ -1185,7 +1185,6 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
       PetscInt, parameter :: one=1, zero=0
       type(tVec), dimension(:), allocatable :: left_null_vecs, right_null_vecs
       type(tVec), dimension(:), allocatable :: left_null_vecs_c, right_null_vecs_c
-      type(tVec), dimension(:), allocatable :: temp_b, temp_x, temp_r
       VecScatter :: vec_scatter
 
       ! ~~~~~~     
@@ -1207,16 +1206,7 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
       proc_stride = 1
       ! Copy the top grid matrix pointer
       air_data%coarse_matrix(1) = pmat
-
-      ! This is the temporary space the PCMG uses internally
-      ! It would normally create these automatically during pcmg setup
-      ! We allocate it as we need it to have the same type as all our coarse matrices
-      ! even though we sometimes delete our coarse matrix and use a matshell instead
-      ! Hence during the setup it would have the wrong type when we're on the gpu 
-      ! @@@ these should be the data type because we only want to allocate during the reset
-      allocate(temp_b(no_levels))
-      allocate(temp_x(no_levels))
-      allocate(temp_r(no_levels))
+      reusing_temp_mg_vecs = .TRUE.
 
       ! ~~~~~~~~~~~~~~~~~~~~~
       ! Check if the user has provided a near nullspace before we do anything
@@ -1740,22 +1730,23 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
 
          ! ~~~~~~~~~~~~~~
          ! Go and create the temporary vecs for our PCMG on this level
-         ! Make sure we're using the assembled coarse matrix and not the 
-         ! shell we might build later otherwise the vec types might not match if 
-         ! we're on the gpu         
+         ! It would normally create these automatically during pcmg setup
+         ! We allocate it as we need it to have the same type as our coarse matrices
+         ! even though we sometimes delete our coarse matrix and use a matshell instead
+         ! Hence during the setup it would have the wrong type when we're on the gpu                 
          ! ~~~~~~~~~~~~~~
-
          ! If we're not re-using
          if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then
+            reusing_temp_mg_vecs = .FALSE.
             if (our_level == 1) then
                ! Only need r on the top grid
                call MatCreateVecs(air_data%coarse_matrix(our_level), &
-                        temp_r(our_level), PETSC_NULL_VEC, ierr)   
+                        air_data%temp_vecs_r(our_level), PETSC_NULL_VEC, ierr)   
             else
                call MatCreateVecs(air_data%coarse_matrix(our_level), &
-                        temp_b(our_level), PETSC_NULL_VEC, ierr)                 
-               call VecDuplicate(temp_b(our_level), temp_x(our_level), ierr)                        
-               call VecDuplicate(temp_b(our_level), temp_r(our_level), ierr)
+                        air_data%temp_vecs_b(our_level), PETSC_NULL_VEC, ierr)                 
+               call VecDuplicate(air_data%temp_vecs_b(our_level), air_data%temp_vecs_x(our_level), ierr)                        
+               call VecDuplicate(air_data%temp_vecs_b(our_level), air_data%temp_vecs_r(our_level), ierr)
             end if
          end if
 
@@ -1878,21 +1869,24 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
             our_level_coarse = our_level + 1
 
             ! Set the temporary storage in the PCMG
-            if (our_level == 1) then
-               ! Only need r on the top grid
-               call PCMGSetR(pcmg, petsc_level, temp_r(our_level), ierr)
-               ! The reference counter is increased by PCMGSetRhs etc, so we have to destroy 
-               call VecDestroy(temp_r(our_level), ierr)              
-            else
-               ! We don't bother creating this space on the coarse grid
-               ! as we always have an assembled mat and the pcmg will auto 
-               ! create the right vec types then
-               call PCMGSetRhs(pcmg, petsc_level, temp_b(our_level), ierr)
-               call VecDestroy(temp_b(our_level), ierr)
-               call PCMGSetR(pcmg, petsc_level, temp_r(our_level), ierr)
-               call VecDestroy(temp_r(our_level), ierr)
-               call PCMGSetX(pcmg, petsc_level, temp_x(our_level), ierr)
-               call VecDestroy(temp_x(our_level), ierr)
+            if (.NOT. reusing_temp_mg_vecs) then
+               if (our_level == 1) then
+                  ! Only need r on the top grid
+                  call PCMGSetR(pcmg, petsc_level, air_data%temp_vecs_r(our_level), ierr)
+                  ! The reference counter is increased by PCMGSetRhs etc, so we have to destroy 
+                  ! our copy, the pcmg then owns this memory
+                  call VecDestroy(air_data%temp_vecs_r(our_level), ierr)              
+               else
+                  ! We don't bother creating this space on the coarse grid
+                  ! as we always have an assembled mat and the pcmg will auto 
+                  ! create the right vec types then
+                  call PCMGSetRhs(pcmg, petsc_level, air_data%temp_vecs_b(our_level), ierr)
+                  call VecDestroy(air_data%temp_vecs_b(our_level), ierr)
+                  call PCMGSetR(pcmg, petsc_level, air_data%temp_vecs_r(our_level), ierr)
+                  call VecDestroy(air_data%temp_vecs_r(our_level), ierr)
+                  call PCMGSetX(pcmg, petsc_level, air_data%temp_vecs_x(our_level), ierr)
+                  call VecDestroy(air_data%temp_vecs_x(our_level), ierr)
+               end if
             end if
 
             ! Set the restrictor/prolongator
@@ -2324,6 +2318,10 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
          deallocate(air_data%temp_vecs_coarse(2)%array)
          deallocate(air_data%temp_vecs_coarse(3)%array)
          deallocate(air_data%temp_vecs_coarse(4)%array)
+
+         deallocate(air_data%temp_vecs_b)
+         deallocate(air_data%temp_vecs_x)
+         deallocate(air_data%temp_vecs_r)
          
          deallocate(air_data%reuse)
          
