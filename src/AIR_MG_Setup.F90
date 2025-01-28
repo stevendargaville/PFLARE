@@ -787,42 +787,22 @@ module air_mg_setup
       ! we used VecISCopy to pull out fine and coarse points
       ! That copies back to the cpu if doing gpu, so now we just build identity restrictors/prolongators
       ! of various sizes and do matmults
-      ! ~~~~~~~~~             
-      ! Thankfully we have a routine to put Afc into a matrix f x (f+c) => [Afc 0] - we use the routine 
-      ! for sticking Z in R, but with the coarse and fine indices swapped and taking
-      ! care to set identity=false (as that would use the wrong indices)
-      ! remembering that the indices here are *not* the repartitioned ones, they are 
-      ! the indices in the original ordering on this level            
-
+      ! ~~~~~~~~~                   
       ! Build fine to full injector
-      call generate_identity(air_data%A_ff(our_level), temp_identity)
-      call compute_R_from_Z(temp_identity, global_row_start, &
-               air_data%IS_fine_index(our_level), air_data%IS_coarse_index(our_level), &
-               air_data%reuse(our_level)%reuse_is(IS_I_FINE_COLS), &
-               .FALSE., &
-               .NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_I_FINE_FULL)), &
-               air_data%reuse(our_level)%reuse_mat(MAT_I_FINE_FULL)) 
-               
-      call MatDestroy(temp_identity, ierr)    
+      call generate_identity_rect(A, air_data%A_fc(our_level), air_data%IS_fine_index(our_level), &
+               air_data%reuse(our_level)%reuse_mat(MAT_I_FINE_FULL))
 
+      ! Build coarse to full injector
+      call generate_identity_rect(A, air_data%A_cf(our_level), air_data%IS_coarse_index(our_level), &
+               air_data%reuse(our_level)%reuse_mat(MAT_I_COARSE_FULL))
+               
       ! Build identity that sets fine in full to zero
       call generate_identity_is(A, air_data%IS_coarse_index(our_level), &
                air_data%reuse(our_level)%reuse_mat(MAT_I_COARSE_FULL_FULL))               
 
       ! If we're C point smoothing as well
       if (air_data%options%one_c_smooth .AND. &
-               .NOT. air_data%options%full_smoothing_up_and_down) then   
-
-         ! Build coarse to full injector
-         call generate_identity(air_data%A_cc(our_level), temp_identity)
-         call compute_R_from_Z(temp_identity, global_row_start, &
-                  air_data%IS_coarse_index(our_level), air_data%IS_fine_index(our_level), &
-                  air_data%reuse(our_level)%reuse_is(IS_I_COARSE_COLS), &
-                  .FALSE., &
-                  .NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_I_COARSE_FULL)), &
-                  air_data%reuse(our_level)%reuse_mat(MAT_I_COARSE_FULL)) 
-                  
-         call MatDestroy(temp_identity, ierr)    
+               .NOT. air_data%options%full_smoothing_up_and_down) then     
          
          ! Build identity that sets coarse in full to zero
          call generate_identity_is(A, air_data%IS_fine_index(our_level), &
@@ -842,17 +822,6 @@ module air_mg_setup
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)         
          air_data%reuse(our_level)%reuse_is(IS_R_Z_FINE_COLS) = PETSC_NULL_IS
 #endif
-         call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_I_FINE_COLS), ierr)
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)         
-               air_data%reuse(our_level)%reuse_is(IS_I_FINE_COLS) = PETSC_NULL_IS
-#endif   
-         if (air_data%options%one_c_smooth) then
-         call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_I_COARSE_COLS), ierr)
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)         
-               air_data%reuse(our_level)%reuse_is(IS_I_COARSE_COLS) = PETSC_NULL_IS
-#endif
-         end if
-
       end if      
       
       ! Delete temporary if not reusing
