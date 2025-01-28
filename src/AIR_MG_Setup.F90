@@ -764,42 +764,7 @@ module air_mg_setup
             call VecDestroy(left_null_vecs_f(i_loc), ierr)       
          end do             
          deallocate(left_null_vecs_f)
-      end if     
-
-      ! ~~~~~~~~~
-      ! Previously to F point smooth we just did things like (see dba0a996be147698d7f9ce07741e7d925001ea66)
-      ! VecISCopy(x, IS_coarse_index, x_c)
-      ! MatMult(Afc, x_c)
-      ! for example to compute Afc * x_c
-      ! but VecISCopy involves a copy from gpu to cpu
-      ! So instead we now just build the equivalent matrices and do matvecs
-      ! ~~~~~~~~~              
-      ! Thankfully we have a routine to put Afc into a matrix f x (f+c) => [Afc 0] - we use the routine 
-      ! for sticking Z in R, but with the coarse and fine indices swapped and taking
-      ! care to set identity=false (as that would use the wrong indices)
-      ! remembering that the indices here are *not* the repartitioned ones, they are 
-      ! the indices in the original ordering on this level
-      call compute_R_from_Z(air_data%A_fc(our_level), global_row_start, &
-               air_data%IS_coarse_index(our_level), air_data%IS_fine_index(our_level), &
-               air_data%reuse(our_level)%reuse_is(IS_AFC_COARSE_COLS), &
-               .FALSE., &
-               .NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_AFC_FULL)), &
-               air_data%reuse(our_level)%reuse_mat(MAT_AFC_FULL))   
-               
-      call generate_identity(air_data%A_ff(our_level), temp_identity)
-               
-      ! Same for Aff but swapped indices
-      call compute_R_from_Z(temp_identity, global_row_start, &
-               air_data%IS_fine_index(our_level), air_data%IS_coarse_index(our_level), &
-               air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), &
-               .FALSE., &
-               .NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_I_FINE_FULL)), &
-               air_data%reuse(our_level)%reuse_mat(MAT_I_FINE_FULL)) 
-               
-      call MatDestroy(temp_identity, ierr)
-
-      call generate_identity_is(A, air_data%IS_coarse_index(our_level), &
-               air_data%reuse(our_level)%reuse_mat(MAT_I_COARSE_FULL_FULL))
+      end if                  
 
       ! ~~~~~~~~~~~~~~~~~~~
       ! ~~~~~~~~~~~~~~~~~~~
@@ -814,6 +779,57 @@ module air_mg_setup
                air_data%restrictors(our_level))
 
       call timer_finish(TIMER_ID_AIR_RESTRICT)      
+
+      call timer_start(TIMER_ID_AIR_IDENTIY)            
+
+      ! ~~~~~~~~~
+      ! Previously in the FC smoothing (see dba0a996be147698d7f9ce07741e7d925001ea66) 
+      ! we used VecISCopy to pull out fine and coarse points
+      ! That copies back to the cpu if doing gpu, so now we just build identity restrictors/prolongators
+      ! of various sizes and do matmults
+      ! ~~~~~~~~~             
+      ! Thankfully we have a routine to put Afc into a matrix f x (f+c) => [Afc 0] - we use the routine 
+      ! for sticking Z in R, but with the coarse and fine indices swapped and taking
+      ! care to set identity=false (as that would use the wrong indices)
+      ! remembering that the indices here are *not* the repartitioned ones, they are 
+      ! the indices in the original ordering on this level            
+
+      ! Build fine to full injector
+      call generate_identity(air_data%A_ff(our_level), temp_identity)
+      call compute_R_from_Z(temp_identity, global_row_start, &
+               air_data%IS_fine_index(our_level), air_data%IS_coarse_index(our_level), &
+               air_data%reuse(our_level)%reuse_is(IS_I_FINE_COLS), &
+               .FALSE., &
+               .NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_I_FINE_FULL)), &
+               air_data%reuse(our_level)%reuse_mat(MAT_I_FINE_FULL)) 
+               
+      call MatDestroy(temp_identity, ierr)    
+
+      ! Build identity that sets fine in full to zero
+      call generate_identity_is(A, air_data%IS_coarse_index(our_level), &
+               air_data%reuse(our_level)%reuse_mat(MAT_I_COARSE_FULL_FULL))               
+
+      ! If we're C point smoothing as well
+      if (air_data%options%one_c_smooth .AND. &
+               .NOT. air_data%options%full_smoothing_up_and_down) then   
+
+         ! Build coarse to full injector
+         call generate_identity(air_data%A_cc(our_level), temp_identity)
+         call compute_R_from_Z(temp_identity, global_row_start, &
+                  air_data%IS_coarse_index(our_level), air_data%IS_fine_index(our_level), &
+                  air_data%reuse(our_level)%reuse_is(IS_I_COARSE_COLS), &
+                  .FALSE., &
+                  .NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_I_COARSE_FULL)), &
+                  air_data%reuse(our_level)%reuse_mat(MAT_I_COARSE_FULL)) 
+                  
+         call MatDestroy(temp_identity, ierr)    
+         
+         ! Build identity that sets coarse in full to zero
+         call generate_identity_is(A, air_data%IS_fine_index(our_level), &
+               air_data%reuse(our_level)%reuse_mat(MAT_I_FINE_FULL_FULL))                         
+      end if        
+      
+      call timer_finish(TIMER_ID_AIR_IDENTIY)            
       
       ! Delete temporary if not reusing
       if (.NOT. air_data%options%reuse_sparsity) then
@@ -826,14 +842,17 @@ module air_mg_setup
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)         
          air_data%reuse(our_level)%reuse_is(IS_R_Z_FINE_COLS) = PETSC_NULL_IS
 #endif
-      call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFC_COARSE_COLS), ierr)
+         call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_I_FINE_COLS), ierr)
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)         
-               air_data%reuse(our_level)%reuse_is(IS_AFC_COARSE_COLS) = PETSC_NULL_IS
-#endif
-call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)         
-               air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS) = PETSC_NULL_IS
+               air_data%reuse(our_level)%reuse_is(IS_I_FINE_COLS) = PETSC_NULL_IS
 #endif   
+         if (air_data%options%one_c_smooth) then
+         call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_I_COARSE_COLS), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)         
+               air_data%reuse(our_level)%reuse_is(IS_I_COARSE_COLS) = PETSC_NULL_IS
+#endif
+         end if
+
       end if      
       
       ! Delete temporary if not reusing
@@ -1035,33 +1054,29 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
       air_data => mat_ctx%air_data
 
       ! ~~~~~~~~~
-      ! Previously to F point smooth we just did things like (see dba0a996be147698d7f9ce07741e7d925001ea66)
-      ! VecISCopy(x, IS_coarse_index, x_c)
-      ! MatMult(Afc, x_c)
-      ! for example to compute Afc * x_c
-      ! but VecISCopy involves a copy from gpu to cpu
-      ! So instead we now just build the equivalent matrices and do matvecs
+      ! Previously (see dba0a996be147698d7f9ce07741e7d925001ea66) we used VecISCopy to pull
+      ! out fine and coarse points
+      ! That copies back to the cpu if doing gpu, so now we just build identity restrictors/prolongators
+      ! of various sizes and do matmults
       ! ~~~~~~~~~       
 
       ! Get out just the fine points from b - this is b_f
       call MatMult(air_data%reuse(our_level)%reuse_mat(MAT_I_FINE_FULL), b, &
-                        air_data%temp_vecs_fine(4)%array(our_level), ierr)  
-
-      ! Copy x but only the non-coarse points from x are non-zero
-      ! ie get x_c but in a vec of full size 
-      call MatMult(air_data%reuse(our_level)%reuse_mat(MAT_I_COARSE_FULL_FULL), x, &
-                        air_data%temp_vecs(1)%array(our_level), ierr)                         
+                        air_data%temp_vecs_fine(4)%array(our_level), ierr)                          
 
       if (.NOT. guess_zero) then 
 
          ! Get out just the fine points from x - this is x_f^0
          call MatMult(air_data%reuse(our_level)%reuse_mat(MAT_I_FINE_FULL), x, &
-                           air_data%temp_vecs_fine(1)%array(our_level), ierr)          
+                           air_data%temp_vecs_fine(1)%array(our_level), ierr)       
+                           
+         ! Get the coarse points from x - this is x_c^0
+         call MatMult(air_data%reuse(our_level)%reuse_mat(MAT_I_COARSE_FULL), x, &
+                  air_data%temp_vecs_coarse(1)%array(our_level), ierr)                             
 
          ! Compute Afc * x_c^0 - this never changes
-         ! where MAT_AFC_FULL is [Afc 0] 
-         call MatMult(air_data%reuse(our_level)%reuse_mat(MAT_AFC_FULL), x, &
-                     air_data%temp_vecs_fine(2)%array(our_level), ierr)                   
+         call MatMult(air_data%A_fc(our_level), air_data%temp_vecs_coarse(1)%array(our_level), &
+                  air_data%temp_vecs_fine(2)%array(our_level), ierr)               
          
          ! This is b_f - A_fc * x_c^0 - this never changes
          call VecAXPY(air_data%temp_vecs_fine(4)%array(our_level), -1.0, air_data%temp_vecs_fine(2)%array(our_level), ierr)                      
@@ -1072,7 +1087,7 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
          ! temp_vecs_fine(4)%array just has b_f in it
          call VecSet(air_data%temp_vecs_fine(3)%array(our_level), 0.0, ierr)
        
-      end if
+      end if     
 
       do f_its = 1, air_data%options%maxits_a_ff
 
@@ -1097,10 +1112,18 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
 
       end do
 
+      ! ~~~~~~~~
       ! Reverse put fine x_f back into x
+      ! ~~~~~~~~
+
+      ! Copy x but only the non-coarse points from x are non-zero
+      ! ie get x_c but in a vec of full size 
+      call MatMult(air_data%reuse(our_level)%reuse_mat(MAT_I_COARSE_FULL_FULL), x, &
+                        air_data%temp_vecs(1)%array(our_level), ierr)        
+
       ! If we're just doing F point smoothing, don't change the coarse points 
-      ! Not sure why we need this, but on the gpu x is twice the size it should be if we don't - x should be overwritten 
-      ! by the MatMultTransposeAdd
+      ! Not sure why we need the vecset, but on the gpu x is twice the size it should be if we don't
+      ! x should be overwritten by the MatMultTransposeAdd
       call VecSet(x, 0.0, ierr)
       call MatMultTransposeAdd(air_data%reuse(our_level)%reuse_mat(MAT_I_FINE_FULL), &
             air_data%temp_vecs_fine(1)%array(our_level), &
@@ -1110,10 +1133,11 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
       ! ~~~~~~~~~~~~~~~~
       ! If we want to let's do a single C-point smooth
       ! ~~~~~~~~~~~~~~~~
-      if (air_data%options%one_c_smooth) then
+      if (air_data%options%one_c_smooth) then        
 
-         ! this is b_c
-         call VecISCopy(b, air_data%is_coarse_index(our_level), SCATTER_REVERSE, air_data%temp_vecs_coarse(4)%array(our_level), ierr)    
+         ! Get out just the coarse points from b - this is b_c
+         call MatMult(air_data%reuse(our_level)%reuse_mat(MAT_I_COARSE_FULL), b, &
+                  air_data%temp_vecs_coarse(4)%array(our_level), ierr)           
 
          ! Compute Acf * x_f^0 - this never changes
          call MatMult(air_data%A_cf(our_level), air_data%temp_vecs_fine(1)%array(our_level), &
@@ -1123,7 +1147,7 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
 
          ! Then A_cc * x_c^n - this changes at each richardson iteration
          call MatMult(air_data%A_cc(our_level), air_data%temp_vecs_coarse(1)%array(our_level), &
-                     air_data%temp_vecs_coarse(3)%array(our_level), ierr)  
+                     air_data%temp_vecs_coarse(3)%array(our_level), ierr)       
 
          ! This is b_c - A_cf * x_f^0 - A_cc * x_c^n
          call VecAYPX(air_data%temp_vecs_coarse(3)%array(our_level), -1.0, air_data%temp_vecs_coarse(4)%array(our_level), ierr)          
@@ -1135,8 +1159,22 @@ call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_AFF_FINE_COLS), ierr)
          ! Compute x_c^n + A_cc^{-1} (b_c - A_cf * x_f^0 - A_cc * x_c^n)
          call VecAXPY(air_data%temp_vecs_coarse(1)%array(our_level), 1.0, air_data%temp_vecs_coarse(2)%array(our_level), ierr)         
 
-         ! ! Reverse put fine x_c back into x
-         call VecISCopy(x, air_data%is_coarse_index(our_level), SCATTER_FORWARD, air_data%temp_vecs_coarse(1)%array(our_level), ierr)        
+         ! ~~~~~~~~
+         ! Reverse put coarse x_c back into x
+         ! ~~~~~~~~
+
+         ! Copy x but only the non-fine points from x are non-zero
+         ! ie get x_f but in a vec of full size 
+         call MatMult(air_data%reuse(our_level)%reuse_mat(MAT_I_FINE_FULL_FULL), x, &
+                           air_data%temp_vecs(1)%array(our_level), ierr)        
+
+         ! Not sure why we need the vecset, but on the gpu x is twice the size it should be if we don't
+         ! x should be overwritten by the MatMultTransposeAdd
+         call VecSet(x, 0.0, ierr)
+         call MatMultTransposeAdd(air_data%reuse(our_level)%reuse_mat(MAT_I_COARSE_FULL), &
+               air_data%temp_vecs_coarse(1)%array(our_level), &
+               air_data%temp_vecs(1)%array(our_level), &
+               x, ierr)         
 
       end if 
       
