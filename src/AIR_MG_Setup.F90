@@ -788,7 +788,7 @@ module air_mg_setup
       ! That copies back to the cpu if doing gpu, so now we just build identity restrictors/prolongators
       ! of various sizes and do matmults
       ! ~~~~~~~~~              
-      if (.NOT. air_data%options%reuse_sparsity) then
+      if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then
 
          ! Build fine to full injector
          call generate_identity_rect(A, air_data%A_fc(our_level), air_data%IS_fine_index(our_level), &
