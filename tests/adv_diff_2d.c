@@ -43,7 +43,7 @@ int main(int argc,char **argv)
   PetscScalar Hx, Hy, theta, alpha, u, v, u_test, v_test;
   PetscBool option_found_u, option_found_v, adv_nondim, check_nondim, diag_scale;
   PetscRandom rctx;
-  Vec x, b, diag_vec;
+  Vec x, b, diag_vec, x_temp;
   Mat A;
   KSPConvergedReason reason;
   PetscLogStage setup, gpu_copy;
@@ -166,13 +166,13 @@ int main(int argc,char **argv)
 
   // Diagonally scale our matrix 
   if (diag_scale) {
-   ierr = VecDuplicate(x, &diag_vec);
-   ierr = MatGetDiagonal(A, diag_vec);
-   ierr = VecReciprocal(diag_vec);
+   ierr = VecDuplicate(x, &diag_vec);CHKERRQ(ierr);
+   ierr = MatGetDiagonal(A, diag_vec);CHKERRQ(ierr);
+   ierr = VecReciprocal(diag_vec);CHKERRQ(ierr);
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 19)
-   ierr = MatDiagonalScale(A, diag_vec, PETSC_NULLPTR);    
+   ierr = MatDiagonalScale(A, diag_vec, PETSC_NULLPTR);CHKERRQ(ierr);    
 #else
-   ierr = MatDiagonalScale(A, diag_vec, PETSC_NULL);    
+   ierr = MatDiagonalScale(A, diag_vec, PETSC_NULL);CHKERRQ(ierr);    
 #endif
    ierr = VecPointwiseMult(b, diag_vec, b); CHKERRQ(ierr);
    ierr = VecDestroy(&diag_vec); CHKERRQ(ierr);
@@ -181,15 +181,20 @@ int main(int argc,char **argv)
   // Setup the ksp
   ierr = PetscLogStagePush(setup);
   ierr = KSPSetUp(ksp);CHKERRQ(ierr);
-  ierr = PetscLogStagePop();
+  ierr = PetscLogStagePop();CHKERRQ(ierr);
 
-  ierr = KSPGetPC(ksp, &pc);
-  ierr = PetscLogStagePush(gpu_copy);
-  ierr = VecSet(x, 1.0);
-  ierr = PCApply(pc, b, x);CHKERRQ(ierr);
-  ierr = PetscLogStagePop();
-  VecSetRandom(x, rctx);
-  PetscRandomDestroy(&rctx);    
+  ierr = KSPGetPC(ksp, &pc);CHKERRQ(ierr);
+  ierr = VecSetRandom(x, rctx);CHKERRQ(ierr);
+  ierr = VecDuplicate(x, &x_temp);CHKERRQ(ierr);  
+
+  // Do a single PCApply so all the vecs and mats get copied to the gpu
+  // before the solve we're trying to time
+  ierr = PetscLogStagePush(gpu_copy);CHKERRQ(ierr);
+  ierr = PCApply(pc, x, x_temp);CHKERRQ(ierr);
+  ierr = PetscLogStagePop();CHKERRQ(ierr);
+
+  PetscRandomDestroy(&rctx);CHKERRQ(ierr); 
+  ierr = VecDestroy(&x_temp);CHKERRQ(ierr);   
 
   // Solve
   ierr = KSPSolve(ksp,b,x);CHKERRQ(ierr);
