@@ -13,7 +13,7 @@ static char help[] = "Solves a one-dimensional steady upwind advection system wi
 
 int main(int argc, char **args)
 {
-  Vec         x, b; /* approx solution, RHS, work vector */
+  Vec         x, b, x_temp; /* approx solution, RHS, work vector */
   Mat         A;              /* linear system matrix */
   KSP         ksp;            /* linear solver context */
   PC          pc;             /* preconditioner context */
@@ -156,11 +156,15 @@ int main(int argc, char **args)
 
   // Do a single PC apply so all the copies to the gpu happen
   KSPGetPC(ksp, &pc);
-  PetscLogStagePush(gpu_copy);
-  VecSet(x, 1.0);  
-  PCApply(pc, b, x);
-  PetscLogStagePop();
   VecSetRandom(x, r);
+  VecDuplicate(x, &x_temp);
+
+  PetscLogStagePush(gpu_copy);
+  PCApply(pc, x, x_temp);
+  PetscLogStagePop();
+
+  PetscRandomDestroy(&r);
+  VecDestroy(&x_temp);
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
                       Solve the linear system
@@ -184,7 +188,6 @@ int main(int argc, char **args)
   VecDestroy(&b);
   MatDestroy(&A);
   KSPDestroy(&ksp);
-  PetscRandomDestroy(&r);
 
   /*
      Always call PetscFinalize() before exiting a program.  This routine
