@@ -1738,7 +1738,8 @@ module air_mg_setup
          ! It would normally create these automatically during pcmg setup
          ! We allocate it as we need it to have the same type as our coarse matrices
          ! even though we sometimes delete our coarse matrix and use a matshell instead
-         ! Hence during the setup it would have the wrong type when we're on the gpu                 
+         ! There is a MatShellSetVecType in C we could use to tell the matshell what type 
+         ! to produce, but that isn't available in fortran
          ! ~~~~~~~~~~~~~~
          ! If we're not re-using
          if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then
