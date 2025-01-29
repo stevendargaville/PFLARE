@@ -236,10 +236,6 @@ module air_data_type
    integer, parameter :: MAT_INV_AFF_DROPPED = 16
    integer, parameter :: MAT_INV_ACC = 17
    integer, parameter :: MAT_SAI_SUB = 18
-   integer, parameter :: MAT_I_FINE_FULL = 19
-   integer, parameter :: MAT_I_COARSE_FULL_FULL = 20
-   integer, parameter :: MAT_I_FINE_FULL_FULL = 21
-   integer, parameter :: MAT_I_COARSE_FULL = 22
 
    ! Indices into reuse_is
    integer, parameter :: IS_REPARTITION = 1
@@ -250,7 +246,7 @@ module air_data_type
    ! would normally be destroyed during the setup
    type air_reuse_data
 
-      type(tMat), dimension(22) :: reuse_mat
+      type(tMat), dimension(18) :: reuse_mat
       type(tIS), dimension(2) :: reuse_is
 
    end type air_reuse_data
@@ -272,6 +268,10 @@ module air_data_type
       ! Storage for ideal restrictors/prolongators that includes I block
       type(tMat), allocatable, dimension(:)              :: restrictors
       type(tMat), allocatable, dimension(:)              :: prolongators
+
+      ! Restrictor style injectors we use as gpus don't currently support veciscopy
+      type(tMat), allocatable, dimension(:)              :: i_fine_full, i_coarse_full
+      type(tMat), allocatable, dimension(:)              :: i_fine_full_full, i_coarse_full_full
 
       ! Extracted matrices on each level
       type(tMat), allocatable, dimension(:)              :: A_ff, A_fc, A_cf, A_cc
@@ -339,6 +339,11 @@ module air_data_type
 
       allocate(air_data%restrictors(air_data%options%max_levels))
       allocate(air_data%prolongators(air_data%options%max_levels))
+
+      allocate(air_data%i_fine_full(air_data%options%max_levels))
+      allocate(air_data%i_coarse_full(air_data%options%max_levels))
+      allocate(air_data%i_fine_full_full(air_data%options%max_levels))
+      allocate(air_data%i_coarse_full_full(air_data%options%max_levels))             
 
       allocate(air_data%coarse_matrix(air_data%options%max_levels))
       allocate(air_data%A_ff(air_data%options%max_levels))
