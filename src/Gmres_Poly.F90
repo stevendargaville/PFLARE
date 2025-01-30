@@ -143,6 +143,8 @@ module gmres_poly
       ! Local variables
       MPI_Comm :: MPI_COMM_MATRIX
       PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one, row_i
+      PetscCount :: vec_size
+      PetscInt, allocatable, dimension(:) :: indices
       integer :: i_loc, seed_size, comm_size, comm_rank, errorcode
       PetscErrorCode :: ierr      
       integer, dimension(:), allocatable :: seed
@@ -200,15 +202,19 @@ module gmres_poly
       ! Create vectors pointing at the columns in K_m+1
       do i_loc = 1, subspace_size+1
          call MatCreateVecs(matrix, V_n(i_loc), PETSC_NULL_VEC, ierr)         
-      end do         
-
+      end do     
+      
+      allocate(indices(local_rows))
       ! Set the random values into the first vector
       ! V_n(1) data will be copied to the gpu when needed
       do row_i = 1, local_rows
-         call VecSetValues(V_n(1), one, [global_row_start + row_i-1], [random_data(row_i, 1)], INSERT_VALUES, ierr)
+         indices(row_i) = global_row_start + row_i-1
       end do
-      call VecAssemblyBegin(V_n(1), ierr)
-      call VecAssemblyEnd(V_n(1), ierr)   
+      ! PetscCount vs PetscInt??
+      vec_size = local_rows
+      call VecSetPreallocationCOO(V_n(1), vec_size, indices, ierr)
+      deallocate(indices)
+      call VecSetValuesCOO(V_n(1), random_data, INSERT_VALUES, ierr)
       
       deallocate(random_data)
 
