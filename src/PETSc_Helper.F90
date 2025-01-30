@@ -640,8 +640,6 @@ module petsc_helper
       ! Match the output type
       call MatGetType(input_mat, mat_type, ierr)
       call MatSetType(output_mat, mat_type, ierr)
-      call MatMPIAIJSetPreallocation(output_mat,one,PETSC_NULL_INTEGER_ARRAY,zero,PETSC_NULL_INTEGER_ARRAY,ierr)
-      call MatSeqAIJSetPreallocation(output_mat,one, PETSC_NULL_INTEGER_ARRAY,ierr)
       call MatSetUp(output_mat, ierr) 
       
       ! Don't set any off processor entries so no need for a reduction when assembling
@@ -711,8 +709,6 @@ module petsc_helper
       ! Match the output type
       call MatGetType(full_mat, mat_type, ierr)
       call MatSetType(output_mat, mat_type, ierr)
-      call MatMPIAIJSetPreallocation(output_mat,one,PETSC_NULL_INTEGER_ARRAY,zero,PETSC_NULL_INTEGER_ARRAY,ierr)
-      call MatSeqAIJSetPreallocation(output_mat,one, PETSC_NULL_INTEGER_ARRAY,ierr)
       call MatSetUp(output_mat, ierr) 
       
       ! Don't set any off processor entries so no need for a reduction when assembling
@@ -780,8 +776,6 @@ module petsc_helper
       ! Match the output type
       call MatGetType(input_mat, mat_type, ierr)
       call MatSetType(output_mat, mat_type, ierr)
-      call MatMPIAIJSetPreallocation(output_mat,one,PETSC_NULL_INTEGER_ARRAY,zero,PETSC_NULL_INTEGER_ARRAY,ierr)
-      call MatSeqAIJSetPreallocation(output_mat,one, PETSC_NULL_INTEGER_ARRAY,ierr)
       call MatSetUp(output_mat, ierr) 
       
       ! Don't set any off processor entries so no need for a reduction when assembling
@@ -859,10 +853,6 @@ module petsc_helper
       ! Match the output type
       call MatGetType(input_mat, mat_type, ierr)
       call MatSetType(output_mat, mat_type, ierr)
-      ! This will allocate more memory than necessary, but saves us looping through and 
-      ! finding if the one entry in this row is local or not - much faster on the gpu
-      call MatMPIAIJSetPreallocation(output_mat,one,PETSC_NULL_INTEGER_ARRAY,one,PETSC_NULL_INTEGER_ARRAY,ierr)
-      call MatSeqAIJSetPreallocation(output_mat,one, PETSC_NULL_INTEGER_ARRAY,ierr)
       call MatSetUp(output_mat, ierr)      
       
       ! Just in case there are some zeros in the input mat, ignore them
