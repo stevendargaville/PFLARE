@@ -741,6 +741,8 @@ module petsc_helper
       type(tMat), intent(inout) :: output_mat
       
       PetscInt :: i_loc, local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
+      PetscInt, allocatable, dimension(:) :: indices
+      real, allocatable, dimension(:) :: v
       PetscErrorCode :: ierr
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       MPI_Comm :: MPI_COMM_MATRIX
@@ -768,15 +770,19 @@ module petsc_helper
       
       ! Don't set any off processor entries so no need for a reduction when assembling
       call MatSetOption(output_mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)
-      call MatSetOption(output_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)          
-
-      ! Set the diagonal
-      do i_loc = global_row_start, global_row_end_plus_one-1
-         call MatSetValue(output_mat, i_loc, i_loc, &
-               1.0, INSERT_VALUES, ierr)
+      call MatSetOption(output_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)    
+      
+      allocate(indices(local_rows))
+      allocate(v(local_rows))
+      do i_loc = 1, local_rows
+         indices(i_loc) = global_row_start + i_loc-1
       end do
-      call MatAssemblyBegin(output_mat, MAT_FINAL_ASSEMBLY, ierr)
-      call MatAssemblyEnd(output_mat, MAT_FINAL_ASSEMBLY, ierr)        
+      v = 1.0
+      ! Set the diagonal
+      call MatSetPreallocationCOO(output_mat, local_rows, indices, indices, ierr)
+      deallocate(indices)
+      call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
+      deallocate(v)
          
    end subroutine generate_identity   
    
@@ -796,6 +802,8 @@ module petsc_helper
       PetscInt :: i_loc, local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
       PetscInt :: local_rows_rect, local_cols_rect, global_rows_rect, global_cols_rect, global_row_start_rect, global_row_end_plus_one_rect
       PetscInt :: local_indices_size
+      PetscInt, allocatable, dimension(:) :: indices
+      real, allocatable, dimension(:) :: v      
       PetscErrorCode :: ierr
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       MPI_Comm :: MPI_COMM_MATRIX
@@ -838,15 +846,19 @@ module petsc_helper
       ! Get the indices we need
       call ISGetIndicesF90(rect_indices, is_pointer, ierr)
 
-      ! Set the diagonal
+      allocate(indices(local_indices_size))
+      allocate(v(local_indices_size))
       do i_loc = 1, local_indices_size
-         call MatSetValue(output_mat, global_row_start_rect + i_loc - 1, is_pointer(i_loc), &
-               1.0, INSERT_VALUES, ierr)
+         indices(i_loc) = global_row_start_rect + i_loc-1
       end do
-      call ISRestoreIndicesF90(rect_indices, is_pointer, ierr) 
+      v = 1.0
+      ! Set the diagonal
+      call MatSetPreallocationCOO(output_mat, local_indices_size, indices, is_pointer, ierr)
+      deallocate(indices)
+      call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
+      deallocate(v)      
 
-      call MatAssemblyBegin(output_mat, MAT_FINAL_ASSEMBLY, ierr)
-      call MatAssemblyEnd(output_mat, MAT_FINAL_ASSEMBLY, ierr)        
+      call ISRestoreIndicesF90(rect_indices, is_pointer, ierr)    
          
    end subroutine generate_identity_rect   
 
@@ -867,6 +879,7 @@ module petsc_helper
       
       PetscInt :: i_loc, local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
       PetscInt :: local_indices_size
+      real, allocatable, dimension(:) :: v      
       PetscErrorCode :: ierr
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       MPI_Comm :: MPI_COMM_MATRIX
@@ -902,15 +915,14 @@ module petsc_helper
       ! Get the indices we need
       call ISGetIndicesF90(indices, is_pointer, ierr)
 
+      allocate(v(local_indices_size))
+      v = 1.0
       ! Set the diagonal
-      do i_loc = 1, local_indices_size
-         call MatSetValue(output_mat, is_pointer(i_loc), is_pointer(i_loc), &
-               1.0, INSERT_VALUES, ierr)
-      end do
+      call MatSetPreallocationCOO(output_mat, local_indices_size, is_pointer, is_pointer, ierr)
+      call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
+      deallocate(v)  
+
       call ISRestoreIndicesF90(indices, is_pointer, ierr)       
-      call MatAssemblyBegin(output_mat, MAT_FINAL_ASSEMBLY, ierr)
-      call MatAssemblyEnd(output_mat, MAT_FINAL_ASSEMBLY, ierr)   
-           
          
    end subroutine generate_identity_is      
 
