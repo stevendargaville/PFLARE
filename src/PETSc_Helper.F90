@@ -454,13 +454,15 @@ module petsc_helper
       type(tMat), intent(in) :: input_mat
       type(tMat), intent(inout) :: output_mat
 
-      PetscInt :: col, ncols, ifree, max_nnzs
+      PetscInt :: col, ncols, ifree, max_nnzs, max_nnzs_total
       PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
-      PetscInt :: global_col_start, global_col_end_plus_one, diagonal_index
+      PetscInt :: counter
       PetscErrorCode :: ierr
       integer :: errorcode, comm_size
-      PetscInt, dimension(:), allocatable :: nnzs_row, onzs_row, cols
+      PetscInt, dimension(:), allocatable :: cols
       real, dimension(:), allocatable :: vals
+      PetscInt, allocatable, dimension(:) :: row_indices, col_indices
+      real, allocatable, dimension(:) :: v         
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       MPI_Comm :: MPI_COMM_MATRIX
       MatType:: mat_type
@@ -477,91 +479,37 @@ module petsc_helper
       call MatGetSize(input_mat, global_rows, global_cols, ierr)
       ! This returns the global index of the local portion of the matrix
       call MatGetOwnershipRange(input_mat, global_row_start, global_row_end_plus_one, ierr)  
-      call MatGetOwnershipRangeColumn(input_mat, global_col_start, global_col_end_plus_one, ierr)  
       
-      allocate(nnzs_row(local_rows))
-      nnzs_row = 0
-
-      max_nnzs = 0
-      if (comm_size/=1) then
-         allocate(onzs_row(local_rows))
-         onzs_row = 0
-      end if
-
-      do ifree = global_row_start, global_row_end_plus_one-1                  
-
-         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
-         if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
+      ! Get the max number of nnzs
+      max_nnzs_total = 0
+      max_nnzs = -1
+      do ifree = global_row_start, global_row_end_plus_one-1
+         call MatGetRow(input_mat, ifree, &
+                  ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
+         max_nnzs_total = max_nnzs_total + ncols
+         if (ncols > max_nnzs) max_nnzs = ncols                  
+         call MatRestoreRow(input_mat, ifree, &
+                  ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)          
       end do
+      ! Adding for potential missing diagonals
+      max_nnzs_total = max_nnzs_total + local_rows
+      max_nnzs = max_nnzs + 1
 
       allocate(cols(max_nnzs))
-      allocate(vals(max_nnzs)) 
-      
-      if (comm_size/=1) then
-         ! Loop over global row indices
-         do ifree = global_row_start, global_row_end_plus_one-1                  
-            ! Get the row
-            call MatGetRow(input_mat, ifree, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
+      allocate(vals(max_nnzs))
 
-            diagonal_index = -1
-            do col = 1, ncols
+      allocate(row_indices(max_nnzs_total))
+      allocate(col_indices(max_nnzs_total))
+      allocate(v(max_nnzs_total))
 
-               if (cols(col) == ifree) then
-                  diagonal_index = col
-               end if
-
-               ! Have to count the diagonal and off-diagonal nnzs in parallel           
-               if (cols(col) .ge. global_col_start .AND. cols(col) .le. global_col_end_plus_one - 1) then
-                  ! Convert to local row indices
-                  nnzs_row(ifree - global_row_start + 1) = nnzs_row(ifree - global_row_start + 1) + 1
-               else
-                  ! Convert to local row indices
-                  onzs_row(ifree - global_row_start + 1) = onzs_row(ifree - global_row_start + 1) + 1
-               end if
-            end do
-
-            ! If there was no diagonal, we're going to add one in
-            if (diagonal_index == -1) nnzs_row(ifree - global_row_start + 1) = nnzs_row(ifree - global_row_start + 1) + 1
-
-            ! Must call otherwise petsc leaks memory
-            call MatRestoreRow(input_mat, ifree, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
-         end do
-      else
-         ! Loop over global row indices
-         do ifree = global_row_start, global_row_end_plus_one-1                  
-            ! Get the row
-            call MatGetRow(input_mat, ifree, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
-   
-            diagonal_index = -1
-            do col = 1, ncols
-
-               if (cols(col) == ifree) then
-                  diagonal_index = col
-               end if
-
-               ! Convert to local row indices
-               nnzs_row(ifree - global_row_start + 1) = nnzs_row(ifree - global_row_start + 1) + 1
-            end do
-
-            ! If there was no diagonal, we're going to add one in
-            if (diagonal_index == -1) nnzs_row(ifree - global_row_start + 1) = nnzs_row(ifree - global_row_start + 1) + 1
-
-            ! Must call otherwise petsc leaks memory
-            call MatRestoreRow(input_mat, ifree, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
-         end do         
-      end if
-
-      ! ! Create the output matrix
+      ! We may be reusing with the same sparsity
       call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
       call MatSetSizes(output_mat, local_rows, local_cols, &
-                       global_rows, global_cols, ierr)
+                        global_rows, global_cols, ierr)
       ! Match the output type
       call MatGetType(input_mat, mat_type, ierr)
       call MatSetType(output_mat, mat_type, ierr)
-      call MatMPIAIJSetPreallocation(output_mat,nz_ignore,nnzs_row,nz_ignore,onzs_row,ierr)
-      call MatSeqAIJSetPreallocation(output_mat,nz_ignore,nnzs_row,ierr)
-      call MatSetUp(output_mat, ierr)     
+      call MatSetUp(output_mat, ierr)             
        
       ! Don't set any off processor entries so no need for a reduction when assembling
       call MatSetOption(output_mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)      
@@ -569,39 +517,40 @@ module petsc_helper
       
       ! Now go and fill the new matrix
       ! Loop over global row indices
+      counter = 1
       do ifree = global_row_start, global_row_end_plus_one-1                  
       
          ! Get the row
          call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)  
-         
-         ! Find where the diagonal is
-         diagonal_index = -1
-         do col = 1, ncols
-            if (cols(col) == ifree) then
-               diagonal_index = col
-               exit
-            end if
-         end do            
 
-         ! Much quicker to call setvalues
-         call MatSetValues(output_mat, one, [ifree], ncols, cols, &
-                  vals, INSERT_VALUES, ierr)
-
-         ! Set the diagonal to zero if there isn't one
-         if (diagonal_index == -1) then
-            call MatSetValue(output_mat, ifree, ifree, 0.0, INSERT_VALUES, ierr)
-         end if
+         row_indices(counter:counter+ncols) = ifree
+         col_indices(counter:counter+ncols) = cols(1:ncols)
+         v(counter:counter+ncols) = vals(1:ncols)    
+         counter = counter + ncols           
 
          ! Must call otherwise petsc leaks memory
          call MatRestoreRow(input_mat, ifree, ncols, cols, vals, ierr)   
-      end do           
+      end do      
       
-      call MatAssemblyBegin(output_mat, MAT_FINAL_ASSEMBLY, ierr)
+      ! Go and add a zero on the diagonal just in case it's not present
+      do ifree = global_row_start, global_row_end_plus_one-1 
+         row_indices(counter) = ifree
+         col_indices(counter) = ifree
+         v(counter) = 0.0
+         counter = counter + 1
+      end do
 
-      deallocate(cols, vals, nnzs_row)
-      if (comm_size/=1) deallocate(onzs_row)
+      ! Set the values
+      call MatSetPreallocationCOO(output_mat, counter-1, row_indices, col_indices, ierr)
+      deallocate(row_indices, col_indices)
+      ! Remember the COO format does the add of all the values in v that share an index
+      ! So zero gets added to every diagonal entry (that way they're always present)
+      ! even though we're calling INSERT_VALUES
+      call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
+      deallocate(v)       
+      
+      deallocate(cols, vals)
 
-      call MatAssemblyEnd(output_mat, MAT_FINAL_ASSEMBLY, ierr) 
          
    end subroutine mat_duplicate_copy_plus_diag   
 
