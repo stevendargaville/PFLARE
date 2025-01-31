@@ -444,7 +444,7 @@ module petsc_helper
 
   !------------------------------------------------------------------------------------------------------------------------
    
-   subroutine mat_duplicate_copy_plus_diag(input_mat, output_mat)
+   subroutine mat_duplicate_copy_plus_diag(input_mat, reuse, output_mat)
 
       ! Duplicates and copies the values from input matrix into the output mat, but ensures
       ! there are always diagonal entries present that are set to zero if absent
@@ -452,6 +452,7 @@ module petsc_helper
       ! ~~~~~~~~~~
       ! Input 
       type(tMat), intent(in) :: input_mat
+      logical, intent(in) :: reuse
       type(tMat), intent(inout) :: output_mat
 
       PetscInt :: col, ncols, ifree, max_nnzs, max_nnzs_total
@@ -503,13 +504,15 @@ module petsc_helper
       allocate(v(max_nnzs_total))
 
       ! We may be reusing with the same sparsity
-      call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
-      call MatSetSizes(output_mat, local_rows, local_cols, &
-                        global_rows, global_cols, ierr)
-      ! Match the output type
-      call MatGetType(input_mat, mat_type, ierr)
-      call MatSetType(output_mat, mat_type, ierr)
-      call MatSetUp(output_mat, ierr)             
+      if (.NOT. reuse) then
+         call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
+         call MatSetSizes(output_mat, local_rows, local_cols, &
+                           global_rows, global_cols, ierr)
+         ! Match the output type
+         call MatGetType(input_mat, mat_type, ierr)
+         call MatSetType(output_mat, mat_type, ierr)
+         call MatSetUp(output_mat, ierr)   
+      end if          
        
       ! Don't set any off processor entries so no need for a reduction when assembling
       call MatSetOption(output_mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)      
@@ -541,7 +544,9 @@ module petsc_helper
       end do
 
       ! Set the values
-      call MatSetPreallocationCOO(output_mat, counter-1, row_indices, col_indices, ierr)
+      if (.NOT. reuse) then
+         call MatSetPreallocationCOO(output_mat, counter-1, row_indices, col_indices, ierr)
+      end if
       deallocate(row_indices, col_indices)
       ! Remember the COO format does the add of all the values in v that share an index
       ! So zero gets added to every diagonal entry (that way they're always present)

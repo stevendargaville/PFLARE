@@ -818,13 +818,9 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       mat_sparsity_match => matrix_powers(poly_sparsity_order)
 
       ! Copy in the highest unconstrained power
-      ! If not re-using
-      if (PetscMatIsNull(cmat)) then    
-         ! Duplicate & copy the matrix, but ensure there is a diagonal present
-         call mat_duplicate_copy_plus_diag(matrix_powers(poly_sparsity_order), cmat)
-      else
-         call MatCopy(matrix_powers(poly_sparsity_order), cmat, SAME_NONZERO_PATTERN, ierr)
-      end if
+      ! Duplicate & copy the matrix, but ensure there is a diagonal present
+      call mat_duplicate_copy_plus_diag(matrix_powers(poly_sparsity_order), .NOT. PetscMatIsNull(cmat), cmat)
+
       ! We know we will never have non-zero locations outside of the highest constrained sparsity power 
       call MatSetOption(cmat, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_TRUE,  ierr)     
       call MatSetOption(cmat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr) 
@@ -1494,13 +1490,9 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       ! For poly_order 1 and poly_sparsity_order 1 this is easy
       else if (poly_order == 1 .AND. poly_sparsity_order == 1) then
 
-         ! If not re-using
-         if (PetscMatIsNull(inv_matrix)) then
-            ! Duplicate & copy the matrix, but ensure there is a diagonal present
-            call mat_duplicate_copy_plus_diag(matrix, inv_matrix)
-         else
-            call MatCopy(matrix, inv_matrix, SAME_NONZERO_PATTERN, ierr)
-         end if
+         ! Duplicate & copy the matrix, but ensure there is a diagonal present
+         call mat_duplicate_copy_plus_diag(matrix, .NOT. PetscMatIsNull(inv_matrix), inv_matrix)
+
          ! Flags to prevent reductions when assembling (there are assembles in the shift)
          call MatSetOption(inv_matrix, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr) 
          call MatSetOption(inv_matrix, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_TRUE,  ierr)     
@@ -1543,7 +1535,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       reuse_triggered = .FALSE.
       if (PetscMatIsNull(inv_matrix)) then
          ! Duplicate & copy the matrix, but ensure there is a diagonal present
-         call mat_duplicate_copy_plus_diag(matrix, inv_matrix)
+         call mat_duplicate_copy_plus_diag(matrix, .FALSE., inv_matrix)
       else
          ! For the powers > 1 the pattern of the original matrix will be different
          ! to the resulting inverse
