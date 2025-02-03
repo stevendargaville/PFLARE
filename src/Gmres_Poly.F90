@@ -700,7 +700,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       PetscInt, dimension(:), pointer :: submatrices_ia, submatrices_ja, cols_two_ptr, cols_ptr
       real, dimension(:), pointer :: vals_two_ptr, vals_ptr
       real(c_double), pointer :: submatrices_vals(:)
-      logical :: symmetric = .false., inodecompressed=.false., done
+      logical :: symmetric = .false., inodecompressed=.false., done, reuse_triggered
       type(tVec) :: rhs_copy, diag_vec, power_vec
       PetscInt, parameter :: one = 1, zero = 0
       CHARACTER(len=255) :: omp_threads_env_char
@@ -727,6 +727,8 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       ! This returns the global index of the local portion of the matrix
       call MatGetOwnershipRange(matrix, global_row_start, global_row_end_plus_one, ierr)  
       call MatGetOwnershipRangeColumn(matrix, global_col_start, global_col_end_plus_one, ierr)  
+
+      reuse_triggered = .NOT. PetscMatIsNull(cmat) 
 
       ! ~~~~~~~~~~
       ! Special case if we just want to return a gmres polynomial with the sparsity of the diagonal
@@ -758,7 +760,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          end do
 
          ! If not re-using
-         if (PetscMatIsNull(cmat)) then
+         if (.NOT. reuse_triggered) then
 
             call MatCreate(MPI_COMM_MATRIX, cmat, ierr)
             call MatSetSizes(cmat, local_rows, local_cols, &
@@ -774,23 +776,27 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          call MatSetOption(cmat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)
          call MatSetOption(cmat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)          
 
-         allocate(indices(local_rows))
-         allocate(v(local_rows))
-         ! Just setting the values to one here, so that we don't have to copy back 
-         ! rhs_copy to the host, MatDiagonalSet just happens directly on the gpu
-         v = 1.0         
+         !allocate(v(local_rows))
+         !v = 1.0         
    
-         ! Set the diagonal
-         counter = 1
-         do i_loc = global_row_start, global_row_end_plus_one-1
-            indices(counter) = i_loc
-            counter = counter + 1
-         end do
-         ! Set the diagonal
-         call MatSetPreallocationCOO(cmat, local_rows, indices, indices, ierr)
-         deallocate(indices)
-         call MatSetValuesCOO(cmat, v, INSERT_VALUES, ierr)    
-         deallocate(v)         
+         if (.NOT. reuse_triggered) then
+            allocate(indices(local_rows))
+
+            ! Set the diagonal
+            counter = 1
+            do i_loc = global_row_start, global_row_end_plus_one-1
+               indices(counter) = i_loc
+               counter = counter + 1
+            end do
+            ! Set the diagonal
+            call MatSetPreallocationCOO(cmat, local_rows, indices, indices, ierr)
+            deallocate(indices)
+
+         end if            
+
+         ! Don't need to set the values as we do that directly with MatDiagonalSet
+         ! call MatSetValuesCOO(cmat, v, INSERT_VALUES, ierr)    
+         ! deallocate(v)         
 
          ! Set the diagonal to our polynomial
          call MatDiagonalSet(cmat, rhs_copy, INSERT_VALUES, ierr)
@@ -829,7 +835,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
 
       ! Copy in the highest unconstrained power
       ! Duplicate & copy the matrix, but ensure there is a diagonal present
-      call mat_duplicate_copy_plus_diag(matrix_powers(poly_sparsity_order), .NOT. PetscMatIsNull(cmat), cmat)
+      call mat_duplicate_copy_plus_diag(matrix_powers(poly_sparsity_order), reuse_triggered, cmat)
 
       ! We know we will never have non-zero locations outside of the highest constrained sparsity power 
       call MatSetOption(cmat, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_TRUE,  ierr)     
@@ -1462,12 +1468,13 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       ! ~~~~~~~~~~~~
       ! If we're here then we want an assembled approximate inverse
       ! ~~~~~~~~~~~~
+      reuse_triggered = .NOT. PetscMatIsNull(inv_matrix) 
 
       ! If we're zeroth order poly this is trivial as it's just the coefficient(1) on the diagonal
       if (poly_order == 0) then
 
          ! If not re-using
-         if (PetscMatIsNull(inv_matrix)) then
+         if (.NOT. reuse_triggered) then
 
             call MatCreate(MPI_COMM_MATRIX, inv_matrix, ierr)
             call MatSetSizes(inv_matrix, local_rows, local_cols, &
@@ -1486,20 +1493,25 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          ! Finish off the non-blocking all reduce to compute our coefficients
          call finish_gmres_polynomial_coefficients_power(poly_order, buffers, coefficients)
 
-         allocate(indices(local_rows))
          allocate(v(local_rows))
          ! Set the diagonal
          v = coefficients(1)      
          
          ! Set the diagonal
-         counter = 1
-         do j_loc = global_row_start, global_row_end_plus_one-1
-            indices(counter) = j_loc
-            counter = counter + 1
-         end do
-         ! Set the diagonal
-         call MatSetPreallocationCOO(inv_matrix, local_rows, indices, indices, ierr)
-         deallocate(indices)
+         if (.NOT. reuse_triggered) then
+            allocate(indices(local_rows))
+
+            ! Set the diagonal
+            counter = 1
+            do j_loc = global_row_start, global_row_end_plus_one-1
+               indices(counter) = j_loc
+               counter = counter + 1
+            end do            
+            call MatSetPreallocationCOO(inv_matrix, local_rows, indices, indices, ierr)
+            deallocate(indices)
+
+         end if
+
          call MatSetValuesCOO(inv_matrix, v, INSERT_VALUES, ierr)    
          deallocate(v)                  
                            
@@ -1510,7 +1522,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       else if (poly_order == 1 .AND. poly_sparsity_order == 1) then
 
          ! Duplicate & copy the matrix, but ensure there is a diagonal present
-         call mat_duplicate_copy_plus_diag(matrix, .NOT. PetscMatIsNull(inv_matrix), inv_matrix)
+         call mat_duplicate_copy_plus_diag(matrix, reuse_triggered, inv_matrix)
 
          ! Flags to prevent reductions when assembling (there are assembles in the shift)
          call MatSetOption(inv_matrix, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr) 
@@ -1551,15 +1563,13 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
 
       ! If not re-using
       ! Copy in the initial matrix
-      reuse_triggered = .FALSE.
-      if (PetscMatIsNull(inv_matrix)) then
+      if (reuse_triggered) then
          ! Duplicate & copy the matrix, but ensure there is a diagonal present
          call mat_duplicate_copy_plus_diag(matrix, .FALSE., inv_matrix)
       else
          ! For the powers > 1 the pattern of the original matrix will be different
          ! to the resulting inverse
          call MatCopy(matrix, inv_matrix, DIFFERENT_NONZERO_PATTERN, ierr)
-         reuse_triggered = .TRUE.
       end if
 
       ! Don't set any off processor entries so no need for a reduction when assembling
