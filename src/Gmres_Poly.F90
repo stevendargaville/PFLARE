@@ -1390,7 +1390,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       type(tMat), intent(inout)                         :: reuse_mat, inv_matrix
 
       ! Local variables
-      PetscInt :: global_row_start, global_row_end_plus_one
+      PetscInt :: global_row_start, global_row_end_plus_one, counter
       PetscInt :: global_rows, global_cols, local_rows, local_cols, j_loc
       integer :: comm_size, errorcode, order
       PetscErrorCode :: ierr      
@@ -1400,6 +1400,8 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       PetscInt :: one=1, zero=0
       logical :: reuse_triggered
       MatType:: mat_type
+      PetscInt, allocatable, dimension(:) :: indices
+      real, allocatable, dimension(:) :: v       
 
       ! ~~~~~~       
 
@@ -1473,8 +1475,6 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
             ! Match the output type
             call MatGetType(matrix, mat_type, ierr)
             call MatSetType(inv_matrix, mat_type, ierr)
-            call MatMPIAIJSetPreallocation(inv_matrix,one,PETSC_NULL_INTEGER_ARRAY,zero,PETSC_NULL_INTEGER_ARRAY,ierr)
-            call MatSeqAIJSetPreallocation(inv_matrix,one,PETSC_NULL_INTEGER_ARRAY,ierr)
             call MatSetUp(inv_matrix, ierr)                
 
          end if        
@@ -1486,13 +1486,22 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          ! Finish off the non-blocking all reduce to compute our coefficients
          call finish_gmres_polynomial_coefficients_power(poly_order, buffers, coefficients)
 
+         allocate(indices(local_rows))
+         allocate(v(local_rows))
          ! Set the diagonal
+         v = coefficients(1)      
+         
+         ! Set the diagonal
+         counter = 1
          do j_loc = global_row_start, global_row_end_plus_one-1
-            call MatSetValue(inv_matrix, j_loc, j_loc, &
-                  coefficients(1), INSERT_VALUES, ierr)
+            indices(counter) = j_loc
+            counter = counter + 1
          end do
-         call MatAssemblyBegin(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)
-         call MatAssemblyEnd(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)           
+         ! Set the diagonal
+         call MatSetPreallocationCOO(inv_matrix, local_rows, indices, indices, ierr)
+         deallocate(indices)
+         call MatSetValuesCOO(inv_matrix, v, INSERT_VALUES, ierr)    
+         deallocate(v)                  
                            
          ! Then just return
          return
