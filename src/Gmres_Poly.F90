@@ -673,7 +673,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       
       PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
       PetscInt :: global_col_start, global_col_end_plus_one, n, ncols, ncols_two, ifree, max_nnzs
-      PetscInt :: i_loc, j_loc, row_size, rows_ao, cols_ao, rows_ad, cols_ad, shift = 0
+      PetscInt :: i_loc, j_loc, row_size, rows_ao, cols_ao, rows_ad, cols_ad, shift = 0, counter
       integer :: errorcode, omp_threads, match_counter, term, order, location
       integer :: comm_size, comm_size_world, status, length
       PetscErrorCode :: ierr      
@@ -705,7 +705,9 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       PetscInt, parameter :: one = 1, zero = 0
       CHARACTER(len=255) :: omp_threads_env_char
       integer :: omp_threads_env
-      MatType:: mat_type     
+      MatType:: mat_type    
+      PetscInt, allocatable, dimension(:) :: indices
+      real, allocatable, dimension(:) :: v 
       
       ! ~~~~~~~~~~  
 
@@ -764,24 +766,32 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
             ! Match the output type
             call MatGetType(matrix, mat_type, ierr)
             call MatSetType(cmat, mat_type, ierr)
-            call MatMPIAIJSetPreallocation(cmat,one,PETSC_NULL_INTEGER_ARRAY,zero,PETSC_NULL_INTEGER_ARRAY,ierr)
-            call MatSeqAIJSetPreallocation(cmat,one,PETSC_NULL_INTEGER_ARRAY,ierr)
-            call MatSetUp(cmat, ierr)              
+            call MatSetUp(cmat, ierr)
 
          end if
 
          ! Don't set any off processor entries so no need for a reduction when assembling
          call MatSetOption(cmat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)
          call MatSetOption(cmat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)          
+
+         allocate(indices(local_rows))
+         allocate(v(local_rows))
+         ! Just setting the values to one here, so that we don't have to copy back 
+         ! rhs_copy to the host, hopefully MatDiagonalSet just happens directly on the gpu
+         v = 1.0         
    
          ! Set the diagonal
+         counter = 1
          do i_loc = global_row_start, global_row_end_plus_one-1
-            call MatSetValue(cmat, i_loc, i_loc, &
-                  1.0, INSERT_VALUES, ierr)
+            indices(counter) = i_loc
+            counter = counter + 1
          end do
-         call MatAssemblyBegin(cmat, MAT_FINAL_ASSEMBLY, ierr)
-         call MatAssemblyEnd(cmat, MAT_FINAL_ASSEMBLY, ierr)    
-   
+         ! Set the diagonal
+         call MatSetPreallocationCOO(cmat, local_rows, indices, indices, ierr)
+         deallocate(indices)
+         call MatSetValuesCOO(cmat, v, INSERT_VALUES, ierr)    
+         deallocate(v)         
+
          ! Set the diagonal to our polynomial
          call MatDiagonalSet(cmat, rhs_copy, INSERT_VALUES, ierr)
       
