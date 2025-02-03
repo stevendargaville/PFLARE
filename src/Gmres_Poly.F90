@@ -1563,7 +1563,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
 
       ! If not re-using
       ! Copy in the initial matrix
-      if (reuse_triggered) then
+      if (.NOT. reuse_triggered) then
          ! Duplicate & copy the matrix, but ensure there is a diagonal present
          call mat_duplicate_copy_plus_diag(matrix, .FALSE., inv_matrix)
       else
