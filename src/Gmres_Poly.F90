@@ -777,7 +777,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          allocate(indices(local_rows))
          allocate(v(local_rows))
          ! Just setting the values to one here, so that we don't have to copy back 
-         ! rhs_copy to the host, hopefully MatDiagonalSet just happens directly on the gpu
+         ! rhs_copy to the host, MatDiagonalSet just happens directly on the gpu
          v = 1.0         
    
          ! Set the diagonal
