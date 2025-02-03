@@ -153,7 +153,7 @@ module petsc_helper
          end if
 
          ! Add lumped terms to the diagonal
-         if (lump_entries .AND. diagonal_index /= -1) then
+         if (lump_entries) then
             vals_copy(diagonal_index) = vals_copy(diagonal_index) + lump_sum
          end if
 
