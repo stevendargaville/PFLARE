@@ -40,13 +40,13 @@ module petsc_helper
       PetscInt :: global_col_start, global_col_end_plus_one, diagonal_index, counter, max_nnzs_total
       PetscErrorCode :: ierr
       integer :: errorcode, comm_size
-      PetscInt, dimension(:), allocatable :: cols, cols_mod
-      real, dimension(:), allocatable :: vals, vals_copy
+      PetscInt, dimension(:), allocatable :: cols
+      real, dimension(:), allocatable :: vals
       PetscInt, allocatable, dimension(:) :: row_indices, col_indices
       real, allocatable, dimension(:) :: v          
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       logical :: rel_row_tol_logical, lump_entries, drop_diag
-      real :: rel_row_tol, lump_sum
+      real :: rel_row_tol
       MPI_Comm :: MPI_COMM_MATRIX
       MatType:: mat_type
       
@@ -88,13 +88,12 @@ module petsc_helper
       end do
 
       allocate(cols(max_nnzs))
-      allocate(cols_mod(max_nnzs))
       allocate(vals(max_nnzs)) 
-      allocate(vals_copy(max_nnzs))
 
-      allocate(row_indices(max_nnzs_total))
-      allocate(col_indices(max_nnzs_total))
-      allocate(v(max_nnzs_total))      
+      ! Times 2 here in case we are lumping
+      allocate(row_indices(max_nnzs_total * 2))
+      allocate(col_indices(max_nnzs_total * 2))
+      allocate(v(max_nnzs_total * 2))      
 
       call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
       call MatSetSizes(output_mat, local_rows, local_cols, &
@@ -116,57 +115,39 @@ module petsc_helper
       do ifree = global_row_start, global_row_end_plus_one-1                  
       
          ! Get the row
-         call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)  
-         
-         ! Find where the diagonal is
-         diagonal_index = -1
-         lump_sum = 0
-         do col = 1, ncols
-            if (cols(col) == ifree) then
-               diagonal_index = col
-               exit
-            end if
-         end do            
+         call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)            
 
          if (rel_row_tol_logical) then
             rel_row_tol = tol * maxval(abs(vals(1:ncols)))
          end if 
-
-         cols_mod(1:ncols) = cols(1:ncols)
-         vals_copy(1:ncols) = vals(1:ncols)
                   
-         ! Allow the dropping of the diagonal
-         if (drop_diag) then
-            do col = 1, ncols
-               if (abs(vals(col)) < rel_row_tol) then
-                  cols_mod(col) = -1    
-                  if (lump_entries) lump_sum = lump_sum + vals(col)             
-               end if
-            end do               
-         else
-            do col = 1, ncols
-               if (abs(vals(col)) < rel_row_tol .AND. cols(col) /= ifree) then
-                  cols_mod(col) = -1    
-                  if (lump_entries) lump_sum = lump_sum + vals(col)             
-               end if
-            end do
-         end if
+         do col = 1, ncols
 
-         ! Add lumped terms to the diagonal
-         if (lump_entries) then
-            vals_copy(diagonal_index) = vals_copy(diagonal_index) + lump_sum
-         end if
+            ! Copy the value in if it is bigger than the tolerance
+            if (abs(vals(col)) .ge. rel_row_tol ) then
 
-         row_indices(counter:counter+ncols-1) = ifree
-         col_indices(counter:counter+ncols-1) = cols_mod(1:ncols)
-         v(counter:counter+ncols-1) = vals_copy(1:ncols)    
-         counter = counter + ncols           
+               row_indices(counter) = ifree
+               col_indices(counter) = cols(col)
+               v(counter) = vals(col)    
+               counter = counter + 1 
+
+            ! If the entry is small and we are lumping, then add it to the diagonal
+            ! or if this is the diagonal and it's small but we are not dropping it
+            else if (lump_entries .OR. (.NOT. drop_diag .AND. cols(col) == ifree)) then
+
+               row_indices(counter) = ifree
+               col_indices(counter) = ifree
+               v(counter) = vals(col)    
+               counter = counter + 1                   
+
+            end if
+         end do                       
 
          ! Must call otherwise petsc leaks memory
          call MatRestoreRow(input_mat, ifree, ncols, cols, vals, ierr)   
       end do           
 
-      deallocate(cols, vals, cols_mod, vals_copy)
+      deallocate(cols, vals)
       ! Set the values
       call MatSetPreallocationCOO(output_mat, counter-1, row_indices, col_indices, ierr)
       deallocate(row_indices, col_indices)
