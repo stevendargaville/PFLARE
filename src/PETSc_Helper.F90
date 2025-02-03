@@ -236,13 +236,15 @@ module petsc_helper
       type(tMat), intent(inout) :: output_mat
       logical, intent(in), optional :: lump
 
-      PetscInt :: col, ncols, ifree, max_nnzs, ncols_mod, index1, index2
+      PetscInt :: col, ncols, ifree, max_nnzs, ncols_mod, index1, index2, counter
       PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
-      PetscInt :: global_col_start, global_col_end_plus_one, diagonal_index
+      PetscInt :: global_col_start, global_col_end_plus_one, max_nnzs_total, max_nnzs_total_two
       PetscErrorCode :: ierr
       integer :: errorcode, comm_size
-      PetscInt, dimension(:), allocatable :: nnzs_row, onzs_row, cols, cols_mod
+      PetscInt, dimension(:), allocatable :: cols, cols_mod
       real, dimension(:), allocatable :: vals, vals_copy
+      PetscInt, allocatable, dimension(:) :: row_indices, col_indices
+      real, allocatable, dimension(:) :: v        
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       logical :: lump_entries
       real :: lump_sum
@@ -264,30 +266,33 @@ module petsc_helper
       ! This returns the global index of the local portion of the matrix
       call MatGetOwnershipRange(input_mat, global_row_start, global_row_end_plus_one, ierr)  
       call MatGetOwnershipRangeColumn(input_mat, global_col_start, global_col_end_plus_one, ierr)  
-      
-      allocate(nnzs_row(local_rows))
-      nnzs_row = 0
 
       max_nnzs = 0
-      if (comm_size/=1) then
-         allocate(onzs_row(local_rows))
-         onzs_row = 0
-      end if
-
+      max_nnzs_total = 0
+      max_nnzs_total_two = 0
       do ifree = global_row_start, global_row_end_plus_one-1                  
 
          call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
+         max_nnzs_total = max_nnzs_total + ncols
          call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          call MatGetRow(sparsity_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
+         max_nnzs_total_two = max_nnzs_total_two + ncols
          call MatRestoreRow(sparsity_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)         
       end do
+
+      max_nnzs_total = max(max_nnzs_total, max_nnzs_total_two)
 
       allocate(cols(max_nnzs))
       allocate(cols_mod(max_nnzs))
       allocate(vals(max_nnzs)) 
       allocate(vals_copy(max_nnzs))
+
+      ! Times 2 here in case we are lumping
+      allocate(row_indices(max_nnzs_total * 2))
+      allocate(col_indices(max_nnzs_total * 2))
+      allocate(v(max_nnzs_total * 2))       
 
       ! Duplicate the sparsity
       call MatDuplicate(sparsity_mat, MAT_DO_NOT_COPY_VALUES, output_mat, ierr)
@@ -300,21 +305,13 @@ module petsc_helper
       
       ! Now go and fill the new matrix
       ! Loop over global row indices
+      counter = 1
       do ifree = global_row_start, global_row_end_plus_one-1                  
       
          ! Get the row
          call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)  
          
-         ! Find where the diagonal is
-         diagonal_index = -1
          lump_sum = 0
-         do col = 1, ncols
-            if (cols(col) == ifree) then
-               diagonal_index = col
-               exit
-            end if
-         end do            
-
          ncols_mod = ncols
          cols_mod(1:ncols) = cols(1:ncols)
          vals_copy(1:ncols) = vals(1:ncols)
@@ -349,25 +346,33 @@ module petsc_helper
          end do
 
          ! Must call otherwise petsc leaks memory
-         call MatRestoreRow(sparsity_mat, ifree, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)          
+         call MatRestoreRow(sparsity_mat, ifree, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)      
+         
+         ! Stick in the intersecting values
+         do col = 1, ncols_mod
+            if (cols_mod(col) /= -1) then
+               row_indices(counter) = ifree
+               col_indices(counter) = cols_mod(col)
+               v(counter) = vals_copy(col)
+               counter = counter + 1
+            end if
+         end do
 
          ! Add lumped terms to the diagonal
          if (lump_entries) then
-            vals_copy(diagonal_index) = vals_copy(diagonal_index) + lump_sum
-         end if
-
-         ! Much quicker to call setvalues
-         call MatSetValues(output_mat, one, [ifree], ncols_mod, cols_mod, &
-                  vals_copy, INSERT_VALUES, ierr)                  
- 
+            row_indices(counter) = ifree
+            col_indices(counter) = ifree
+            v(counter) = lump_sum
+            counter = counter + 1
+         end if              
       end do  
             
-      call MatAssemblyBegin(output_mat, MAT_FINAL_ASSEMBLY, ierr)
-
-      deallocate(cols, vals, nnzs_row, cols_mod, vals_copy)
-      if (comm_size/=1) deallocate(onzs_row)
-
-      call MatAssemblyEnd(output_mat, MAT_FINAL_ASSEMBLY, ierr) 
+      deallocate(cols, vals, cols_mod, vals_copy)
+      ! Set the values
+      call MatSetPreallocationCOO(output_mat, counter-1, row_indices, col_indices, ierr)
+      deallocate(row_indices, col_indices)
+      call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
+      deallocate(v)  
          
    end subroutine remove_from_sparse_match
 
