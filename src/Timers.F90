@@ -49,6 +49,7 @@ subroutine print_timers()
    print *,  "constrain time   :", timer_time(TIMER_ID_AIR_CONSTRAIN)       
    print *,  "rap time         :", timer_time(TIMER_ID_AIR_RAP)
    print *,  "identity time    :", timer_time(TIMER_ID_AIR_IDENTIY)
+   print *,  "drop time        :", timer_time(TIMER_ID_AIR_DROP)
 
 end subroutine print_timers
 

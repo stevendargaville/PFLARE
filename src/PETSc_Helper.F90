@@ -199,6 +199,8 @@ module petsc_helper
       call MatSetOption(output_mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)      
       call MatSetOption(output_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)    
       ! This ensures any entries outside the existing sparsity of output_mat are dropped 
+      ! Not sure if this is respected by the new COO interface so we will keep the 
+      ! matsetvalues use below for now
       call MatSetOption(output_mat, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE, ierr)
       
       ! Now go and fill the new matrix
