@@ -99,6 +99,7 @@ module repartition
 
             call MatRestoreRow(input_mat, i_loc, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
          end do
+         deallocate(cols)
 
       end if
       
