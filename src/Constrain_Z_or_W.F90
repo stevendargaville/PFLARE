@@ -94,28 +94,16 @@ module constrain_z_or_w
       end do
 
       ! If we want to create a constant nullspace vector on the end of left_null_vecs or right_null_vecs
-      if (cst_nullspace) then      
-         call MatGetSize(input_mat, global_rows, global_cols, ierr)    
-         call MatGetLocalSize(input_mat, local_rows, local_cols, ierr)      
+      if (cst_nullspace) then           
 
          if (left) then
-            if (comm_size /= 1) then
-               call VecCreateMPI(MPI_COMM_MATRIX, local_rows, &
-                        global_rows, left_null_vecs(no_nullspace_vecs), ierr)                                                                                         
-            else
-               call VecCreateSeq(PETSC_COMM_SELF, local_rows, left_null_vecs(no_nullspace_vecs), ierr)          
-            end if     
+            call MatCreateVecs(input_mat, left_null_vecs(no_nullspace_vecs), PETSC_NULL_VEC, ierr)
             ! Set to the constant     
             call VecSet(left_null_vecs(no_nullspace_vecs), 1.0, ierr)
          end if
 
          if (right) then
-            if (comm_size /= 1) then
-               call VecCreateMPI(MPI_COMM_MATRIX, local_rows, &
-                        global_rows, right_null_vecs(no_nullspace_vecs), ierr)                                                                                         
-            else
-               call VecCreateSeq(PETSC_COMM_SELF, local_rows, right_null_vecs(no_nullspace_vecs), ierr)          
-            end if          
+            call MatCreateVecs(input_mat, right_null_vecs(no_nullspace_vecs), PETSC_NULL_VEC, ierr)
             ! Set to the constant
             call VecSet(right_null_vecs(no_nullspace_vecs), 1.0, ierr)
          end if         
@@ -156,12 +144,7 @@ module constrain_z_or_w
       call MatGetLocalSize(input_mat, local_rows, local_cols, ierr)
       
       ! Create the vecs
-      if (comm_size /= 1) then
-         call VecCreateMPI(MPI_COMM_MATRIX, local_rows, &
-                  global_rows, vec_rhs, ierr)                                                                                         
-      else
-         call VecCreateSeq(PETSC_COMM_SELF, local_rows, vec_rhs, ierr)          
-      end if 
+      call MatCreateVecs(input_mat, vec_rhs, PETSC_NULL_VEC, ierr)
 
       ! ~~~~~~~~~~~~
       ! Setup a petsc ksp to solve Ax = 0
