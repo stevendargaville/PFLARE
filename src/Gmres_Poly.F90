@@ -685,6 +685,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       PetscInt, pointer :: colmap_c(:)
       type(tIS) :: col_indices
       type(tMat) :: matrix_condensed, Ad, Ao
+      type(tMat), target :: temp_mat
       PetscOffset :: iicol
       PetscInt :: icol(1)
       type(c_ptr) :: colmap_c_ptr, vals_c_ptr
@@ -867,8 +868,20 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          ! ~~~~
          ! Get the cols
          ! ~~~~
-         ! Much more annoying in older petsc
-         call MatMPIAIJGetSeqAIJ(mat_sparsity_match, Ad, Ao, icol, iicol, ierr)
+         call MatGetType(matrix, mat_type, ierr)
+         if (mat_type == "mpiaij") then
+            ! Much more annoying in older petsc
+            call MatMPIAIJGetSeqAIJ(mat_sparsity_match, Ad, Ao, icol, iicol, ierr)            
+         
+         ! If on the gpu, just do a convert to mpiaij format first
+         ! This will be expensive but the best we can do for now without writing our 
+         ! own version of this subroutine in cuda/kokkos
+         else
+            call MatConvert(mat_sparsity_match, MATMPIAIJ, MAT_INITIAL_MATRIX, temp_mat, ierr)
+            call MatMPIAIJGetSeqAIJ(temp_mat, Ad, Ao, icol, iicol, ierr) 
+            mat_sparsity_match => temp_mat
+         end if
+
          call MatGetSize(Ad, rows_ad, cols_ad, ierr)             
          ! We know the col size of Ao is the size of colmap, the number of non-zero offprocessor columns
          call MatGetSize(Ao, rows_ao, cols_ao, ierr)         
@@ -1265,6 +1278,10 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       do order = 2, poly_sparsity_order
          call MatDestroy(matrix_powers(order), ierr)
       end do
+      if (mat_type /= "mpiaij") then
+         call MatDestroy(temp_mat, ierr)
+      end if
+
       deallocate(col_indices_off_proc_array)
       deallocate(cols, vals, cols_two, vals_two, vals_power_temp, vals_previous_power_temp, cols_index_one, cols_index_two)
 
