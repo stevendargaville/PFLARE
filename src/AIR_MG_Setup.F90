@@ -1293,31 +1293,17 @@ module air_mg_setup
          else
 
             ! Get the size of the previous coarse grid as that is now our bottom grid
-            if (comm_size /= 1) then
-
-               ! If we're on the top grid and we have coarsened fast enough to not have a second level
-               ! should only happen on very small problems               
-               if (our_level == 1) then
-                  global_fine_is_size = global_rows
-                  local_fine_is_size = local_rows
-               else
-                  call ISGetSize(air_data%IS_coarse_index(our_level-1), global_fine_is_size, ierr)
-                  call ISGetLocalSize(air_data%IS_coarse_index(our_level-1), local_fine_is_size, ierr)
-               end if
-               call MatCreateVecs(air_data%A_fc(our_level-1), &
-                        air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)                                        
-               !call VecCreateMPI(MPI_COMM_MATRIX, local_fine_is_size, &
-               !         global_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)  
+            ! If we're on the top grid and we have coarsened fast enough to not have a second level
+            ! should only happen on very small problems               
+            if (our_level == 1) then
+               global_fine_is_size = global_rows
+               local_fine_is_size = local_rows
             else
-               if (our_level == 1) then
-                  global_fine_is_size = global_rows
-               else
-                  call ISGetSize(air_data%IS_coarse_index(our_level-1), global_fine_is_size, ierr)
-               end if
-               call MatCreateVecs(air_data%A_fc(our_level-1), &
-                        air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)                                        
-               !call VecCreateSeq(PETSC_COMM_SELF, global_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)    
+               call ISGetSize(air_data%IS_coarse_index(our_level-1), global_fine_is_size, ierr)
+               call ISGetLocalSize(air_data%IS_coarse_index(our_level-1), local_fine_is_size, ierr)
             end if
+            call MatCreateVecs(air_data%A_fc(our_level-1), &
+                     air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)
 
             if (air_data%options%constrain_z) then
                ! Destroy our copy of the left near nullspace vectors
@@ -1407,44 +1393,17 @@ module air_mg_setup
          ! ~~~~~~~
          ! If we haven't built them already
          if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then
-            if (comm_size /= 1) then
+            call MatCreateVecs(air_data%A_ff(our_level), &
+                     air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)
+            call MatCreateVecs(air_data%A_fc(our_level), &
+                     air_data%temp_vecs_coarse(1)%array(our_level), PETSC_NULL_VEC, ierr)  
+            call MatCreateVecs(air_data%coarse_matrix(our_level), &
+                     air_data%temp_vecs(1)%array(our_level), PETSC_NULL_VEC, ierr)                                                  
 
-               call MatCreateVecs(air_data%A_ff(our_level), &
-                        air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)
-               call MatCreateVecs(air_data%A_fc(our_level), &
-                        air_data%temp_vecs_coarse(1)%array(our_level), PETSC_NULL_VEC, ierr)  
-               call MatCreateVecs(air_data%coarse_matrix(our_level), &
-                        air_data%temp_vecs(1)%array(our_level), PETSC_NULL_VEC, ierr)                                                  
-
-               !call VecCreateMPI(MPI_COMM_MATRIX, local_fine_is_size, &
-               !         global_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)     
-               !call VecCreateMPI(MPI_COMM_MATRIX, local_coarse_is_size, &
-               !         global_coarse_is_size, air_data%temp_vecs_coarse(1)%array(our_level), ierr)                                                                      
-               ! We need this to trigger the coarse solver
-               if (our_level == no_levels - 1) then
-                  call MatCreateVecs(air_data%A_fc(our_level), PETSC_NULL_VEC, &
-                           air_data%temp_vecs_fine(1)%array(our_level+1), ierr)                      
-
-                  !call VecCreateMPI(MPI_COMM_MATRIX, local_coarse_is_size, &
-                  !         global_coarse_is_size, air_data%temp_vecs_fine(1)%array(our_level+1), ierr)                      
-               end if                  
-            else
-               call MatCreateVecs(air_data%A_ff(our_level), &
-                        air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)
-               call MatCreateVecs(air_data%A_fc(our_level), &
-                        air_data%temp_vecs_coarse(1)%array(our_level), PETSC_NULL_VEC, ierr) 
-               call MatCreateVecs(air_data%coarse_matrix(our_level), &
-                        air_data%temp_vecs(1)%array(our_level), PETSC_NULL_VEC, ierr)                          
-
-               !call VecCreateSeq(PETSC_COMM_SELF, local_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)          
-               !call VecCreateSeq(PETSC_COMM_SELF, local_coarse_is_size, air_data%temp_vecs_coarse(1)%array(our_level), ierr) 
-               ! We need this to trigger the coarse solver
-               if (our_level == no_levels - 1) then
-                  call MatCreateVecs(air_data%A_fc(our_level), &
-                           air_data%temp_vecs_fine(1)%array(our_level+1), PETSC_NULL_VEC, ierr)                       
-                  !call VecCreateSeq(PETSC_COMM_SELF, local_coarse_is_size, air_data%temp_vecs_fine(1)%array(our_level+1), ierr)          
-               end if
-            end if
+            if (our_level == no_levels - 1) then
+               call MatCreateVecs(air_data%A_fc(our_level), PETSC_NULL_VEC, &
+                        air_data%temp_vecs_fine(1)%array(our_level+1), ierr)                                         
+            end if                  
          end if   
          
          ! ~~~~~~~~~~~~~~
