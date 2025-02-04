@@ -1278,7 +1278,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       do order = 2, poly_sparsity_order
          call MatDestroy(matrix_powers(order), ierr)
       end do
-      if (mat_type /= "mpiaij") then
+      if (comm_size /= 1 .AND. mat_type /= "mpiaij") then
          call MatDestroy(temp_mat, ierr)
       end if
 

@@ -951,7 +951,7 @@ module petsc_helper
       PetscOffset :: iicol
       PetscInt :: icol(1)       
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
-      type(tMat) :: Ad, Ao
+      type(tMat) :: Ad, Ao, temp_mat
       type(c_ptr) :: colmap_c_ptr
       PetscInt, pointer :: colmap_c(:)
       PetscInt, dimension(:), pointer :: col_indices_off_proc_array
@@ -984,10 +984,24 @@ module petsc_helper
       call MatGetOwnershipRange(Z, global_row_start_Z, global_row_end_plus_one_Z, ierr)  
       call MatGetOwnershipRangeColumn(Z, global_col_start_Z, global_col_end_plus_one_Z, ierr)   
 
+      call MatGetType(Z, mat_type, ierr)
+
       ! Get the local non-local components and sizes
       if (comm_size /= 1) then
 
-         call MatMPIAIJGetSeqAIJ(Z, Ad, Ao, icol, iicol, ierr)
+         if (mat_type == "mpiaij") then
+            call MatMPIAIJGetSeqAIJ(Z, Ad, Ao, icol, iicol, ierr)
+            A_array = Z%v
+
+         ! If on the gpu, just do a convert to mpiaij format first
+         ! This will be expensive but the best we can do for now without writing our 
+         ! own version of this subroutine in cuda/kokkos            
+         else
+            call MatConvert(Z, MATMPIAIJ, MAT_INITIAL_MATRIX, temp_mat, ierr)
+            call MatMPIAIJGetSeqAIJ(temp_mat, Ad, Ao, icol, iicol, ierr)             
+            A_array = temp_mat%v
+         end if
+
          ! We know the col size of Ao is the size of colmap, the number of non-zero offprocessor columns
          call MatGetSize(Ao, rows_ao, cols_ao, ierr)    
          call MatGetSize(Ad, rows_ad, cols_ad, ierr)  
@@ -1003,7 +1017,6 @@ module petsc_helper
          ! Now we need the global off-processor column indices in Z
          if (comm_size /= 1) then 
 
-            A_array = Z%v
             call get_colmap_c(A_array, colmap_c_ptr)
             call c_f_pointer(colmap_c_ptr, colmap_c, shape=[cols_ao])
             
@@ -1082,7 +1095,6 @@ module petsc_helper
          call MatSetSizes(R, local_rows_z, local_full_cols, &
                              global_rows_z, global_full_cols, ierr)
          ! Match the output type
-         call MatGetType(Z, mat_type, ierr)
          call MatSetType(R, mat_type, ierr)
          call MatSetUp(R, ierr)         
       end if      
@@ -1146,6 +1158,10 @@ module petsc_helper
       deallocate(row_indices_coo, col_indices_coo)
       call MatSetValuesCOO(R, v, INSERT_VALUES, ierr)    
       deallocate(v)   
+
+      if (comm_size /= 1 .AND. mat_type /= "mpiaij") then
+         call MatDestroy(temp_mat, ierr)
+      end if      
 
       call ISRestoreIndicesF90(orig_fine_col_indices, is_pointer_orig_fine_col, ierr)
       call ISRestoreIndicesF90(is_coarse, is_pointer_coarse, ierr)
