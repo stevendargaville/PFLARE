@@ -1194,6 +1194,7 @@ module air_mg_setup
       type(tVec), dimension(:), allocatable :: left_null_vecs, right_null_vecs
       type(tVec), dimension(:), allocatable :: left_null_vecs_c, right_null_vecs_c
       VecScatter :: vec_scatter
+      VecType :: vec_type
 
       ! ~~~~~~     
 
@@ -1624,11 +1625,16 @@ module air_mg_setup
                   ! ~~~~~~~~~~~~~~~~~~     
                   if (air_data%options%constrain_z .OR. air_data%options%constrain_w) then 
 
-                     ! Can't use matcreatevecs here, if we coarsen down to one process it returns a serial vector
                      call MatGetSize(air_data%coarse_matrix(our_level_coarse), global_rows_repart, global_cols_repart, ierr)
                      call MatGetLocalSize(air_data%coarse_matrix(our_level_coarse), local_rows_repart, local_cols_repart, ierr)
-                     call VecCreateMPI(MPI_COMM_MATRIX, local_rows_repart, &
-                              global_rows_repart, temp_coarse_vec, ierr)  
+                     ! Can't use matcreatevecs here on coarse_matrix(our_level_coarse)
+                     ! if the coarser matrix has gone down to one process it returns a serial vector
+                     ! but we have to have the same type for the scatter (ie mpi and mpi)
+                     call VecGetType(left_null_vecs(1), vec_type, ierr)
+                     call VecCreate(MPI_COMM_MATRIX, temp_coarse_vec, ierr)
+                     call VecSetSizes(temp_coarse_vec, local_rows_repart, global_rows_repart, ierr)
+                     call VecSetType(temp_coarse_vec, vec_type, ierr)
+                     call VecSetUp(temp_coarse_vec, ierr)
 
                      ! Can't seem to pass in PETSC_NULL_IS to the vecscattercreate in petsc 3.14
                      call VecGetLocalSize(temp_coarse_vec, local_vec_size, ierr)
