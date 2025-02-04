@@ -60,7 +60,7 @@ module sai_z
       logical :: approx_solve
       ! In fortran this needs to be of size n+1 where n is the number of submatrices we want
       type(tMat), dimension(2) :: submatrices, submatrices_full
-      type(tMat) :: Ao, Ad, A_ff_power, tcf_plus_atilde_cf
+      type(tMat) :: Ao, Ad, A_ff_power, tcf_plus_atilde_cf, temp_mat
       type(tKSP) :: ksp
       type(tPC) :: pc
       PetscOffset :: iicol
@@ -72,6 +72,7 @@ module sai_z
       logical :: constrain
       real, dimension(:), pointer :: b_f_vals, b_vals
       real :: lambda, b_c
+      MatType:: mat_type
 
       ! ~~~~~~
 
@@ -106,6 +107,7 @@ module sai_z
       call MatSetOption(z, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)   
       
       call MatGetOwnershipRange(A_ff, global_row_start_aff, global_row_end_plus_one_aff, ierr)              
+      call MatGetType(A_ff, mat_type, ierr)
 
       ! ~~~~~~~~~~~~
       ! If we're in parallel we need to get the off-process rows of matrix that correspond
@@ -119,14 +121,21 @@ module sai_z
          ! Get the cols from the sparsity_mat_cf, not from A_ff
          ! ~~~~
          ! Much more annoying in older petsc
-         call MatMPIAIJGetSeqAIJ(sparsity_mat_cf, Ad, Ao, icol, iicol, ierr)
+         if (mat_type == "mpiaij") then
+            call MatMPIAIJGetSeqAIJ(sparsity_mat_cf, Ad, Ao, icol, iicol, ierr)
+            A_array = sparsity_mat_cf%v
+         else
+            call MatConvert(sparsity_mat_cf, MATMPIAIJ, MAT_INITIAL_MATRIX, temp_mat, ierr)
+            call MatMPIAIJGetSeqAIJ(temp_mat, Ad, Ao, icol, iicol, ierr)             
+            A_array = temp_mat%v
+         end if
+
          ! Have to be careful here as we don't have a square matrix, so rows_ao isn't equal to the number of local columns
          call MatGetSize(Ad, rows_ad, cols_ad, ierr)             
          ! We know the col size of Ao is the size of colmap, the number of non-zero offprocessor columns
          call MatGetSize(Ao, rows_ao, cols_ao, ierr)         
 
          ! For the column indices we need to take all the columns
-         A_array = sparsity_mat_cf%v
          call get_colmap_c(A_array, colmap_c_ptr)
          call c_f_pointer(colmap_c_ptr, colmap_c, shape=[cols_ao])
 
@@ -533,6 +542,10 @@ module sai_z
          call ISDestroy(i_row_is, ierr)
          call ISDestroy(j_col_is, ierr)               
       end do  
+
+      if (comm_size /= 1 .AND. mat_type /= "mpiaij") then
+         call MatDestroy(temp_mat, ierr)
+      end if        
 
       call KSPDestroy(ksp, ierr)
       call MatAssemblyBegin(z, MAT_FINAL_ASSEMBLY, ierr)

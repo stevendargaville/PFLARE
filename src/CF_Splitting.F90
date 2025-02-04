@@ -189,7 +189,8 @@ module cf_splitting
          call MatRestoreRow(input_mat, ifree, ncols, cols, vals, ierr)
       end do
 
-      ! Create the output matrix
+      ! Create the output matrix - specifically an aij so output_mat
+      ! remains on the cpu as the cf splittings are all on the cpu for the moment
       if (comm_size/=1) then
          call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
                   global_rows, global_cols, &
