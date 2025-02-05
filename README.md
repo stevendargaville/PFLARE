@@ -32,6 +32,7 @@ PFLARE can scalably solve:
 
    - The number of active MPI ranks on lower levels can be reduced where necessary. If this is used then:
      - Repartitioning with graph partitioners can be applied.
+     - OpenMP can be used in the polynomial inverse assembly (i.e., AIRG or nAIR) to reduce setup time (without requiring support for non-busy waits in the MPI library).
      - Calculation of polynomial coefficients can be done on subcommunicators.
    - The PCPFLAREINV methods above can be used as parallel coarse grid solvers, allowing heavy truncation of the multigrid hierarchy.
    - The sparsity of the multigrid hierarchy (and hence the CF splitting, repartitioning and symbolic matrix-matrix products) can be reused during setup. 
@@ -337,6 +338,66 @@ or via the command line: ``-pc_type air -pc_air_reuse_sparsity -pc_air_reuse_pol
 Often an outer loop (e.g., eigenvalue) will require solving a series of different linear systems one after another, and then returning to the first linear system to start the loop again. If the linear systems are close enough to each other to get good performance from reusing the sparsity, but different enough from each other that reusing the GMRES polynomials coefficients from a different linear system gives poor performance, PCAIR allows the GMRES polynomial coefficients to be saved externally and then restored before a solve. 
 
 This means we can cheaply generate the exact same preconditioner when periodically solving the same linear system. An example of this is given in ``tests/ex6f_getcoeffs.F90``, where we solve a linear system, store the resulting GMRES polynomial coefficients, reuse the sparsity to solve a different linear system, then reuse the sparsity and restore the GMRES polynomial coefficients to solve the first linear system again. We should note this type of reuse is not yet available in Python. 
+
+## OpenMP with PCAIR
+
+If processor agglomeration has been enabled (it is by default) and:
+1) ``-pc_air_matrix_free_polys`` has not been set (default).
+2) ``-pc_air_inverse_type`` is one of: power (default), arnoldi or neumann.
+3) ``-pc_air_inverse_sparsity_order=1`` (default)
+
+then OpenMP can be used to reduce the time required to assemble the fixed-sparsity polynomial inverses. The idle MPI ranks that have been left with 0 unknowns after repartitioning will be used to thread. 
+
+The number of threads will automatically increase on lower grids with processor agglomeration. For example, if the number of active MPI ranks is halved each time processor agglomeration is triggered (``-pc_air_processor_agglom_factor 2``), then 2 threads will be used after the first processor agglomeration, with 4 threads used after the second, etc. 
+
+This relies on a repartitioning where the MPI ranks that are made inactive are on the same node (and NUMA region), i.e., each node has fewer active MPI ranks after repartitioning (typically called an "interleaved" partitioning), rather than some nodes being full and others empty. This will depend on how the ranks are numbered by the MPI library. Good performance is also dependent on appropriate pinning of MPI ranks and OpenMP threads to hardware cores. 
+
+Given that the time required to assemble the approximate polynomial inverses is typically small, using OpenMP often has little impact on the overall setup time. If however reuse has been enabled with PCAIR (see above), then the approximate polynomial inverse time is often the largest component of the (reused) setup time and OpenMP can help.
+
+To build PFLARE with OpenMP, add the appropriate OpenMP compiler flag before calling make, e.g., with GNU
+
+     export CFLAGS="-fopenmp"
+     export FFLAGS="-fopenmp" 
+     make
+
+and then before running a problem with PFLARE, set the ``OMP_NUM_THREADS`` environmental variable to be the maximum number of threads to use; typically this would be the number of hardware cores per NUMA region.
+
+It is recommended that PFLARE be linked with unthreaded BLAS/LAPACK libraries, as there is often little gain from using threaded libraries with PFLARE and that ensures the ``OMP_NUM_THREADS`` environmental variable is used purely to control the OpenMP described above. 
+
+On Cray machines, adding the OpenMP compiler flag typically triggers linking to threaded libraries (e.g., BLAS/LAPACK). To work around this, it is recommended that PFLARE is built as a shared library (which is the default) with the compiler flag enabled, then any code which uses PFLARE is compiled without the compiler flag but with the OpenMP libraries included in the ``LDFLAGS``. This will ensure PFLARE can use OpenMP, but the unthreaded libraries are used to link. 
+
+For example, on ARCHER2 (a HPE Cray EX machine) to build PFLARE and the tests with GNU:
+
+     # Cray MPI compiler wrappers
+     export CC=cc
+     export FC=ftn
+
+     # Build PFLARE
+     export CFLAGS="-fopenmp"
+     export FFLAGS="-fopenmp" 
+     make CC=${CC} FC=${FC}
+
+     # Build the tests
+     export CFLAGS=""
+     export FFLAGS="" 
+     export LDFLAGS="-lgomp"
+     make build_tests CC=${CC} FC=${FC} 
+
+Running a test with OpenMP then requires setting the ``OMP_NUM_THREADS`` variable, ensuring the MPI ranks and OpenMP threads are correctly pinned and telling the queueing system that the problem is oversubscribed. For example, the (partial) slurm script to run adv_diff_2d on one node is:
+
+      #SBATCH --time=0:01:0
+      #SBATCH --nodes=1
+      #SBATCH --ntasks-per-node=128
+      #SBATCH --overcommit
+      #SBATCH --partition=standard
+      #SBATCH --qos=standard
+
+      # Give it a maximum of 4 threads
+      export OMP_NUM_THREADS=4
+
+      [ Set the hex mask which describes the pinning ]
+
+      srun --oversubscribe --distribution=block:block --cpu-bind=mask_cpu:$mask adv_diff_2d.o -pc_type air
 
 ## GPU support           
 

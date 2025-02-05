@@ -8,6 +8,11 @@ module gmres_poly
    use gmres_poly_data_type
    use nonbusywait
    use petsc_helper
+                
+   ! OpenMP module
+#ifdef _OPENMP
+   use omp_lib
+#endif
 
 #include "petsc/finclude/petsc.h"   
 
@@ -1019,11 +1024,54 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       ! From here we now have cmat with the correct values up to the power poly_sparsity_order
       ! and hence we want to add in the sparsity constrained powers
       ! ~~~~~~~~~~~~
+
+
+#ifdef _OPENMP
+      ! Any rank with 0 local_rows hits the non-busy wait
+      ! before the collective matassembly (below) and goes idle and so we can use it to thread
+      ! This typically requires the omp threads to be pinned reasonably 
+      ! for good performance
+      ! buffers%proc_stride tells us how many idle ranks we have total
+      ! after processor agglomeration
+      ! Get the number of omp threads set in the environmental variable
+      call get_environment_variable("OMP_NUM_THREADS", omp_threads_env_char, &
+               length=length, status=status)
+      if (status /= 1 .AND. length /= 0) then
+         read(omp_threads_env_char(1:5),'(i5)') omp_threads_env
+         ! If we have idle ranks
+         if (buffers%proc_stride /= 1) then
+            ! Don't use more than omp_threads_env omp threads
+            ! It's up to the user to tell us the max number of omp threads
+            ! to use via OMP_NUM_THREADS - at most the user should
+            ! set it as the number of threads per numa region
+            omp_threads = min(omp_threads_env, buffers%proc_stride)
+            call omp_set_num_threads(omp_threads)
+         ! If we have no idle ranks then don't thread 
+         else
+            call omp_set_num_threads(1)
+         end if
+      ! If the OMP_NUM_THREADS is not set
+      else
+         call omp_set_num_threads(1)
+      end if
+#endif
       
       ! Now go through and compute the sum of the matrix powers
       ! We're doing row-wise matmatmults here assuming the fixed sparsity
       ! We exploit the fact that the subsequent matrix powers can be done
       ! one row at a time, so we only have to retrieve the needed vals from mat_sparsity_match once
+
+      ! Need dynamic scheduling in the omp here as each row will have different amounts of work
+      !$omp parallel   proc_bind(close) &
+      !$omp            shared(local_rows, poly_sparsity_order, submatrices, mat_sparsity_match) &
+      !$omp            shared(global_row_start, comm_size, col_indices_off_proc_array, row_size) &
+      !$omp            shared(coefficients, cmat, submatrices_ia, submatrices_ja, submatrices_vals) &
+      !$omp            private(i_loc, ncols_two, cols_two, vals_two, ierr) & 
+      !$omp            private(ncols, cols, cols_local, vals, location, j_loc, symbolic_ones) & 
+      !$omp            private(symbolic_vals, cols_index_one, cols_index_two, match_counter) & 
+      !$omp            private(vals_temp, vals_prev_temp, term, cols_two_ptr, vals_two_ptr) &
+      !$omp            private(cols_ptr, vals_ptr)
+      !$omp do schedule(dynamic,10) 
       do i_loc = 1, local_rows 
                           
          ! Get the row of mat_sparsity_match
@@ -1055,6 +1103,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
             ! Should optimise this to use the pointers rather than a critical protected access
             ! but the matmatmults to 
             ! create the powers are very expensive so should deal with that first            
+            !$omp critical
             call MatGetRow(mat_sparsity_match, global_row_start + i_loc-1, ncols_two, &
                   cols_two, vals_two, ierr)  
                   
@@ -1067,6 +1116,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
             
             call MatRestoreRow(mat_sparsity_match, global_row_start + i_loc-1, ncols_two, &
                      cols_two, vals_two, ierr)     
+            !$omp end critical           
                      
             ! We already have the global indices, we need the local ones
             do j_loc = 1, ncols
@@ -1164,8 +1214,11 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
             ! ~~~~~~~~~~~
             ! Now can add the value of coeff * A^(term-1) to our matrix
             ! ~~~~~~~~~~~
+            ! Has to be critical as can't add to the matrix from multiple threads at once
+            !$omp critical
             call MatSetValues(cmat, one, [global_row_start + i_loc-1], ncols, cols(1:ncols), &
                      coefficients(term) * vals_temp, ADD_VALUES, ierr)   
+            !$omp end critical
 
             ! This should now have the value of A^(term-1) in it
             vals_prev_temp = vals_temp
@@ -1181,7 +1234,27 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
             end if      
          end do  
          deallocate(symbolic_vals, symbolic_ones, cols_local)  
-      end do     
+      end do 
+      !$omp end do
+      !$omp end parallel      
+
+      ! ~~~~~~~~~~~
+      ! Now if we are a rank with zero local rows, we will skip all 
+      ! the compute above and we want to sleep so we can be available as a thread
+      ! to the omp above
+      ! This has to be above the collective matassemblybegin/end, otherwise we would
+      ! rely on the waits in our mpi library being non-busy and there are very 
+      ! few which do this, let alone by default 
+      ! ~~~~~~~~~~~      
+#ifdef _OPENMP
+      ! Set the number of threads back to omp_threads_env when we're done
+      call omp_set_num_threads(omp_threads_env)
+
+      ! Non-busy wait
+      if (buffers%proc_stride /= 1) then
+         call non_busy_wait(MPI_COMM_MATRIX, local_rows)
+      end if      
+#endif  
 
       call MatRestoreRowIJF90(submatrices(1),shift,symmetric,inodecompressed,n,submatrices_ia,submatrices_ja,done,ierr) 
       ! We very deliberately don't call restorearray here!
