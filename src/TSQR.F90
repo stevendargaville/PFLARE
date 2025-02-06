@@ -270,7 +270,6 @@ module tsqr
       
       ! ~~~~~~~~~
       use, intrinsic :: iso_c_binding, only : c_ptr, c_f_pointer 
-      use mpi_f08
       type(c_ptr), value :: invec, inoutvec 
       integer            :: len 
       integer            :: type 
