@@ -322,4 +322,5 @@ PetscErrorCode ComputeMat(DM da, Mat A, PetscScalar u, PetscScalar v, PetscScala
   MatFilter(A, 0.0, PETSC_TRUE, PETSC_TRUE);
 #endif
 
+  return 0;
 }
