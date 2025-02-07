@@ -42,8 +42,7 @@ int main(int argc,char **argv)
   PetscInt its, M, N;
   PetscScalar Hx, Hy, theta, alpha, u, v, u_test, v_test;
   PetscBool option_found_u, option_found_v, adv_nondim, check_nondim, diag_scale;
-  PetscRandom rctx;
-  Vec x, b, diag_vec, x_temp;
+  Vec x, b, diag_vec;
   Mat A;
   KSPConvergedReason reason;
   PetscLogStage setup, gpu_copy;
@@ -58,7 +57,7 @@ int main(int argc,char **argv)
   PCRegister_PFLARE();
 
   PetscLogStageRegister("Setup", &setup);
-  PetscLogStageRegister("GPU copy stage - triggered by one PCApply", &gpu_copy);
+  PetscLogStageRegister("GPU copy stage - triggered by a prelim KSPSolve", &gpu_copy);
 
   ierr = KSPCreate(PETSC_COMM_WORLD,&ksp);CHKERRQ(ierr);
   ierr = DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE,DMDA_STENCIL_STAR,11,11,PETSC_DECIDE,PETSC_DECIDE,1,1,NULL,NULL,&da);CHKERRQ(ierr);
@@ -72,9 +71,6 @@ int main(int argc,char **argv)
   ierr = DMCreateMatrix(da, &A);
   ierr = DMCreateGlobalVector(da, &x);
   ierr = DMCreateGlobalVector(da, &b);
-
-  // Random initial guess
-  PetscRandomCreate(PETSC_COMM_WORLD,&rctx);
 
   // Zero rhs
   VecSet(b, 0.0);
@@ -184,19 +180,20 @@ int main(int argc,char **argv)
   ierr = PetscLogStagePop();CHKERRQ(ierr);
 
   ierr = KSPGetPC(ksp, &pc);CHKERRQ(ierr);
-  ierr = VecSetRandom(x, rctx);CHKERRQ(ierr);
-  ierr = VecDuplicate(x, &x_temp);CHKERRQ(ierr);  
+  ierr = VecSet(x, 1.0);CHKERRQ(ierr);
 
-  // Do a single PCApply so all the vecs and mats get copied to the gpu
+  // Do a preliminary KSPSolve so all the vecs and mats get copied to the gpu
   // before the solve we're trying to time
+  PetscPrintf(PETSC_COMM_WORLD, "Preliminary KSPSolve so GPU copies occur \n");
   ierr = PetscLogStagePush(gpu_copy);CHKERRQ(ierr);
-  ierr = PCApply(pc, x, x_temp);CHKERRQ(ierr);
+  ierr = KSPSolve(ksp,b,x);CHKERRQ(ierr);
   ierr = PetscLogStagePop();CHKERRQ(ierr);
 
-  PetscRandomDestroy(&rctx);CHKERRQ(ierr); 
-  ierr = VecDestroy(&x_temp);CHKERRQ(ierr);   
-
   // Solve
+  // We set x to 1 rather than random as the vecrandom doesn't yet have a
+  // gpu implementation and we don't want a copy occuring back to the cpu
+  ierr = VecSet(x, 1.0);CHKERRQ(ierr);
+  PetscPrintf(PETSC_COMM_WORLD, "Timed KSPSolve \n");
   ierr = KSPSolve(ksp,b,x);CHKERRQ(ierr);
 
   // Write out the iteration count

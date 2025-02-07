@@ -20,7 +20,6 @@ int main(int argc, char **args)
   PetscInt    i, j, n = 10, col[2], its, global_row_start, global_row_end_plus_one, local_size;
   PetscInt    start_assign, counter;
   PetscScalar work_scalar, value[2];
-  PetscRandom r;
   KSPConvergedReason reason;
   PetscLogStage setup, gpu_copy;
 
@@ -33,7 +32,7 @@ int main(int argc, char **args)
   PCRegister_PFLARE();
 
   PetscLogStageRegister("Setup", &setup);
-  PetscLogStageRegister("GPU copy stage - triggered by one PCApply", &gpu_copy);  
+  PetscLogStageRegister("GPU copy stage - triggered by a prelim KSPSolve", &gpu_copy);
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
          Compute the matrix and right-hand-side vector that define
@@ -113,7 +112,6 @@ int main(int argc, char **args)
   /*
      Create x, b - random initial guess and zero rhs
   */
-  PetscRandomCreate(PETSC_COMM_WORLD, &r);
   VecSet(b, 0.0);
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -154,21 +152,22 @@ int main(int argc, char **args)
   KSPSetUp(ksp);
   PetscLogStagePop();
 
-  // Do a single PC apply so all the copies to the gpu happen
+  // Do a preliminary KSPSolve so all the copies to the gpu happen
   KSPGetPC(ksp, &pc);
-  VecSetRandom(x, r);
-  VecDuplicate(x, &x_temp);
+  VecSet(x, 1.0);
 
+  PetscPrintf(PETSC_COMM_WORLD, "Preliminary KSPSolve so GPU copies occur \n");
   PetscLogStagePush(gpu_copy);
-  PCApply(pc, x, x_temp);
+  KSPSolve(ksp, b, x);
   PetscLogStagePop();
-
-  PetscRandomDestroy(&r);
-  VecDestroy(&x_temp);
 
   /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
                       Solve the linear system
      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+  // We set x to 1 rather than random as the vecrandom doesn't yet have a
+  // gpu implementation and we don't want a copy occuring back to the cpu     
+  VecSet(x, 1.0); 
+  PetscPrintf(PETSC_COMM_WORLD, "Timed KSPSolve \n");
   KSPSolve(ksp, b, x);
 
   KSPGetIterationNumber(ksp,&its);
