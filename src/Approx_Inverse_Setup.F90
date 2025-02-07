@@ -370,7 +370,7 @@ module approx_inverse_setup
 
       PetscErrorCode :: ierr
       MatType:: mat_type
-      type(mat_ctxtype), pointer :: mat_ctx
+      type(mat_ctxtype), pointer :: mat_ctx, mat_ctx_ida
       ! ~~~~~~
 
       if (.NOT. PetscMatIsNull(matrix)) then
@@ -381,6 +381,23 @@ module approx_inverse_setup
             if (mat_ctx%own_coefficients) then
                deallocate(mat_ctx%coefficients)
                mat_ctx%coefficients => null()
+            end if
+            call VecDestroy(mat_ctx%mf_temp_vec(MF_VEC_TEMP), ierr)
+
+            ! Both newton and neumann polynomials use some extra temporary vectors
+            if (.NOT. PetscMatIsNull(mat_ctx%mat_ida) .OR. &
+                     associated(mat_ctx%real_roots)) then
+               
+               call VecDestroy(mat_ctx%mf_temp_vec(MF_VEC_RHS), ierr)
+               call VecDestroy(mat_ctx%mf_temp_vec(MF_VEC_DIAG), ierr)
+            end if
+
+            ! Neumann polynomial has extra context that needs deleting
+            if (.NOT. PetscMatIsNull(mat_ctx%mat_ida)) then
+               call MatShellGetContext(mat_ctx%mat_ida, mat_ctx_ida, ierr)
+               deallocate(mat_ctx_ida)
+               call MatDestroy(mat_ctx%mat_ida, ierr)
+
             end if
             deallocate(mat_ctx)
          end if               

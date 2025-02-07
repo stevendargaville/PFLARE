@@ -4,6 +4,7 @@ module sai_z
    use petsc
    use sorting
    use c_petsc_interfaces
+   use petsc_helper
 
 #include "petsc/finclude/petsc.h"
 
@@ -59,7 +60,7 @@ module sai_z
       logical :: approx_solve
       ! In fortran this needs to be of size n+1 where n is the number of submatrices we want
       type(tMat), dimension(2) :: submatrices, submatrices_full
-      type(tMat) :: Ao, Ad, A_ff_power, tcf_plus_atilde_cf
+      type(tMat) :: Ao, Ad, A_ff_power, tcf_plus_atilde_cf, temp_mat
       type(tKSP) :: ksp
       type(tPC) :: pc
       PetscOffset :: iicol
@@ -71,6 +72,7 @@ module sai_z
       logical :: constrain
       real, dimension(:), pointer :: b_f_vals, b_vals
       real :: lambda, b_c
+      MatType:: mat_type
 
       ! ~~~~~~
 
@@ -105,6 +107,7 @@ module sai_z
       call MatSetOption(z, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)   
       
       call MatGetOwnershipRange(A_ff, global_row_start_aff, global_row_end_plus_one_aff, ierr)              
+      call MatGetType(A_ff, mat_type, ierr)
 
       ! ~~~~~~~~~~~~
       ! If we're in parallel we need to get the off-process rows of matrix that correspond
@@ -118,14 +121,21 @@ module sai_z
          ! Get the cols from the sparsity_mat_cf, not from A_ff
          ! ~~~~
          ! Much more annoying in older petsc
-         call MatMPIAIJGetSeqAIJ(sparsity_mat_cf, Ad, Ao, icol, iicol, ierr)
+         if (mat_type == "mpiaij") then
+            call MatMPIAIJGetSeqAIJ(sparsity_mat_cf, Ad, Ao, icol, iicol, ierr)
+            A_array = sparsity_mat_cf%v
+         else
+            call MatConvert(sparsity_mat_cf, MATMPIAIJ, MAT_INITIAL_MATRIX, temp_mat, ierr)
+            call MatMPIAIJGetSeqAIJ(temp_mat, Ad, Ao, icol, iicol, ierr)             
+            A_array = temp_mat%v
+         end if
+
          ! Have to be careful here as we don't have a square matrix, so rows_ao isn't equal to the number of local columns
          call MatGetSize(Ad, rows_ad, cols_ad, ierr)             
          ! We know the col size of Ao is the size of colmap, the number of non-zero offprocessor columns
          call MatGetSize(Ao, rows_ao, cols_ao, ierr)         
 
          ! For the column indices we need to take all the columns
-         A_array = sparsity_mat_cf%v
          call get_colmap_c(A_array, colmap_c_ptr)
          call c_f_pointer(colmap_c_ptr, colmap_c, shape=[cols_ao])
 
@@ -533,6 +543,10 @@ module sai_z
          call ISDestroy(j_col_is, ierr)               
       end do  
 
+      if (comm_size /= 1 .AND. mat_type /= "mpiaij") then
+         call MatDestroy(temp_mat, ierr)
+      end if        
+
       call KSPDestroy(ksp, ierr)
       call MatAssemblyBegin(z, MAT_FINAL_ASSEMBLY, ierr)
       call MatAssemblyEnd(z, MAT_FINAL_ASSEMBLY, ierr)       
@@ -574,36 +588,8 @@ module sai_z
       ! Means assembling an identity, but that is trivial
       ! ~~~~~~~~~~~
 
-      call PetscObjectGetComm(matrix, MPI_COMM_MATRIX, ierr)    
-      ! Get the comm size 
-      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, ierr)         
-      call MatGetLocalSize(matrix, local_rows, local_cols, ierr)
-      call MatGetSize(matrix, global_rows, global_cols, ierr)
-      call MatGetOwnershipRange(matrix, global_row_start, global_row_end_plus_one, ierr)  
-      
-      ! Now rhs_copy should have our diagonal polynomial approximation
-      if (comm_size/=1) then
-         call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                  global_rows, global_cols, &
-                  one, PETSC_NULL_INTEGER_ARRAY, &
-                  zero, PETSC_NULL_INTEGER_ARRAY, &
-                  minus_I, ierr)   
-      else
-         call MatCreateSeqAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                  one, PETSC_NULL_INTEGER_ARRAY, &
-                  minus_I, ierr)            
-      end if 
-      ! Don't set any off processor entries so no need for a reduction when assembling
-      call MatSetOption(minus_I, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)
-      call MatSetOption(minus_I, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)          
-
-      ! Set the diagonal
-      do i_loc = global_row_start, global_row_end_plus_one-1
-         call MatSetValue(minus_I, i_loc, i_loc, &
-               -1.0, INSERT_VALUES, ierr)
-      end do
-      call MatAssemblyBegin(minus_I, MAT_FINAL_ASSEMBLY, ierr)
-      call MatAssemblyEnd(minus_I, MAT_FINAL_ASSEMBLY, ierr)    
+      call generate_identity(matrix, minus_I)
+      call MatScale(minus_I, -1.0, ierr)
       
       ! Calculate our approximate inverse
       ! Now given we are using the same code as SAI Z

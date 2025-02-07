@@ -33,12 +33,15 @@ module weighted_jacobi
       integer :: comm_size, errorcode
       MPI_Comm :: MPI_COMM_MATRIX 
       PetscInt :: local_rows, local_cols, ncols, global_row_start, global_row_end_plus_one
-      PetscInt :: global_rows, global_cols, i_loc
+      PetscInt :: global_rows, global_cols, i_loc, counter
       PetscErrorCode :: ierr
+      PetscInt, allocatable, dimension(:) :: indices
       type(tMat) :: temp_mat
       type(tVec) :: rhs_copy, diag_vec
       real :: norm_inf, weight
       PetscInt, parameter :: one=1, zero=0
+      MatType:: mat_type
+      logical :: reuse_triggered
 
       ! ~~~~~~    
 
@@ -91,34 +94,37 @@ module weighted_jacobi
       ! Let's create a matrix to represent the inverse diagonal
       ! Can't use matdiagonal as we want to do symbolic matmat products
       ! and don't want to have to define how that is done
-      
-      ! If not re-using
-      if (PetscMatIsNull(inv_matrix)) then      
+      reuse_triggered = .NOT. PetscMatIsNull(inv_matrix) 
 
-         if (comm_size/=1) then
-            call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                     global_rows, global_cols, &
-                     one, PETSC_NULL_INTEGER_ARRAY, &
-                     zero, PETSC_NULL_INTEGER_ARRAY, &
-                     inv_matrix, ierr)   
-         else
-            call MatCreateSeqAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                     one, PETSC_NULL_INTEGER_ARRAY, &
-                     inv_matrix, ierr)            
-         end if 
-      end if
+      ! We may be reusing with the same sparsity
+      if (.NOT. reuse_triggered) then
+         call MatCreate(MPI_COMM_MATRIX, inv_matrix, ierr)
+         call MatSetSizes(inv_matrix, local_rows, local_cols, &
+                           global_rows, global_cols, ierr)
+         ! Match the output type
+         call MatGetType(matrix, mat_type, ierr)
+         call MatSetType(inv_matrix, mat_type, ierr)
+         call MatSetUp(inv_matrix, ierr)   
+      end if       
 
       ! Don't set any off processor entries so no need for a reduction when assembling
       call MatSetOption(inv_matrix, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)
       call MatSetOption(inv_matrix, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)          
 
-      ! Set the diagonal
-      do i_loc = global_row_start, global_row_end_plus_one-1
-         call MatSetValue(inv_matrix, i_loc, i_loc, &
-               1.0, INSERT_VALUES, ierr)
-      end do
-      call MatAssemblyBegin(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)
-      call MatAssemblyEnd(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)    
+      if (.NOT. reuse_triggered) then
+         allocate(indices(local_rows))
+
+         ! Set the diagonal
+         counter = 1
+         do i_loc = global_row_start, global_row_end_plus_one-1
+            indices(counter) = i_loc
+            counter = counter + 1
+         end do
+         ! Set the diagonal
+         ! Don't need to set the values as we do that directly with MatDiagonalSet
+         call MatSetPreallocationCOO(inv_matrix, local_rows, indices, indices, ierr)
+         deallocate(indices)         
+      end if  
 
       ! Set the diagonal to our weighted jacobi
       call MatDiagonalSet(inv_matrix, diag_vec, INSERT_VALUES, ierr)

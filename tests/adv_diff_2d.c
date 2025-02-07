@@ -36,15 +36,16 @@ extern PetscErrorCode ComputeMat(DM,Mat,PetscScalar,PetscScalar, PetscScalar, Pe
 int main(int argc,char **argv)
 {
   KSP            ksp;
+  PC             pc;
   DM             da;
   PetscErrorCode ierr;
   PetscInt its, M, N;
   PetscScalar Hx, Hy, theta, alpha, u, v, u_test, v_test;
   PetscBool option_found_u, option_found_v, adv_nondim, check_nondim, diag_scale;
-  PetscRandom rctx;
   Vec x, b, diag_vec;
   Mat A;
   KSPConvergedReason reason;
+  PetscLogStage setup, gpu_copy;
 
   ierr = PetscInitialize(&argc,&argv,(char*)0,help);if (ierr) return ierr;
 
@@ -54,6 +55,9 @@ int main(int argc,char **argv)
 
   // Register the pflare types
   PCRegister_PFLARE();
+
+  PetscLogStageRegister("Setup", &setup);
+  PetscLogStageRegister("GPU copy stage - triggered by a prelim KSPSolve", &gpu_copy);
 
   ierr = KSPCreate(PETSC_COMM_WORLD,&ksp);CHKERRQ(ierr);
   ierr = DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE,DMDA_STENCIL_STAR,11,11,PETSC_DECIDE,PETSC_DECIDE,1,1,NULL,NULL,&da);CHKERRQ(ierr);
@@ -67,11 +71,6 @@ int main(int argc,char **argv)
   ierr = DMCreateMatrix(da, &A);
   ierr = DMCreateGlobalVector(da, &x);
   ierr = DMCreateGlobalVector(da, &b);
-
-  // Random initial guess
-  PetscRandomCreate(PETSC_COMM_WORLD,&rctx);
-  VecSetRandom(x, rctx);
-  PetscRandomDestroy(&rctx);  
 
   // Zero rhs
   VecSet(b, 0.0);
@@ -163,22 +162,36 @@ int main(int argc,char **argv)
 
   // Diagonally scale our matrix 
   if (diag_scale) {
-   ierr = VecDuplicate(x, &diag_vec);
-   ierr = MatGetDiagonal(A, diag_vec);
-   ierr = VecReciprocal(diag_vec);
+   ierr = VecDuplicate(x, &diag_vec);CHKERRQ(ierr);
+   ierr = MatGetDiagonal(A, diag_vec);CHKERRQ(ierr);
+   ierr = VecReciprocal(diag_vec);CHKERRQ(ierr);
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 19)
-   ierr = MatDiagonalScale(A, diag_vec, PETSC_NULLPTR);    
+   ierr = MatDiagonalScale(A, diag_vec, PETSC_NULLPTR);CHKERRQ(ierr);    
 #else
-   ierr = MatDiagonalScale(A, diag_vec, PETSC_NULL);    
+   ierr = MatDiagonalScale(A, diag_vec, PETSC_NULL);CHKERRQ(ierr);    
 #endif
    ierr = VecPointwiseMult(b, diag_vec, b); CHKERRQ(ierr);
    ierr = VecDestroy(&diag_vec); CHKERRQ(ierr);
   }
 
   // Setup the ksp
+  ierr = PetscLogStagePush(setup);
   ierr = KSPSetUp(ksp);CHKERRQ(ierr);
+  ierr = PetscLogStagePop();CHKERRQ(ierr);
+
+  ierr = KSPGetPC(ksp, &pc);CHKERRQ(ierr);
+  ierr = VecSet(x, 1.0);CHKERRQ(ierr);
+
+  // Do a preliminary KSPSolve so all the vecs and mats get copied to the gpu
+  // before the solve we're trying to time
+  ierr = PetscLogStagePush(gpu_copy);CHKERRQ(ierr);
+  ierr = KSPSolve(ksp,b,x);CHKERRQ(ierr);
+  ierr = PetscLogStagePop();CHKERRQ(ierr);
 
   // Solve
+  // We set x to 1 rather than random as the vecrandom doesn't yet have a
+  // gpu implementation and we don't want a copy occuring back to the cpu
+  ierr = VecSet(x, 1.0);CHKERRQ(ierr);
   ierr = KSPSolve(ksp,b,x);CHKERRQ(ierr);
 
   // Write out the iteration count
@@ -304,4 +317,5 @@ PetscErrorCode ComputeMat(DM da, Mat A, PetscScalar u, PetscScalar v, PetscScala
   MatFilter(A, 0.0, PETSC_TRUE, PETSC_TRUE);
 #endif
 
+  return 0;
 }

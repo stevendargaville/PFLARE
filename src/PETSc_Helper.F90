@@ -37,15 +37,18 @@ module petsc_helper
 
       PetscInt :: col, ncols, ifree, max_nnzs
       PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
-      PetscInt :: global_col_start, global_col_end_plus_one, diagonal_index
+      PetscInt :: global_col_start, global_col_end_plus_one, diagonal_index, counter, max_nnzs_total
       PetscErrorCode :: ierr
       integer :: errorcode, comm_size
-      PetscInt, dimension(:), allocatable :: nnzs_row, onzs_row, cols, cols_mod
-      real, dimension(:), allocatable :: vals, vals_copy
+      PetscInt, dimension(:), allocatable :: cols
+      real, dimension(:), allocatable :: vals
+      PetscInt, allocatable, dimension(:) :: row_indices, col_indices
+      real, allocatable, dimension(:) :: v          
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       logical :: rel_row_tol_logical, lump_entries, drop_diag
-      real :: rel_row_tol, lump_sum
+      real :: rel_row_tol
       MPI_Comm :: MPI_COMM_MATRIX
+      MatType:: mat_type
       
       ! ~~~~~~~~~~
       ! If the tolerance is 0 we still want to go through this routine and drop the zeros
@@ -74,92 +77,31 @@ module petsc_helper
       call MatGetOwnershipRange(input_mat, global_row_start, global_row_end_plus_one, ierr)  
       call MatGetOwnershipRangeColumn(input_mat, global_col_start, global_col_end_plus_one, ierr)  
       
-      allocate(nnzs_row(local_rows))
-      nnzs_row = 0
-
       max_nnzs = 0
-      if (comm_size/=1) then
-         allocate(onzs_row(local_rows))
-         onzs_row = 0
-      end if
-
+      max_nnzs_total = 0
       do ifree = global_row_start, global_row_end_plus_one-1                  
 
          call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
+         max_nnzs_total = max_nnzs_total + ncols
          call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
       end do
 
       allocate(cols(max_nnzs))
-      allocate(cols_mod(max_nnzs))
       allocate(vals(max_nnzs)) 
-      allocate(vals_copy(max_nnzs))
-      
-      if (comm_size/=1) then
-         ! Loop over global row indices
-         do ifree = global_row_start, global_row_end_plus_one-1                  
-            ! Get the row
-            call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)
-            
-            if (rel_row_tol_logical) then
-               rel_row_tol = tol * maxval(abs(vals(1:ncols)))
-            end if  
 
-            do col = 1, ncols
+      ! Times 2 here in case we are lumping
+      allocate(row_indices(max_nnzs_total * 2))
+      allocate(col_indices(max_nnzs_total * 2))
+      allocate(v(max_nnzs_total * 2))      
 
-               ! Have to count the diagonal and off-diagonal nnzs in parallel           
-               if (cols(col) .ge. global_col_start .AND. cols(col) .le. global_col_end_plus_one - 1) then
-
-                  !if (abs(vals(col)) .ge. rel_row_tol) then
-                  if (abs(vals(col)) .ge. rel_row_tol .OR. (.NOT. drop_diag .AND. cols(col) == ifree)) then
-                     ! Convert to local row indices
-                     nnzs_row(ifree - global_row_start + 1) = nnzs_row(ifree - global_row_start + 1) + 1
-                  end if
-               else
-                  if (abs(vals(col)) .ge. rel_row_tol .OR. (.NOT. drop_diag .AND. cols(col) == ifree)) then
-                     ! Convert to local row indices
-                     onzs_row(ifree - global_row_start + 1) = onzs_row(ifree - global_row_start + 1) + 1
-                  end if               
-               end if
-            end do
-
-            ! Must call otherwise petsc leaks memory
-            call MatRestoreRow(input_mat, ifree, ncols, cols, vals, ierr)
-         end do
-      else
-         ! Loop over global row indices
-         do ifree = global_row_start, global_row_end_plus_one-1                  
-            ! Get the row
-            call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)
-   
-            if (rel_row_tol_logical) then
-               rel_row_tol = tol * maxval(abs(vals(1:ncols)))
-            end if  
-   
-            do col = 1, ncols
-               if (abs(vals(col)) .ge. rel_row_tol .OR. (.NOT. drop_diag .AND. cols(col) == ifree)) then
-               !if (abs(vals(col)) .ge. rel_row_tol) then
-                  ! Convert to local row indices
-                  nnzs_row(ifree - global_row_start + 1) = nnzs_row(ifree - global_row_start + 1) + 1
-               end if
-            end do
-   
-            ! Must call otherwise petsc leaks memory
-            call MatRestoreRow(input_mat, ifree, ncols, cols, vals, ierr)
-         end do         
-      end if
-
-      ! Create the output matrix
-      if (comm_size/=1) then
-         call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                  global_rows, global_cols, &
-                  nz_ignore, nnzs_row, &
-                  nz_ignore, onzs_row, &
-                  output_mat, ierr)   
-      else
-         call MatCreateSeqAIJ(PETSC_COMM_SELF, global_rows, global_cols, nz_ignore, nnzs_row, &
-                     output_mat, ierr)            
-      end if   
+      call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
+      call MatSetSizes(output_mat, local_rows, local_cols, &
+                       global_rows, global_cols, ierr)
+      ! Match the output type
+      call MatGetType(input_mat, mat_type, ierr)
+      call MatSetType(output_mat, mat_type, ierr)
+      call MatSetUp(output_mat, ierr) 
        
       ! Just in case there are some zeros in the input mat, ignore them
       call MatSetOption(output_mat, MAT_IGNORE_ZERO_ENTRIES, PETSC_TRUE, ierr)     
@@ -169,64 +111,48 @@ module petsc_helper
       
       ! Now go and fill the new matrix
       ! Loop over global row indices
+      counter = 1
       do ifree = global_row_start, global_row_end_plus_one-1                  
       
          ! Get the row
-         call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)  
-         
-         ! Find where the diagonal is
-         diagonal_index = -1
-         lump_sum = 0
-         do col = 1, ncols
-            if (cols(col) == ifree) then
-               diagonal_index = col
-               exit
-            end if
-         end do            
+         call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)            
 
          if (rel_row_tol_logical) then
             rel_row_tol = tol * maxval(abs(vals(1:ncols)))
          end if 
-
-         cols_mod(1:ncols) = cols(1:ncols)
-         vals_copy(1:ncols) = vals(1:ncols)
                   
-         ! Allow the dropping of the diagonal
-         if (drop_diag) then
-            do col = 1, ncols
-               if (abs(vals(col)) < rel_row_tol) then
-                  cols_mod(col) = -1    
-                  if (lump_entries) lump_sum = lump_sum + vals(col)             
-               end if
-            end do               
-         else
-            do col = 1, ncols
-               if (abs(vals(col)) < rel_row_tol .AND. cols(col) /= ifree) then
-                  cols_mod(col) = -1    
-                  if (lump_entries) lump_sum = lump_sum + vals(col)             
-               end if
-            end do
-         end if
+         do col = 1, ncols
 
-         ! Add lumped terms to the diagonal
-         if (lump_entries) then
-            vals_copy(diagonal_index) = vals_copy(diagonal_index) + lump_sum
-         end if
+            ! Copy the value in if it is bigger than the tolerance
+            if (abs(vals(col)) .ge. rel_row_tol ) then
 
-         ! Much quicker to call setvalues
-         call MatSetValues(output_mat, one, [ifree], ncols, cols_mod, &
-                  vals_copy, INSERT_VALUES, ierr)
+               row_indices(counter) = ifree
+               col_indices(counter) = cols(col)
+               v(counter) = vals(col)    
+               counter = counter + 1 
+
+            ! If the entry is small and we are lumping, then add it to the diagonal
+            ! or if this is the diagonal and it's small but we are not dropping it
+            else if (lump_entries .OR. (.NOT. drop_diag .AND. cols(col) == ifree)) then
+
+               row_indices(counter) = ifree
+               col_indices(counter) = ifree
+               v(counter) = vals(col)    
+               counter = counter + 1                   
+
+            end if
+         end do                       
 
          ! Must call otherwise petsc leaks memory
          call MatRestoreRow(input_mat, ifree, ncols, cols, vals, ierr)   
       end do           
-      
-      call MatAssemblyBegin(output_mat, MAT_FINAL_ASSEMBLY, ierr)
 
-      deallocate(cols, vals, nnzs_row, cols_mod, vals_copy)
-      if (comm_size/=1) deallocate(onzs_row)
-
-      call MatAssemblyEnd(output_mat, MAT_FINAL_ASSEMBLY, ierr) 
+      deallocate(cols, vals)
+      ! Set the values
+      call MatSetPreallocationCOO(output_mat, counter-1, row_indices, col_indices, ierr)
+      deallocate(row_indices, col_indices)
+      call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
+      deallocate(v)        
          
    end subroutine remove_small_from_sparse
 
@@ -273,6 +199,8 @@ module petsc_helper
       call MatSetOption(output_mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)      
       call MatSetOption(output_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)    
       ! This ensures any entries outside the existing sparsity of output_mat are dropped 
+      ! Not sure if this is respected by the new COO interface so we will keep the 
+      ! matsetvalues use below for now
       call MatSetOption(output_mat, MAT_NEW_NONZERO_LOCATIONS, PETSC_FALSE, ierr)
       
       ! Now go and fill the new matrix
@@ -308,13 +236,15 @@ module petsc_helper
       type(tMat), intent(inout) :: output_mat
       logical, intent(in), optional :: lump
 
-      PetscInt :: col, ncols, ifree, max_nnzs, ncols_mod, index1, index2
+      PetscInt :: col, ncols, ifree, max_nnzs, ncols_mod, index1, index2, counter
       PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
-      PetscInt :: global_col_start, global_col_end_plus_one, diagonal_index
+      PetscInt :: global_col_start, global_col_end_plus_one, max_nnzs_total, max_nnzs_total_two
       PetscErrorCode :: ierr
       integer :: errorcode, comm_size
-      PetscInt, dimension(:), allocatable :: nnzs_row, onzs_row, cols, cols_mod
+      PetscInt, dimension(:), allocatable :: cols, cols_mod
       real, dimension(:), allocatable :: vals, vals_copy
+      PetscInt, allocatable, dimension(:) :: row_indices, col_indices
+      real, allocatable, dimension(:) :: v        
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       logical :: lump_entries
       real :: lump_sum
@@ -336,30 +266,33 @@ module petsc_helper
       ! This returns the global index of the local portion of the matrix
       call MatGetOwnershipRange(input_mat, global_row_start, global_row_end_plus_one, ierr)  
       call MatGetOwnershipRangeColumn(input_mat, global_col_start, global_col_end_plus_one, ierr)  
-      
-      allocate(nnzs_row(local_rows))
-      nnzs_row = 0
 
       max_nnzs = 0
-      if (comm_size/=1) then
-         allocate(onzs_row(local_rows))
-         onzs_row = 0
-      end if
-
+      max_nnzs_total = 0
+      max_nnzs_total_two = 0
       do ifree = global_row_start, global_row_end_plus_one-1                  
 
          call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
+         max_nnzs_total = max_nnzs_total + ncols
          call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          call MatGetRow(sparsity_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
          if (ncols > max_nnzs) max_nnzs = ncols
+         max_nnzs_total_two = max_nnzs_total_two + ncols
          call MatRestoreRow(sparsity_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)         
       end do
+
+      max_nnzs_total = max(max_nnzs_total, max_nnzs_total_two)
 
       allocate(cols(max_nnzs))
       allocate(cols_mod(max_nnzs))
       allocate(vals(max_nnzs)) 
       allocate(vals_copy(max_nnzs))
+
+      ! Times 2 here in case we are lumping
+      allocate(row_indices(max_nnzs_total * 2))
+      allocate(col_indices(max_nnzs_total * 2))
+      allocate(v(max_nnzs_total * 2))       
 
       ! Duplicate the sparsity
       call MatDuplicate(sparsity_mat, MAT_DO_NOT_COPY_VALUES, output_mat, ierr)
@@ -372,21 +305,13 @@ module petsc_helper
       
       ! Now go and fill the new matrix
       ! Loop over global row indices
+      counter = 1
       do ifree = global_row_start, global_row_end_plus_one-1                  
       
          ! Get the row
          call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)  
          
-         ! Find where the diagonal is
-         diagonal_index = -1
          lump_sum = 0
-         do col = 1, ncols
-            if (cols(col) == ifree) then
-               diagonal_index = col
-               exit
-            end if
-         end do            
-
          ncols_mod = ncols
          cols_mod(1:ncols) = cols(1:ncols)
          vals_copy(1:ncols) = vals(1:ncols)
@@ -421,31 +346,39 @@ module petsc_helper
          end do
 
          ! Must call otherwise petsc leaks memory
-         call MatRestoreRow(sparsity_mat, ifree, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)          
+         call MatRestoreRow(sparsity_mat, ifree, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)      
+         
+         ! Stick in the intersecting values
+         do col = 1, ncols_mod
+            if (cols_mod(col) /= -1) then
+               row_indices(counter) = ifree
+               col_indices(counter) = cols_mod(col)
+               v(counter) = vals_copy(col)
+               counter = counter + 1
+            end if
+         end do
 
          ! Add lumped terms to the diagonal
          if (lump_entries) then
-            vals_copy(diagonal_index) = vals_copy(diagonal_index) + lump_sum
-         end if
-
-         ! Much quicker to call setvalues
-         call MatSetValues(output_mat, one, [ifree], ncols_mod, cols_mod, &
-                  vals_copy, INSERT_VALUES, ierr)                  
- 
+            row_indices(counter) = ifree
+            col_indices(counter) = ifree
+            v(counter) = lump_sum
+            counter = counter + 1
+         end if              
       end do  
             
-      call MatAssemblyBegin(output_mat, MAT_FINAL_ASSEMBLY, ierr)
-
-      deallocate(cols, vals, nnzs_row, cols_mod, vals_copy)
-      if (comm_size/=1) deallocate(onzs_row)
-
-      call MatAssemblyEnd(output_mat, MAT_FINAL_ASSEMBLY, ierr) 
+      deallocate(cols, vals, cols_mod, vals_copy)
+      ! Set the values
+      call MatSetPreallocationCOO(output_mat, counter-1, row_indices, col_indices, ierr)
+      deallocate(row_indices, col_indices)
+      call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
+      deallocate(v)  
          
    end subroutine remove_from_sparse_match
 
   !------------------------------------------------------------------------------------------------------------------------
    
-   subroutine mat_duplicate_copy_plus_diag(input_mat, output_mat)
+   subroutine mat_duplicate_copy_plus_diag(input_mat, reuse, output_mat)
 
       ! Duplicates and copies the values from input matrix into the output mat, but ensures
       ! there are always diagonal entries present that are set to zero if absent
@@ -453,17 +386,21 @@ module petsc_helper
       ! ~~~~~~~~~~
       ! Input 
       type(tMat), intent(in) :: input_mat
+      logical, intent(in) :: reuse
       type(tMat), intent(inout) :: output_mat
 
-      PetscInt :: col, ncols, ifree, max_nnzs
+      PetscInt :: col, ncols, ifree, max_nnzs, max_nnzs_total
       PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
-      PetscInt :: global_col_start, global_col_end_plus_one, diagonal_index
+      PetscInt :: counter
       PetscErrorCode :: ierr
       integer :: errorcode, comm_size
-      PetscInt, dimension(:), allocatable :: nnzs_row, onzs_row, cols
+      PetscInt, dimension(:), allocatable :: cols
       real, dimension(:), allocatable :: vals
+      PetscInt, allocatable, dimension(:) :: row_indices, col_indices
+      real, allocatable, dimension(:) :: v         
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       MPI_Comm :: MPI_COMM_MATRIX
+      MatType:: mat_type
       
       ! ~~~~~~~~~~
       ! If the tolerance is 0 we still want to go through this routine and drop the zeros
@@ -477,92 +414,39 @@ module petsc_helper
       call MatGetSize(input_mat, global_rows, global_cols, ierr)
       ! This returns the global index of the local portion of the matrix
       call MatGetOwnershipRange(input_mat, global_row_start, global_row_end_plus_one, ierr)  
-      call MatGetOwnershipRangeColumn(input_mat, global_col_start, global_col_end_plus_one, ierr)  
       
-      allocate(nnzs_row(local_rows))
-      nnzs_row = 0
-
-      max_nnzs = 0
-      if (comm_size/=1) then
-         allocate(onzs_row(local_rows))
-         onzs_row = 0
-      end if
-
-      do ifree = global_row_start, global_row_end_plus_one-1                  
-
-         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
-         if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
+      ! Get the max number of nnzs
+      max_nnzs_total = 0
+      max_nnzs = -1
+      do ifree = global_row_start, global_row_end_plus_one-1
+         call MatGetRow(input_mat, ifree, &
+                  ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
+         max_nnzs_total = max_nnzs_total + ncols
+         if (ncols > max_nnzs) max_nnzs = ncols                  
+         call MatRestoreRow(input_mat, ifree, &
+                  ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)          
       end do
+      ! Adding for potential missing diagonals
+      max_nnzs_total = max_nnzs_total + local_rows
+      max_nnzs = max_nnzs + 1
 
       allocate(cols(max_nnzs))
-      allocate(vals(max_nnzs)) 
-      
-      if (comm_size/=1) then
-         ! Loop over global row indices
-         do ifree = global_row_start, global_row_end_plus_one-1                  
-            ! Get the row
-            call MatGetRow(input_mat, ifree, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
+      allocate(vals(max_nnzs))
 
-            diagonal_index = -1
-            do col = 1, ncols
+      allocate(row_indices(max_nnzs_total))
+      allocate(col_indices(max_nnzs_total))
+      allocate(v(max_nnzs_total))
 
-               if (cols(col) == ifree) then
-                  diagonal_index = col
-               end if
-
-               ! Have to count the diagonal and off-diagonal nnzs in parallel           
-               if (cols(col) .ge. global_col_start .AND. cols(col) .le. global_col_end_plus_one - 1) then
-                  ! Convert to local row indices
-                  nnzs_row(ifree - global_row_start + 1) = nnzs_row(ifree - global_row_start + 1) + 1
-               else
-                  ! Convert to local row indices
-                  onzs_row(ifree - global_row_start + 1) = onzs_row(ifree - global_row_start + 1) + 1
-               end if
-            end do
-
-            ! If there was no diagonal, we're going to add one in
-            if (diagonal_index == -1) nnzs_row(ifree - global_row_start + 1) = nnzs_row(ifree - global_row_start + 1) + 1
-
-            ! Must call otherwise petsc leaks memory
-            call MatRestoreRow(input_mat, ifree, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
-         end do
-      else
-         ! Loop over global row indices
-         do ifree = global_row_start, global_row_end_plus_one-1                  
-            ! Get the row
-            call MatGetRow(input_mat, ifree, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
-   
-            diagonal_index = -1
-            do col = 1, ncols
-
-               if (cols(col) == ifree) then
-                  diagonal_index = col
-               end if
-
-               ! Convert to local row indices
-               nnzs_row(ifree - global_row_start + 1) = nnzs_row(ifree - global_row_start + 1) + 1
-            end do
-
-            ! If there was no diagonal, we're going to add one in
-            if (diagonal_index == -1) nnzs_row(ifree - global_row_start + 1) = nnzs_row(ifree - global_row_start + 1) + 1
-
-            ! Must call otherwise petsc leaks memory
-            call MatRestoreRow(input_mat, ifree, ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
-         end do         
-      end if
-
-      ! Create the output matrix
-      if (comm_size/=1) then
-         call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                  global_rows, global_cols, &
-                  nz_ignore, nnzs_row, &
-                  nz_ignore, onzs_row, &
-                  output_mat, ierr)   
-      else
-         call MatCreateSeqAIJ(PETSC_COMM_SELF, global_rows, global_cols, nz_ignore, nnzs_row, &
-                     output_mat, ierr)            
-      end if   
+      ! We may be reusing with the same sparsity
+      if (.NOT. reuse) then
+         call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
+         call MatSetSizes(output_mat, local_rows, local_cols, &
+                           global_rows, global_cols, ierr)
+         ! Match the output type
+         call MatGetType(input_mat, mat_type, ierr)
+         call MatSetType(output_mat, mat_type, ierr)
+         call MatSetUp(output_mat, ierr)   
+      end if          
        
       ! Don't set any off processor entries so no need for a reduction when assembling
       call MatSetOption(output_mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)      
@@ -570,162 +454,235 @@ module petsc_helper
       
       ! Now go and fill the new matrix
       ! Loop over global row indices
+      counter = 1
       do ifree = global_row_start, global_row_end_plus_one-1                  
       
          ! Get the row
          call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)  
-         
-         ! Find where the diagonal is
-         diagonal_index = -1
-         do col = 1, ncols
-            if (cols(col) == ifree) then
-               diagonal_index = col
-               exit
-            end if
-         end do            
 
-         ! Much quicker to call setvalues
-         call MatSetValues(output_mat, one, [ifree], ncols, cols, &
-                  vals, INSERT_VALUES, ierr)
-
-         ! Set the diagonal to zero if there isn't one
-         if (diagonal_index == -1) then
-            call MatSetValue(output_mat, ifree, ifree, 0.0, INSERT_VALUES, ierr)
-         end if
+         row_indices(counter:counter+ncols-1) = ifree
+         col_indices(counter:counter+ncols-1) = cols(1:ncols)
+         v(counter:counter+ncols-1) = vals(1:ncols)    
+         counter = counter + ncols           
 
          ! Must call otherwise petsc leaks memory
          call MatRestoreRow(input_mat, ifree, ncols, cols, vals, ierr)   
-      end do           
+      end do      
       
-      call MatAssemblyBegin(output_mat, MAT_FINAL_ASSEMBLY, ierr)
+      ! Go and add a zero on the diagonal just in case it's not present
+      do ifree = global_row_start, global_row_end_plus_one-1 
+         row_indices(counter) = ifree
+         col_indices(counter) = ifree
+         v(counter) = 0.0
+         counter = counter + 1
+      end do
 
-      deallocate(cols, vals, nnzs_row)
-      if (comm_size/=1) deallocate(onzs_row)
+      ! Set the values
+      if (.NOT. reuse) then
+         call MatSetPreallocationCOO(output_mat, counter-1, row_indices, col_indices, ierr)
+      end if
+      deallocate(row_indices, col_indices)
+      ! Remember the COO format does the add of all the values in v that share an index
+      ! So zero gets added to every diagonal entry (that way they're always present)
+      ! even though we're calling INSERT_VALUES
+      call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
+      deallocate(v)       
+      
+      deallocate(cols, vals)
 
-      call MatAssemblyEnd(output_mat, MAT_FINAL_ASSEMBLY, ierr) 
          
    end subroutine mat_duplicate_copy_plus_diag   
 
    !------------------------------------------------------------------------------------------------------------------------
    
-   subroutine generate_one_point_from_sparse(input_mat, output_mat)
+   subroutine generate_identity(input_mat, output_mat)
 
-      ! Returns a copy of a sparse matrix with only the biggest relative entry preserved
-      ! We use this to calculate our one point approximate ideal prolongator for example
+      ! Returns an assembled identity of matching dimension/type to the input
    
       ! ~~~~~~~~~~
       ! Input 
       type(tMat), intent(in) :: input_mat
       type(tMat), intent(inout) :: output_mat
       
-      PetscInt :: col, ncols, ifree, max_nnzs
-      PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
-      PetscInt :: global_col_start, global_col_end_plus_one
+      PetscInt :: i_loc, local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
+      PetscInt, allocatable, dimension(:) :: indices
+      real, allocatable, dimension(:) :: v
       PetscErrorCode :: ierr
-      PetscInt, dimension(:), allocatable :: nnzs_row, onzs_row, cols
-      real, dimension(:), allocatable :: vals
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
-      integer :: max_loc(1)
-      integer :: comm_size, errorcode
       MPI_Comm :: MPI_COMM_MATRIX
+      MatType:: mat_type
       
       ! ~~~~~~~~~~
 
       call PetscObjectGetComm(input_mat, MPI_COMM_MATRIX, ierr)   
-      ! Get the comm size 
-      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)
 
       ! Get the local sizes
       call MatGetLocalSize(input_mat, local_rows, local_cols, ierr)
       call MatGetSize(input_mat, global_rows, global_cols, ierr)
       ! This returns the global index of the local portion of the matrix
       call MatGetOwnershipRange(input_mat, global_row_start, global_row_end_plus_one, ierr)  
-      call MatGetOwnershipRangeColumn(input_mat, global_col_start, global_col_end_plus_one, ierr)  
 
-      max_nnzs = 0
-      do ifree = global_row_start, global_row_end_plus_one-1                  
-
-         call MatGetRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
-         if (ncols > max_nnzs) max_nnzs = ncols
-         call MatRestoreRow(input_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
-      end do
-
-      allocate(cols(max_nnzs))
-      allocate(vals(max_nnzs))       
-
-      ! Can do this quicker in serial 
-      if (comm_size/=1) then
+      call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
+      call MatSetSizes(output_mat, local_rows, local_cols, &
+                       global_rows, global_cols, ierr)
+      ! Match the output type
+      call MatGetType(input_mat, mat_type, ierr)
+      call MatSetType(output_mat, mat_type, ierr)
+      call MatSetUp(output_mat, ierr) 
       
-         allocate(nnzs_row(local_rows))
-         allocate(onzs_row(local_rows))
-         nnzs_row = 0
-         onzs_row = 0      
-
-         ! Loop over global row indices
-         do ifree = global_row_start, global_row_end_plus_one-1                  
-            ! Get the row
-            call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)
-
-            max_loc = maxloc(abs(vals(1:ncols)))
-
-            do col = 1, ncols
-
-               ! Have to count the diagonal and off-diagonal nnzs in parallel           
-               if (cols(max_loc(1)) .ge. global_col_start .AND. cols(max_loc(1)) .le. global_col_end_plus_one - 1) then
-                  ! Convert to local row indices
-                  nnzs_row(ifree - global_row_start + 1) =1
-               else
-                  ! Convert to local row indices
-                  onzs_row(ifree - global_row_start + 1) = 1
-               end if
-            end do
-
-            ! Must call otherwise petsc leaks memory
-            call MatRestoreRow(input_mat, ifree, ncols, cols, vals, ierr)
-         end do
-
-         ! Create the output matrix
-         call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                  global_rows, global_cols, &
-                  nz_ignore, nnzs_row, &
-                  nz_ignore, onzs_row, &
-                  output_mat, ierr)   
-
-      else
-         call MatCreateSeqAIJ(PETSC_COMM_SELF, global_rows, global_cols, one, PETSC_NULL_INTEGER_ARRAY, &
-                     output_mat, ierr)            
-      end if    
-      
-      ! Just in case there are some zeros in the input mat, ignore them
-      call MatSetOption(output_mat, MAT_IGNORE_ZERO_ENTRIES, PETSC_TRUE, ierr)   
       ! Don't set any off processor entries so no need for a reduction when assembling
-      call MatSetOption(output_mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)       
-      call MatSetOption(output_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)   
+      call MatSetOption(output_mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)
+      call MatSetOption(output_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)    
       
-      ! Now go and fill the new matrix
-      ! Loop over global row indices
-      do ifree = global_row_start, global_row_end_plus_one-1                  
-      
-         ! Get the row
-         call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)   
-         if (ncols /= 0) then
-            max_loc = maxloc(abs(vals(1:ncols)))
-            call MatSetValue(output_mat, ifree, cols(max_loc(1)), &
-                        vals(max_loc(1)), INSERT_VALUES, ierr)   
-         end if         
-   
-         ! Must call otherwise petsc leaks memory
-         call MatRestoreRow(input_mat, ifree, ncols, cols, vals, ierr)   
-      end do           
-
-      call MatAssemblyBegin(output_mat, MAT_FINAL_ASSEMBLY, ierr)
-
-      deallocate(cols, vals)
-      if (comm_size/=1) deallocate(nnzs_row, onzs_row)
-
-      call MatAssemblyEnd(output_mat, MAT_FINAL_ASSEMBLY, ierr) 
+      allocate(indices(local_rows))
+      allocate(v(local_rows))
+      do i_loc = 1, local_rows
+         indices(i_loc) = global_row_start + i_loc-1
+      end do
+      v = 1.0
+      ! Set the diagonal
+      call MatSetPreallocationCOO(output_mat, local_rows, indices, indices, ierr)
+      deallocate(indices)
+      call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
+      deallocate(v)
          
-   end subroutine generate_one_point_from_sparse    
+   end subroutine generate_identity   
+   
+
+   !------------------------------------------------------------------------------------------------------------------------
+   
+   subroutine generate_identity_rect(full_mat, rect_mat, rect_indices, output_mat)
+
+      ! Returns an assembled (rectangular) injector that pulls out points in the row_indices: looks like [I 0]
+   
+      ! ~~~~~~~~~~
+      ! Input 
+      type(tMat), intent(in)    :: full_mat, rect_mat
+      type(tIS), intent(in)     :: rect_indices
+      type(tMat), intent(inout) :: output_mat
+      
+      PetscInt :: i_loc, local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
+      PetscInt :: local_rows_rect, local_cols_rect, global_rows_rect, global_cols_rect, global_row_start_rect, global_row_end_plus_one_rect
+      PetscInt :: local_indices_size
+      PetscInt, allocatable, dimension(:) :: indices
+      real, allocatable, dimension(:) :: v      
+      PetscErrorCode :: ierr
+      PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
+      MPI_Comm :: MPI_COMM_MATRIX
+      MatType:: mat_type
+      PetscInt, dimension(:), pointer :: is_pointer
+      
+      ! ~~~~~~~~~~
+
+      call PetscObjectGetComm(full_mat, MPI_COMM_MATRIX, ierr)   
+
+      ! Get the local sizes
+      call MatGetLocalSize(full_mat, local_rows, local_cols, ierr)
+      call MatGetSize(full_mat, global_rows, global_cols, ierr)
+      ! This returns the global index of the local portion of the matrix
+      call MatGetOwnershipRange(full_mat, global_row_start, global_row_end_plus_one, ierr)  
+
+      call MatGetLocalSize(rect_mat, local_rows_rect, local_cols_rect, ierr)
+      call MatGetSize(rect_mat, global_rows_rect, global_cols_rect, ierr)
+      ! This returns the global index of the local portion of the matrix
+      call MatGetOwnershipRange(rect_mat, global_row_start_rect, global_row_end_plus_one_rect, ierr)       
+
+      ! Get the local sizes
+      call IsGetLocalSize(rect_indices, local_indices_size, ierr)
+
+      call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
+      ! Rectangular matrix 
+      call MatSetSizes(output_mat, local_rows_rect, local_cols, &
+                  global_rows_rect, global_cols, ierr)
+      ! Match the output type
+      call MatGetType(full_mat, mat_type, ierr)
+      call MatSetType(output_mat, mat_type, ierr)
+      call MatSetUp(output_mat, ierr) 
+      
+      ! Don't set any off processor entries so no need for a reduction when assembling
+      call MatSetOption(output_mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)
+      call MatSetOption(output_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)          
+
+      ! Get the indices we need
+      call ISGetIndicesF90(rect_indices, is_pointer, ierr)
+
+      allocate(indices(local_indices_size))
+      allocate(v(local_indices_size))
+      do i_loc = 1, local_indices_size
+         indices(i_loc) = global_row_start_rect + i_loc-1
+      end do
+      v = 1.0
+      ! Set the diagonal
+      call MatSetPreallocationCOO(output_mat, local_indices_size, indices, is_pointer, ierr)
+      deallocate(indices)
+      call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
+      deallocate(v)      
+
+      call ISRestoreIndicesF90(rect_indices, is_pointer, ierr)    
+         
+   end subroutine generate_identity_rect   
+
+   !------------------------------------------------------------------------------------------------------------------------
+   
+   subroutine generate_identity_is(input_mat, indices, output_mat)
+
+      ! Returns an assembled identity of matching dimension/type to the input
+      ! but with ones only in the diagonals of the input IS
+      ! We use this to do the equivalent of veciscopy that doesn't have to be 
+      ! copied back to the cpu from the gpu
+   
+      ! ~~~~~~~~~~
+      ! Input 
+      type(tMat), intent(in)     :: input_mat
+      type(tIS), intent(in)      :: indices
+      type(tMat), intent(inout)  :: output_mat
+      
+      PetscInt :: i_loc, local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
+      PetscInt :: local_indices_size
+      real, allocatable, dimension(:) :: v      
+      PetscErrorCode :: ierr
+      PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
+      MPI_Comm :: MPI_COMM_MATRIX
+      MatType:: mat_type
+      PetscInt, dimension(:), pointer :: is_pointer
+      
+      ! ~~~~~~~~~~
+
+      call PetscObjectGetComm(input_mat, MPI_COMM_MATRIX, ierr)   
+
+      ! Get the local sizes
+      call IsGetLocalSize(indices, local_indices_size, ierr)
+
+      call MatGetLocalSize(input_mat, local_rows, local_cols, ierr)
+      call MatGetSize(input_mat, global_rows, global_cols, ierr)
+      ! This returns the global index of the local portion of the matrix
+      call MatGetOwnershipRange(input_mat, global_row_start, global_row_end_plus_one, ierr)  
+
+      call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
+      call MatSetSizes(output_mat, local_rows, local_cols, &
+                       global_rows, global_cols, ierr)
+      ! Match the output type
+      call MatGetType(input_mat, mat_type, ierr)
+      call MatSetType(output_mat, mat_type, ierr)
+      call MatSetUp(output_mat, ierr) 
+      
+      ! Don't set any off processor entries so no need for a reduction when assembling
+      call MatSetOption(output_mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)
+      call MatSetOption(output_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)  
+      
+      ! Get the indices we need
+      call ISGetIndicesF90(indices, is_pointer, ierr)
+
+      allocate(v(local_indices_size))
+      v = 1.0
+      ! Set the diagonal
+      call MatSetPreallocationCOO(output_mat, local_indices_size, is_pointer, is_pointer, ierr)
+      call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
+      deallocate(v)  
+
+      call ISRestoreIndicesF90(indices, is_pointer, ierr)       
+         
+   end subroutine generate_identity_is      
 
    !------------------------------------------------------------------------------------------------------------------------
    
@@ -741,14 +698,17 @@ module petsc_helper
       
       PetscInt :: col, row, ncols, ifree, max_nnzs
       PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
-      PetscInt :: global_col_start, global_col_end_plus_one
+      PetscInt :: global_col_start, global_col_end_plus_one, counter
+      PetscInt, allocatable, dimension(:) :: row_indices, col_indices
+      real, allocatable, dimension(:) :: v
       PetscErrorCode :: ierr
-      PetscInt, dimension(:), allocatable :: nnzs_row, onzs_row, cols
+      PetscInt, dimension(:), allocatable :: cols
       real, dimension(:), allocatable :: vals
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       integer :: max_loc(1)
       integer :: comm_size, errorcode
       MPI_Comm :: MPI_COMM_MATRIX
+      MatType:: mat_type
       
       ! ~~~~~~~~~~
 
@@ -774,77 +734,52 @@ module petsc_helper
       allocate(cols(max_nnzs))
       allocate(vals(max_nnzs))       
 
-      ! Can do this quicker in serial 
-      if (comm_size /= 1) then
-      
-         allocate(nnzs_row(local_rows))
-         allocate(onzs_row(local_rows))
-         nnzs_row = 0
-         onzs_row = 0      
-
-         ! Loop over global row indices
-         do ifree = global_row_start, global_row_end_plus_one-1                  
-            ! Get the row
-            call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)
-
-            max_loc = maxloc(abs(vals(1:ncols)))
-
-            do col = 1, ncols
-
-               ! Have to count the diagonal and off-diagonal nnzs in parallel           
-               if (cols(max_loc(1)) .ge. global_col_start .AND. cols(max_loc(1)) .le. global_col_end_plus_one - 1) then
-                  ! Convert to local row indices
-                  nnzs_row(ifree - global_row_start + 1) =1
-               else
-                  ! Convert to local row indices
-                  onzs_row(ifree - global_row_start + 1) = 1
-               end if
-            end do
-
-            ! Must call otherwise petsc leaks memory
-            call MatRestoreRow(input_mat, ifree, ncols, cols, vals, ierr)
-         end do
-
-         ! Create the output matrix
-         call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                  global_rows, global_cols, &
-                  nz_ignore, nnzs_row, &
-                  nz_ignore, onzs_row, &
-                  output_mat, ierr)   
-
-      else
-         call MatCreateSeqAIJ(PETSC_COMM_SELF, global_rows, global_cols, one, PETSC_NULL_INTEGER_ARRAY, &
-                     output_mat, ierr)            
-      end if    
+      ! ! Create the output matrix
+      call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
+      call MatSetSizes(output_mat, local_rows, local_cols, &
+                       global_rows, global_cols, ierr)
+      ! Match the output type
+      call MatGetType(input_mat, mat_type, ierr)
+      call MatSetType(output_mat, mat_type, ierr)
+      call MatSetUp(output_mat, ierr)      
       
       ! Just in case there are some zeros in the input mat, ignore them
       call MatSetOption(output_mat, MAT_IGNORE_ZERO_ENTRIES, PETSC_TRUE, ierr)   
       ! Don't set any off processor entries so no need for a reduction when assembling
       call MatSetOption(output_mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)        
       call MatSetOption(output_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)    
+
+      ! We know we only have one entry per row
+      allocate(row_indices(local_rows))
+      allocate(col_indices(local_rows))
+      allocate(v(local_rows))
+      v = 1.0
       
       ! Now go and fill the new matrix
       ! Loop over global row indices
+      counter = 1
       do ifree = global_row_start, global_row_end_plus_one-1                  
       
          ! Get the row
          call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)   
          if (ncols /= 0) then
             max_loc = maxloc(abs(vals(1:ncols)))
-            call MatSetValue(output_mat, ifree, cols(max_loc(1)), &
-                        1.0, INSERT_VALUES, ierr)   
-         end if         
+            row_indices(counter) = ifree
+            col_indices(counter) = cols(max_loc(1))         
+            counter = counter + 1
+         end if    
    
          ! Must call otherwise petsc leaks memory
          call MatRestoreRow(input_mat, ifree, ncols, cols, vals, ierr)   
-      end do           
-
-      call MatAssemblyBegin(output_mat, MAT_FINAL_ASSEMBLY, ierr)
+      end do         
+      
+      ! Set the values
+      call MatSetPreallocationCOO(output_mat, counter-1, row_indices, col_indices, ierr)
+      deallocate(row_indices, col_indices)
+      call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
+      deallocate(v)      
 
       deallocate(cols, vals)
-      if (comm_size /= 1) deallocate(nnzs_row, onzs_row)
-
-      call MatAssemblyEnd(output_mat, MAT_FINAL_ASSEMBLY, ierr) 
          
    end subroutine generate_one_point_with_one_entry_from_sparse       
 
@@ -862,16 +797,19 @@ module petsc_helper
       logical, intent(in) :: identity, reuse
 
       PetscInt :: global_row_start_W, global_row_end_plus_one_W, global_col_start_W, global_col_end_plus_one_W
-      PetscInt :: local_rows_coarse, local_rows, local_cols, local_cols_coarse, max_ncols, i_loc, ncols
+      PetscInt :: local_rows_coarse, local_rows, local_cols, local_cols_coarse, max_nnzs, i_loc, ncols, max_nnzs_total
       PetscInt :: global_cols, global_rows, global_rows_coarse, global_cols_coarse
-      PetscInt :: col, cols_z, rows_z, local_rows_fine
+      PetscInt :: col, cols_z, rows_z, local_rows_fine, counter
       integer :: errorcode, comm_size, comm_size_world
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX
-      PetscInt, dimension(:), allocatable :: nnzs_row, onzs_row, cols
+      PetscInt, dimension(:), allocatable :: cols
       real, dimension(:), allocatable :: vals
+      PetscInt, allocatable, dimension(:) :: row_indices, col_indices
+      real, allocatable, dimension(:) :: v      
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       PetscInt, dimension(:), pointer :: is_pointer_coarse, is_pointer_fine
+      MatType:: mat_type
 
       ! ~~~~~~~~~~
 
@@ -900,59 +838,37 @@ module petsc_helper
       global_rows_coarse = rows_z
       global_cols_coarse = rows_z      
 
-      allocate(nnzs_row(local_rows))
-      allocate(onzs_row(local_rows))
-      nnzs_row = 0
-      onzs_row = 0
-
-      ! Get the max number of columns before anything
-      max_ncols = -1
+      ! Get the max number of nnzs
+      max_nnzs_total = 0
+      max_nnzs = -1
       do i_loc = global_row_start_W, global_row_end_plus_one_W-1
          call MatGetRow(W, i_loc, &
                   ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
-         if (ncols > max_ncols) max_ncols = ncols
+         max_nnzs_total = max_nnzs_total + ncols
+         if (ncols > max_nnzs) max_nnzs = ncols                  
          call MatRestoreRow(W, i_loc, &
                   ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)          
       end do
-      max_ncols = max_ncols + 1
-      allocate(cols(max_ncols))
-      allocate(vals(max_ncols))
+      if (identity) max_nnzs_total = max_nnzs_total + local_rows_coarse
+      max_nnzs = max_nnzs + 1
 
-      ! We may be reusing with the same sparsity, so don't need to preallocate
+      allocate(cols(max_nnzs))
+      allocate(vals(max_nnzs))
+
+      allocate(row_indices(max_nnzs_total))
+      allocate(col_indices(max_nnzs_total))
+      allocate(v(max_nnzs_total))
+
+      ! We may be reusing with the same sparsity
       if (.NOT. reuse) then
       
-         ! Have to get the number of local and off processor nnzs
-         do i_loc = global_row_start_W, global_row_end_plus_one_W-1
-            call MatGetRow(W, i_loc, &
-                     ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
-            do col = 1, ncols
-               if (cols(col) .ge. global_col_start_W .AND. cols(col) .le. global_col_end_plus_one_W - 1) then
-                  nnzs_row(is_pointer_fine(i_loc - global_row_start_W + 1)-global_row_start +1) = nnzs_row(is_pointer_fine(i_loc - global_row_start_W + 1)-global_row_start +1) + 1
-               else
-                  onzs_row(is_pointer_fine(i_loc - global_row_start_W + 1)-global_row_start +1) = onzs_row(is_pointer_fine(i_loc - global_row_start_W + 1)-global_row_start +1) + 1
-               end if
-            end do
-            call MatRestoreRow(W, i_loc, &
-                     ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)          
-         end do
-
-         ! Identity
-         if (identity) then
-            do i_loc = 1, local_rows_coarse
-               nnzs_row(is_pointer_coarse(i_loc)-global_row_start +1) = nnzs_row(is_pointer_coarse(i_loc)-global_row_start +1) + 1
-            end do
-         end if
-
-         if (comm_size /= 1) then
-            call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols_coarse, global_rows, global_cols_coarse, &
-                        nz_ignore, nnzs_row, &
-                        nz_ignore, onzs_row, &
-                        P, ierr)           
-         else
-            call MatCreateSeqAIJ(MPI_COMM_MATRIX, local_rows, local_rows_coarse, &
-                              nz_ignore, nnzs_row, &
-                              P, ierr)          
-         end if
+         call MatCreate(MPI_COMM_MATRIX, P, ierr)
+         call MatSetSizes(P, local_rows, local_cols_coarse, &
+                          global_rows, global_cols_coarse, ierr)
+         ! Match the output type
+         call MatGetType(W, mat_type, ierr)
+         call MatSetType(P, mat_type, ierr)
+         call MatSetUp(P, ierr)         
       end if
 
       ! Just in case there are some zeros in the input mat, ignore them
@@ -962,14 +878,15 @@ module petsc_helper
       call MatSetOption(P, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)           
 
       ! Copy in the values of W
+      counter = 1
       do i_loc = global_row_start_W, global_row_end_plus_one_W-1
          call MatGetRow(W, i_loc, &
                   ncols, cols, vals, ierr)
 
-         call MatSetValues(P,&
-                  one, [is_pointer_fine(i_loc - global_row_start_W + 1)], &
-                  ncols, cols(1:ncols), &
-                  vals(1:ncols), INSERT_VALUES, ierr)                     
+         row_indices(counter:counter+ncols-1) = is_pointer_fine(i_loc - global_row_start_W + 1)
+         col_indices(counter:counter+ncols-1) = cols(1:ncols)
+         v(counter:counter+ncols-1) = vals(1:ncols)    
+         counter = counter + ncols                                
 
          call MatRestoreRow(W, i_loc, &
                   ncols, cols, vals, ierr)          
@@ -978,17 +895,23 @@ module petsc_helper
       ! If we want the identity block or just leave it zero
       if (identity) then
          do i_loc = 1, local_rows_coarse
-            call MatSetValue(P, &
-                     is_pointer_coarse(i_loc), &
-                     i_loc - 1 + global_col_start_W, &
-                     1.0, INSERT_VALUES, ierr)
+
+            row_indices(counter) = is_pointer_coarse(i_loc)
+            col_indices(counter) = i_loc - 1 + global_col_start_W
+            v(counter) = 1.0
+            counter = counter + 1
+
          end do     
       end if
-      deallocate(nnzs_row, onzs_row, cols, vals) 
+      deallocate(cols, vals) 
       
-      ! Finish the assembly at the end
-      call MatAssemblyBegin(P, MAT_FINAL_ASSEMBLY, ierr)
-      call MatAssemblyEnd(P, MAT_FINAL_ASSEMBLY, ierr)  
+      ! Set the values
+      if (.NOT. reuse) then
+         call MatSetPreallocationCOO(P, counter-1, row_indices, col_indices, ierr)
+      end if
+      deallocate(row_indices, col_indices)
+      call MatSetValuesCOO(P, v, INSERT_VALUES, ierr)    
+      deallocate(v)  
       
       call ISRestoreIndicesF90(is_coarse, is_pointer_coarse, ierr)
       call ISRestoreIndicesF90(is_fine, is_pointer_fine, ierr)       
@@ -1014,24 +937,28 @@ module petsc_helper
       logical, intent(in) :: identity, reuse
 
       PetscInt :: global_row_start_Z, global_row_end_plus_one_Z, global_col_start_Z, global_col_end_plus_one_Z
-      PetscInt :: local_rows_coarse, local_rows_fine, local_rows, local_cols, local_cols_coarse, max_ncols, i_loc, ncols
-      PetscInt :: global_cols, global_rows, global_rows_coarse, global_cols_coarse
-      PetscInt :: col, cols_z, rows_z, rows_ao, cols_ao, rows_ad, cols_ad, size_cols
+      PetscInt :: local_coarse_size, local_fine_size, local_rows, local_full_cols, i_loc, ncols
+      PetscInt :: global_coarse_size, global_fine_size, global_full_cols, max_nnzs_total, max_nnzs
+      PetscInt :: col, rows_ao, cols_ao, rows_ad, cols_ad, size_cols, global_rows_z, global_cols_z
+      PetscInt :: local_rows_z, local_cols_z, counter
       integer :: comm_size, comm_size_world, errorcode, comm_rank
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX      
-      PetscInt, dimension(:), allocatable :: nnzs_row, onzs_row, cols
+      PetscInt, dimension(:), allocatable :: cols
       real, dimension(:), allocatable :: vals
+      PetscInt, allocatable, dimension(:) :: row_indices_coo, col_indices_coo
+      real, allocatable, dimension(:) :: v      
       PetscOffset :: iicol
       PetscInt :: icol(1)       
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
-      type(tMat) :: Ad, Ao
+      type(tMat) :: Ad, Ao, temp_mat
       type(c_ptr) :: colmap_c_ptr
       PetscInt, pointer :: colmap_c(:)
       PetscInt, dimension(:), pointer :: col_indices_off_proc_array
       type(tIS) :: col_indices
       PetscInt, dimension(:), pointer :: is_pointer_orig_fine_col, is_pointer_coarse, is_pointer_fine
       integer(c_long_long) :: A_array
+      MatType:: mat_type
 
       ! ~~~~~~~~~~
 
@@ -1043,26 +970,38 @@ module petsc_helper
       call ISGetIndicesF90(is_fine, is_pointer_fine, ierr)
       call ISGetIndicesF90(is_coarse, is_pointer_coarse, ierr)      
 
-      call IsGetLocalSize(is_coarse, local_rows_coarse, ierr)
-      call IsGetLocalSize(is_fine, local_rows_fine, ierr)
+      call IsGetLocalSize(is_coarse, local_coarse_size, ierr)
+      call IsGetLocalSize(is_fine, local_fine_size, ierr)
+      call IsGetSize(is_coarse, global_coarse_size, ierr)
+      call IsGetSize(is_fine, global_fine_size, ierr)      
 
-      local_cols_coarse = local_rows_coarse
-      local_cols = local_rows_coarse + local_rows_fine
-      local_rows = local_cols
+      local_full_cols = local_coarse_size + local_fine_size
+      global_full_cols = global_coarse_size + global_fine_size
 
-      call MatGetSize(Z, rows_z, cols_z, ierr) 
+      call MatGetLocalSize(Z, local_rows_z, local_cols_z, ierr) 
+      call MatGetSize(Z, global_rows_z, global_cols_z, ierr) 
       
-      global_cols = rows_z + cols_z
-      global_rows = global_cols
-      global_rows_coarse = rows_z
-      global_cols_coarse = rows_z      
       call MatGetOwnershipRange(Z, global_row_start_Z, global_row_end_plus_one_Z, ierr)  
       call MatGetOwnershipRangeColumn(Z, global_col_start_Z, global_col_end_plus_one_Z, ierr)   
+
+      call MatGetType(Z, mat_type, ierr)
 
       ! Get the local non-local components and sizes
       if (comm_size /= 1) then
 
-         call MatMPIAIJGetSeqAIJ(Z, Ad, Ao, icol, iicol, ierr)
+         if (mat_type == "mpiaij") then
+            call MatMPIAIJGetSeqAIJ(Z, Ad, Ao, icol, iicol, ierr)
+            A_array = Z%v
+
+         ! If on the gpu, just do a convert to mpiaij format first
+         ! This will be expensive but the best we can do for now without writing our 
+         ! own version of this subroutine in cuda/kokkos            
+         else
+            call MatConvert(Z, MATMPIAIJ, MAT_INITIAL_MATRIX, temp_mat, ierr)
+            call MatMPIAIJGetSeqAIJ(temp_mat, Ad, Ao, icol, iicol, ierr)             
+            A_array = temp_mat%v
+         end if
+
          ! We know the col size of Ao is the size of colmap, the number of non-zero offprocessor columns
          call MatGetSize(Ao, rows_ao, cols_ao, ierr)    
          call MatGetSize(Ad, rows_ad, cols_ad, ierr)  
@@ -1078,7 +1017,6 @@ module petsc_helper
          ! Now we need the global off-processor column indices in Z
          if (comm_size /= 1) then 
 
-            A_array = Z%v
             call get_colmap_c(A_array, colmap_c_ptr)
             call c_f_pointer(colmap_c_ptr, colmap_c, shape=[cols_ao])
             
@@ -1125,58 +1063,41 @@ module petsc_helper
       ! Get the indices
       call ISGetIndicesF90(orig_fine_col_indices, is_pointer_orig_fine_col, ierr)
 
-      allocate(nnzs_row(local_rows_coarse))
-      allocate(onzs_row(local_rows_coarse))
-      nnzs_row = 0
-      onzs_row = 0
       ! Z
-      ! Get the max number of columns before anything
-      max_ncols = -1
+      ! Get the max number of nnzs
+      max_nnzs_total = 0
+      max_nnzs = -1      
       do i_loc = global_row_start_Z, global_row_end_plus_one_Z-1
          call MatGetRow(Z, i_loc, &
                   ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)
-         if (ncols > max_ncols) max_ncols = ncols
+         max_nnzs_total = max_nnzs_total + ncols
+         if (ncols > max_nnzs) max_nnzs = ncols
          call MatRestoreRow(Z, i_loc, &
                   ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)          
       end do
-      max_ncols = max_ncols + 1
-      allocate(cols(max_ncols))
-      allocate(vals(max_ncols))
+      if (identity) max_nnzs_total = max_nnzs_total + local_rows_z
+      max_nnzs = max_nnzs + 1
 
-      ! We may be reusing with the same sparsity, so don't need to preallocate
+      allocate(cols(max_nnzs))
+      allocate(vals(max_nnzs))
+
+      allocate(row_indices_coo(max_nnzs_total))
+      allocate(col_indices_coo(max_nnzs_total))
+      allocate(v(max_nnzs_total))    
+      
+      ! We may be reusing with the same sparsity
       if (.NOT. reuse) then
-
-         ! Have to get the number of local and off processor nnzs
-         do i_loc = global_row_start_Z, global_row_end_plus_one_Z-1
-            call MatGetRow(Z, i_loc, &
-                     ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)
-            do col = 1, ncols
-               if (cols(col) .ge. global_col_start_Z .AND. cols(col) .le. global_col_end_plus_one_Z - 1) then
-                  nnzs_row(i_loc - global_row_start_Z + 1) = nnzs_row(i_loc - global_row_start_Z + 1) + 1
-               else
-                  onzs_row(i_loc - global_row_start_Z + 1) = onzs_row(i_loc - global_row_start_Z + 1) + 1
-               end if
-            end do
-            call MatRestoreRow(Z, i_loc, &
-                     ncols, cols, PETSC_NULL_SCALAR_ARRAY, ierr)          
-         end do
-
-         ! Identity
-         do i_loc = 1, local_rows_coarse
-            nnzs_row(i_loc) = nnzs_row(i_loc) + 1
-         end do         
-
-         if (comm_size /= 1) then
-            call MatCreateAIJ(MPI_COMM_MATRIX, local_rows_coarse, local_cols, global_rows_coarse, global_cols, &
-                        nz_ignore, nnzs_row, &
-                        nz_ignore, onzs_row, &
-                        R, ierr)           
-         else
-            call MatCreateSeqAIJ(MPI_COMM_MATRIX, local_rows_coarse, local_cols, &
-                                 nz_ignore, nnzs_row, &
-                                 R, ierr)        
-         end if    
-      end if
+      
+         call MatCreate(MPI_COMM_MATRIX, R, ierr)
+         ! Taking care here to use the row sizes of Z, but the full size for cols
+         ! as we can use this routine to stick Afc and Aff in full sizes column arrays
+         ! and hence the row size of the input Z won't always equal the same sizes as the input is's
+         call MatSetSizes(R, local_rows_z, local_full_cols, &
+                             global_rows_z, global_full_cols, ierr)
+         ! Match the output type
+         call MatSetType(R, mat_type, ierr)
+         call MatSetUp(R, ierr)         
+      end if      
 
       ! Just in case there are some zeros in the input mat, ignore them
       call MatSetOption(R, MAT_IGNORE_ZERO_ENTRIES, PETSC_TRUE, ierr)     
@@ -1187,25 +1108,31 @@ module petsc_helper
       ! Z - do Ad and Ao separately, as that way we have local indices into is_pointer_orig_fine_col
       ! to give us the original column numbers 
       ! Let's start with Ad - remember Ad and Ao are serial
-      do i_loc = 1, local_rows_coarse
+      counter = 1
+      do i_loc = 1, local_rows_z
          call MatGetRow(Ad, i_loc-1, &
                   ncols, cols, vals, ierr)
-         call MatSetValues(R,&
-                  one, [i_loc -1 + global_row_start_Z], &
-                  ncols, is_pointer_orig_fine_col(cols(1:ncols)+1), &
-                  vals(1:ncols), INSERT_VALUES, ierr)
+
+         row_indices_coo(counter:counter+ncols-1) = i_loc -1 + global_row_start_Z
+         col_indices_coo(counter:counter+ncols-1) = is_pointer_orig_fine_col(cols(1:ncols)+1)
+         v(counter:counter+ncols-1) = vals(1:ncols)    
+         counter = counter + ncols                                
+
          call MatRestoreRow(Ad, i_loc-1, &
-                  ncols, cols, vals, ierr)          
+                  ncols, cols, vals, ierr)         
       end do
+
       if (comm_size /= 1) then
          ! Then Ao
-         do i_loc = 1, local_rows_coarse
+         do i_loc = 1, local_rows_z
             call MatGetRow(Ao, i_loc-1, &
                      ncols, cols, vals, ierr)
-            call MatSetValues(R,&
-                     one, [i_loc -1 + global_row_start_Z], &
-                     ncols, is_pointer_orig_fine_col(cols(1:ncols)+1 + cols_ad), &
-                     vals(1:ncols), INSERT_VALUES, ierr)
+
+            row_indices_coo(counter:counter+ncols-1) = i_loc -1 + global_row_start_Z
+            col_indices_coo(counter:counter+ncols-1) = is_pointer_orig_fine_col(cols(1:ncols)+1 + cols_ad)
+            v(counter:counter+ncols-1) = vals(1:ncols)    
+            counter = counter + ncols                       
+
             call MatRestoreRow(Ao, i_loc-1, &
                      ncols, cols, vals, ierr)          
          end do
@@ -1213,17 +1140,28 @@ module petsc_helper
 
       ! If we want the identity block or just leave it zero
       if (identity) then
-         do i_loc = 1, local_rows_coarse
-            call MatSetValue(R, &
-                     i_loc - 1 + global_row_start_Z, &
-                     is_pointer_coarse(i_loc), &
-                     1.0, INSERT_VALUES, ierr)
+         do i_loc = 1, local_rows_z
+
+            row_indices_coo(counter) = i_loc - 1 + global_row_start_Z
+            col_indices_coo(counter) = is_pointer_coarse(i_loc)
+            v(counter) = 1.0
+            counter = counter + 1
+
          end do  
       end if                                   
-      deallocate(nnzs_row, onzs_row, cols, vals)
+      deallocate(cols, vals)
 
-      call MatAssemblyBegin(R, MAT_FINAL_ASSEMBLY, ierr)
-      call MatAssemblyEnd(R, MAT_FINAL_ASSEMBLY, ierr)   
+      ! Set the values
+      if (.NOT. reuse) then
+         call MatSetPreallocationCOO(R, counter-1, row_indices_coo, col_indices_coo, ierr)
+      end if
+      deallocate(row_indices_coo, col_indices_coo)
+      call MatSetValuesCOO(R, v, INSERT_VALUES, ierr)    
+      deallocate(v)   
+
+      if (comm_size /= 1 .AND. mat_type /= "mpiaij") then
+         call MatDestroy(temp_mat, ierr)
+      end if      
 
       call ISRestoreIndicesF90(orig_fine_col_indices, is_pointer_orig_fine_col, ierr)
       call ISRestoreIndicesF90(is_coarse, is_pointer_coarse, ierr)

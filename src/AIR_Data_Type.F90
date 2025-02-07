@@ -239,7 +239,7 @@ module air_data_type
 
    ! Indices into reuse_is
    integer, parameter :: IS_REPARTITION = 1
-   integer, parameter :: IS_R_Z_COLS = 2
+   integer, parameter :: IS_R_Z_FINE_COLS = 2
    
    ! Stores temporary data we use for re-use
    ! The things stored in these structures 
@@ -269,6 +269,10 @@ module air_data_type
       type(tMat), allocatable, dimension(:)              :: restrictors
       type(tMat), allocatable, dimension(:)              :: prolongators
 
+      ! Restrictor style injectors we use as gpus don't currently support veciscopy
+      type(tMat), allocatable, dimension(:)              :: i_fine_full, i_coarse_full
+      type(tMat), allocatable, dimension(:)              :: i_fine_full_full, i_coarse_full_full
+
       ! Extracted matrices on each level
       type(tMat), allocatable, dimension(:)              :: A_ff, A_fc, A_cf, A_cc
       ! Approximate inverse of Aff
@@ -297,6 +301,8 @@ module air_data_type
 
       ! Temporary storage
       type(petsc_vec_array), dimension(4) :: temp_vecs_fine, temp_vecs_coarse 
+      type(petsc_vec_array), dimension(1) :: temp_vecs
+      type(tVec), dimension(:), allocatable :: temp_vecs_b, temp_vecs_x, temp_vecs_r
 
       ! Temporary reuse
       type(air_reuse_data), allocatable, dimension(:) :: reuse
@@ -333,6 +339,11 @@ module air_data_type
 
       allocate(air_data%restrictors(air_data%options%max_levels))
       allocate(air_data%prolongators(air_data%options%max_levels))
+
+      allocate(air_data%i_fine_full(air_data%options%max_levels))
+      allocate(air_data%i_coarse_full(air_data%options%max_levels))
+      allocate(air_data%i_fine_full_full(air_data%options%max_levels))
+      allocate(air_data%i_coarse_full_full(air_data%options%max_levels))             
 
       allocate(air_data%coarse_matrix(air_data%options%max_levels))
       allocate(air_data%A_ff(air_data%options%max_levels))
@@ -375,6 +386,10 @@ module air_data_type
       allocate(air_data%temp_vecs_coarse(2)%array(air_data%options%max_levels))
       allocate(air_data%temp_vecs_coarse(3)%array(air_data%options%max_levels))
       allocate(air_data%temp_vecs_coarse(4)%array(air_data%options%max_levels))
+      allocate(air_data%temp_vecs(1)%array(air_data%options%max_levels))
+      allocate(air_data%temp_vecs_b(air_data%options%max_levels))
+      allocate(air_data%temp_vecs_x(air_data%options%max_levels))
+      allocate(air_data%temp_vecs_r(air_data%options%max_levels))
 
       ! Reuse 
       allocate(air_data%reuse(air_data%options%max_levels))

@@ -3,7 +3,7 @@
 # PFLARE library
 ### Author: Steven Dargaville
 
-This library contains methods which can be used to solve linear systems in parallel with PETSc, with interfaces in C/Fortran/Python.
+This library contains methods which can be used to solve linear systems in parallel with PETSc, with interfaces in C/Fortran/Python and GPU support.
    
 PFLARE can scalably solve:
 1) Hyperbolic problems implicitly without Gauss-Seidel methods, such as advection equations, streaming operators from Boltzmann transport applications, multigrid in time discretisations, etc. This includes time dependent or independent equations, with structured or unstructured grids, with lower triangular structure or without.
@@ -53,7 +53,7 @@ PFLARE can scalably solve:
 
 ## Building PFLARE
 
-This library depends on MPI, BLAS, LAPACK (>= 3.4) and PETSc (3.14 to 3.22) configured with a graph partitioner (e.g., ParMETIS). Please compile PETSc directly from the source code, as PFLARE requires access to some of the PETSc types only available in the source.
+This library depends on MPI, BLAS, LAPACK (>= 3.4) and PETSc (3.15 to 3.22) configured with a graph partitioner (e.g., ParMETIS). Please compile PETSc directly from the source code, as PFLARE requires access to some of the PETSc types only available in the source.
 
 1) Set `PETSC_DIR` and `PETSC_ARCH` environmental variables.
 2) Call ``make`` in the top level directory (you may need to modify the Makefile).
@@ -399,6 +399,50 @@ Running a test with OpenMP then requires setting the ``OMP_NUM_THREADS`` variabl
 
       srun --oversubscribe --distribution=block:block --cpu-bind=mask_cpu:$mask adv_diff_2d.o -pc_type air
 
+## GPU support           
+
+If PETSc has been configured with GPU support (e.g., CUDA, HIP, Kokkos) then PCPFLAREINV and PCAIR support GPUs. This relies on the matrix and vector types being set correctly by the user, which is typically done through command line options. By default the setup/solve occurs on the CPU. For example, if we solve the 1D advection problem ``tests/ex86`` using a 30th order GMRES polynomial applied matrix-free with the command line options:
+
+``./ex86.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30``
+
+the setup/solve will occur on the CPU. If we want to run on GPUs, we must ensure the matrix/vector types match the appropriate GPU types. In both ``tests/ex86`` and ``tests/adv_diff_2d``, these types can be set through command line arguments. The types are specified with either ``-mat_type`` and ``-vec_type``, or if set by a DM directly (like in ``tests/adv_diff_2d``), use ``-dm_mat_type`` and ``-dm_vec_type``. 
+
+If using CUDA directly:
+
+``./ex86.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijcusparse -vec_type cuda``
+
+If using HIP directly:
+
+``./ex86.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijhipsparse -vec_type hip``
+
+If using KOKKOS (with either the CUDA or HIP back-end):
+
+``./ex86.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijkokkos -vec_type kokkos``
+
+For both PCPFLAREINV and PCAIR, the entirity of the solve happens on GPUs without any copies between the CPU/GPU if using either CUDA directly, or using KOKKOS with the CUDA or HIP back-end. Using HIP directly incurs copies during the solve so we would not recommend this currently. 
+
+The setup however occurs on both the CPU and GPU depending on the options used, with copies occuring between the two where needed. The command line option  ``-log_view`` shows how many copies to/from the CPU/GPU occur.
+
+Currently the setup can be quite slow, with substantial differences between the CUDA, HIP and KOKKOS setup performance. Development of the setup on the GPU is ongoing, please get in touch if you would like to contribute. The main areas requiring development are:
+
+1) CF splittings on the GPU - Porting PMISR DDC should only require a small modification of an existing GPU compatible PMIS method
+2) Aplying drop tolerances to matrices
+3) Copying a matrix but only for entries in a given sparsity - CUDA routines for this exist in the cusparse library
+4) Processor agglomeration - GPU libraries exist which could replace the CPU-based calls to ParMETIS
+
+### Performance notes
+
+1 - Typically we find good performance using between 1-4 million DOFs per GPU. 
+
+2 - The default parameters used in the processor agglomeration in PCAIR (e.g., ``-pc_air_process_eq_limit``) have not been optimised for GPUs.
+
+3 - Multigrid methods on GPUs will often pin the coarse grids to the CPU, as GPUs are not very fast at the small solves that occur on coarse grids. We do not do this in PCAIR; instead we recommend using the GMRES polynomials applied matrix free as a coarse solver. In particular the polynomials which use the Newton basis are stable at high order and can therefore be combined with heavy truncation of the multigrid hierarchy. 
+
+For example, on a single NVIDIA GPU with a 2D structured grid advection problem, truncating the number of levels to 11 (typically the coarsening gives 25 levels) and applying a 10th order Newton polynomial matrix-free as a coarse grid solver:
+
+``./adv_diff_2d.o -da_grid_x 1000 -da_grid_y 1000 -ksp_type richardson -pc_type air -pc_air_max_levels 11 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_poly_order 10 -dm_mat_type aijcusparse -dm_vec_type cuda``
+
+gives the same iteration count as without truncation and we see an overall speedup of ~1.35x in the solve on GPUs with this approach. The level of truncation and polynomial orders required are currently problem dependent, but automated methods to determine this are under development. 
 
 ## CF splittings
 

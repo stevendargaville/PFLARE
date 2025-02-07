@@ -130,41 +130,46 @@ module gmres_poly
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine create_temp_space_box_mueller(MPI_COMM_MATRIX, comm_size, comm_rank, &
-                  local_rows, global_rows, subspace_size, &
-                  K_m_plus_1_data, K_m_plus_1_data_not_zero, K_m_plus_1_pointer, &
-                  K_m_plus_one)
+   subroutine create_temp_space_box_mueller(matrix, subspace_size, V_n)
       
       ! Creates some temporary space and computes box mueller random numbers
       ! in the first column
 
       ! ~~~~~~
-      MPI_Comm, intent(in)                                        :: MPI_COMM_MATRIX
-      integer, intent(in)                                         :: comm_size, comm_rank, subspace_size
-      PetscInt, intent(in)                                        :: local_rows, global_rows
-      real, dimension(:, :), allocatable, target, intent(inout)   :: K_m_plus_1_data, K_m_plus_1_data_not_zero
-      real, dimension(:, :), pointer, intent(out)                 :: K_m_plus_1_pointer
-      type(tVec), dimension(:)                                    :: K_m_plus_one
+      type(tMat), intent(in)                                      :: matrix
+      integer, intent(in)                                         :: subspace_size
+      type(tVec), dimension(:)                                    :: V_n
 
       ! Local variables
-      integer :: i_loc, seed_size
+      MPI_Comm :: MPI_COMM_MATRIX
+      PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one, row_i
+      PetscCount :: vec_size
+      PetscInt, allocatable, dimension(:) :: indices
+      integer :: i_loc, seed_size, comm_size, comm_rank, errorcode
       PetscErrorCode :: ierr      
       integer, dimension(:), allocatable :: seed
-      real, dimension(:), contiguous, pointer :: data_ptr
+      real, dimension(:, :), allocatable, target   :: random_data
       PetscInt, parameter :: one=1, zero=0
       ! ~~~~~~    
 
-      ! Just a guard for when there are zero local rows
-      ! We still need to allocate something given we are creating petsc vecs with arrays
-      allocate(K_m_plus_1_data(local_rows, subspace_size+1))
-      K_m_plus_1_pointer => K_m_plus_1_data
-      if (local_rows == 0) then
-         allocate(K_m_plus_1_data_not_zero(1, subspace_size+1))
-         K_m_plus_1_pointer => K_m_plus_1_data_not_zero
-      end if     
+      ! We might want to call the gmres poly creation on a sub communicator
+      ! so let's get the comm attached to the matrix and make sure to use that 
+      call PetscObjectGetComm(matrix, MPI_COMM_MATRIX, ierr)  
+      ! Get the comm size 
+      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)     
+      ! Get the comm rank
+      call MPI_Comm_rank(MPI_COMM_MATRIX, comm_rank, errorcode)     
+      ! Get the matrix sizes
+      call MatGetSize(matrix, global_rows, global_cols, ierr)
+      call MatGetLocalSize(matrix, local_rows, local_cols, ierr)     
+      call MatGetOwnershipRange(matrix, global_row_start, global_row_end_plus_one, ierr)  
 
       ! ~~~~~~~~~~
-      ! Create random vector
+      ! Create random vector - this happens on the cpu
+      ! We could do most of the box-muller on the gpu, but currently the random numbers in petsc 
+      ! are still generated on the host (and we don't have portable trig functions in petsc across the different
+      ! gpu vec types), so that would cause more copies to/from the gpu     
+      ! If that changes this should be rewritten so this all happens on the gpu  
       ! ~~~~~~~~~~      
 
       call random_seed(size=seed_size)
@@ -176,17 +181,19 @@ module gmres_poly
       end do   
       call random_seed(put=seed)    
 
-      ! Gives a random number between 0 <= u < 1
-      ! We should remove the u = 0 (ie epsilon) case, but we don't need a perfect
-      ! normal distribution here     
-      ! Get two sets of random numbers 
-      call random_number(K_m_plus_1_pointer(:, 1:2))
+      ! Gives random numbers between 0 <= u < 1  
+      allocate(random_data(local_rows, 2))
+      call random_number(random_data(:, 1:2))
+
+      ! Remove the u = 0 (ie epsilon) case
+      ! to change from [0,1) to (0,1], which we need for the log */
+      ! random_data(:, 1) = 1.0 - random_data(:, 1)
 
       ! We want our random rhs to be a normal distribution with zero mean as that preserves
       ! white noise in the eigenspace (ie it is rotation invariant to unitary transforms)
       ! Do a box-muller to take two numbers with uniform distribution and produce a number
       ! that is normally distributed       
-      K_m_plus_1_pointer(:, 1) = sqrt(-2 * log(K_m_plus_1_pointer(:, 1))) * cos(2 * pi * K_m_plus_1_pointer(:, 2))
+      random_data(:, 1) = sqrt(-2 * log(random_data(:, 1))) * cos(2 * pi * random_data(:, 2))
       deallocate(seed)
 
       ! ~~~~~~~~~~
@@ -194,17 +201,22 @@ module gmres_poly
       ! ~~~~~~~~~~ 
       ! Create vectors pointing at the columns in K_m+1
       do i_loc = 1, subspace_size+1
-         ! There is now an interface to VecCreateSeqWithArray in PETSc >=3.18
-         ! that requires a 1D array
-         data_ptr => K_m_plus_1_pointer(1:local_rows,i_loc)
-         if (comm_size==1) then
-            call VecCreateSeqWithArray(PETSC_COMM_SELF, one, &
-               local_rows, data_ptr, K_m_plus_one(i_loc), ierr)  
-         else
-            call VecCreateMPIWithArray(MPI_COMM_MATRIX, one, &
-               local_rows, global_rows, data_ptr, K_m_plus_one(i_loc), ierr)            
-         end if
-      end do         
+         call MatCreateVecs(matrix, V_n(i_loc), PETSC_NULL_VEC, ierr)         
+      end do     
+      
+      allocate(indices(local_rows))
+      ! Set the random values into the first vector
+      ! V_n(1) data will be copied to the gpu when needed
+      do row_i = 1, local_rows
+         indices(row_i) = global_row_start + row_i-1
+      end do
+      ! PetscCount vs PetscInt??
+      vec_size = local_rows
+      call VecSetPreallocationCOO(V_n(1), vec_size, indices, ierr)
+      deallocate(indices)
+      call VecSetValuesCOO(V_n(1), random_data, INSERT_VALUES, ierr)
+      
+      deallocate(random_data)
 
       ! ~~~~~~~~~~~~
 
@@ -344,38 +356,25 @@ module gmres_poly
       real, dimension(poly_order+1) :: least_squares_sol
       real, dimension(:), allocatable :: work
       real :: beta
-      real, dimension(:), pointer :: v_one, v_two
-      real, dimension(:, :), allocatable, target :: K_m_plus_1_data, K_m_plus_1_data_not_zero
-      real, dimension(:, :), pointer :: K_m_plus_1_pointer
       type(tVec) :: w_j
       type(tVec), dimension(poly_order+2) :: V_n
-      real, dimension(:), pointer :: data_ptr
       integer, dimension(:), allocatable :: iwork
       real :: rcond = -1.0
 
       ! ~~~~~~    
 
       ! This is how many columns we have in K_m
-      subspace_size = poly_order + 1
+      subspace_size = poly_order + 1   
+      ! Get the matrix sizes
+      call MatGetSize(matrix, global_rows, global_cols, ierr)
 
       ! ~~~~~~~~~~~~~
       ! We're basically just writing a simple GMRES here with no restart, the reason we can't use the petsc one
       ! is we need access to the unrotated hessenberg matrix, and the orthogonalised vectors
       ! to compute the gmres polynomial
       ! See Nachtigal et al 1992 for details on how we generate the gmres polynomial 
-      ! coefficients in the power basis using the Arnoldi basis
+      ! coefficients using the Arnoldi basis
       ! ~~~~~~~~~~~~~
-
-      ! We might want to call the gmres poly creation on a sub communicator
-      ! so let's get the comm attached to the matrix and make sure to use that 
-      call PetscObjectGetComm(matrix, MPI_COMM_MATRIX, ierr)  
-      ! Get the comm size 
-      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)     
-      ! Get the comm rank
-      call MPI_Comm_rank(MPI_COMM_MATRIX, comm_rank, errorcode)     
-      ! Get the matrix sizes
-      call MatGetSize(matrix, global_rows, global_cols, ierr)
-      call MatGetLocalSize(matrix, local_rows, local_cols, ierr)
 
       if (subspace_size > global_rows) then
          print *, "The input subspace size is greater than the matrix size"
@@ -384,14 +383,9 @@ module gmres_poly
 
       ! ~~~~~~~~~~
       ! Allocate space and create random numbers 
-      ! There are individual petsc vecs built in V_n that point at 
-      ! the data in K_m_plus_1_data
       ! The first vec has random numbers in it
       ! ~~~~~~~~~~ 
-      call create_temp_space_box_mueller(MPI_COMM_MATRIX, comm_size, comm_rank, &
-               local_rows, global_rows, subspace_size, &
-               K_m_plus_1_data, K_m_plus_1_data_not_zero, K_m_plus_1_pointer, &
-               V_n)
+      call create_temp_space_box_mueller(matrix, subspace_size, V_n)
       
       ! Create an extra vector for storage
       call VecDuplicate(V_n(1), w_j, ierr)         
@@ -444,8 +438,6 @@ module gmres_poly
                least_squares_sol, 1, &
                0.0, coefficients(1), 1) 
 
-      deallocate(K_m_plus_1_data)
-      if (allocated(K_m_plus_1_data_not_zero)) deallocate(K_m_plus_1_data_not_zero)
       do i_loc = 1, subspace_size+1
          call VecDestroy(V_n(i_loc), ierr)
       end do
@@ -474,13 +466,14 @@ module gmres_poly
 
       ! Local variables
       PetscInt :: global_rows, global_cols, local_rows, local_cols
+      PetscInt :: global_row_start, global_row_end_plus_one, row_i
+      PetscInt, dimension(:), allocatable :: global_indices
       integer :: comm_size, subspace_size, comm_rank, i_loc
       integer :: errorcode
       PetscErrorCode :: ierr      
       MPI_Comm :: MPI_COMM_MATRIX
-      real, dimension(:, :), allocatable, target :: K_m_plus_1_data, K_m_plus_1_data_not_zero
-      real, dimension(:, :), pointer :: K_m_plus_1_pointer
-      type(tVec), dimension(poly_order+2) :: K_m_plus_one
+      real, dimension(:, :), allocatable, target :: K_m_plus_1_data
+      type(tVec), dimension(poly_order+2) :: V_n
       ! ~~~~~~    
 
       ! This is how many columns we have in K_m
@@ -527,30 +520,45 @@ module gmres_poly
 
       ! ~~~~~~~~~~
       ! Allocate space and create random numbers 
-      ! There are individual petsc vecs built in K_m_plus_one that point at 
-      ! the data in K_m_plus_1_data
       ! The first vec has random numbers in it
       ! ~~~~~~~~~~      
-      call create_temp_space_box_mueller(MPI_COMM_MATRIX, comm_size, comm_rank, &
-               local_rows, global_rows, subspace_size, &
-               K_m_plus_1_data, K_m_plus_1_data_not_zero, K_m_plus_1_pointer, &
-               K_m_plus_one)
+      call create_temp_space_box_mueller(matrix, subspace_size, V_n)
 
       ! ~~~~~~~~~~~~
 
       ! Now loop through and build the power basis K_m+1
       do i_loc = 1, subspace_size
 
-         ! Compute K_m_plus_1_data(j+1) = A * K_m_plus_1_data(j)
+         ! Compute V_n(j+1) = A * V_n(j)
          ! Could do this with a matrix-power kernel with less comms if desired, except
          ! that we only ever need this once for very low order so that would prob result in more comms overall
          call MatMult(matrix, &
-                  K_m_plus_one(i_loc), &
-                  K_m_plus_one(i_loc+1), ierr)  
+                  V_n(i_loc), &
+                  V_n(i_loc+1), ierr)  
       end do      
 
+      ! Need to copy the individual vectors into a dense slab of memory
+      ! Used to just have a dense slab of memory and then
+      ! place the pointers into the vecs, but that 
+      ! became cumbersome when supporting different vec types (eg cuda on a gpu)
+      allocate(K_m_plus_1_data(local_rows, subspace_size+1))
+      allocate(global_indices(local_rows))
+      call MatGetOwnershipRange(matrix, global_row_start, global_row_end_plus_one, ierr)  
+      do row_i = 1, local_rows
+         global_indices(row_i) = global_row_start + row_i - 1
+      end do
+        
+      ! Copy into K_m_plus_1_data and then destroy the vecs
+      do i_loc = 1, subspace_size+1
+         ! Have to use vecgetvalues interface for gpus
+         ! This does a copy of the vec from gpu to cpu if necessary
+         call VecGetValues(V_n(i_loc), local_rows, global_indices, K_m_plus_1_data(:, i_loc), ierr)
+         call VecDestroy(V_n(i_loc), ierr)
+      end do         
+
       ! ~~~~~~~~~~~~~
-      ! Start the tall-skinny QR factorisation of the power basis
+      ! Start the tall-skinny QR factorisation of the power basis - this all happens
+      ! on the cpu
       ! ~~~~~~~~~~~~~
       call start_tsqr(MPI_COMM_MATRIX, K_m_plus_1_data, buffers)
 
@@ -561,11 +569,7 @@ module gmres_poly
       ! ~~~~~
       ! ~~~~~
 
-      deallocate(K_m_plus_1_data)
-      if (allocated(K_m_plus_1_data_not_zero)) deallocate(K_m_plus_1_data_not_zero)
-      do i_loc = 1, subspace_size+1
-         call VecDestroy(K_m_plus_one(i_loc), ierr)
-      end do       
+      deallocate(K_m_plus_1_data, global_indices)    
 
    end subroutine start_gmres_polynomial_coefficients_power 
 
@@ -669,7 +673,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       
       PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
       PetscInt :: global_col_start, global_col_end_plus_one, n, ncols, ncols_two, ifree, max_nnzs
-      PetscInt :: i_loc, j_loc, row_size, rows_ao, cols_ao, rows_ad, cols_ad, shift = 0
+      PetscInt :: i_loc, j_loc, row_size, rows_ao, cols_ao, rows_ad, cols_ad, shift = 0, counter
       integer :: errorcode, omp_threads, match_counter, term, order, location
       integer :: comm_size, comm_size_world, status, length
       PetscErrorCode :: ierr      
@@ -681,6 +685,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       PetscInt, pointer :: colmap_c(:)
       type(tIS) :: col_indices
       type(tMat) :: matrix_condensed, Ad, Ao
+      type(tMat), target :: temp_mat
       PetscOffset :: iicol
       PetscInt :: icol(1)
       type(c_ptr) :: colmap_c_ptr, vals_c_ptr
@@ -696,11 +701,14 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       PetscInt, dimension(:), pointer :: submatrices_ia, submatrices_ja, cols_two_ptr, cols_ptr
       real, dimension(:), pointer :: vals_two_ptr, vals_ptr
       real(c_double), pointer :: submatrices_vals(:)
-      logical :: symmetric = .false., inodecompressed=.false., done
+      logical :: symmetric = .false., inodecompressed=.false., done, reuse_triggered
       type(tVec) :: rhs_copy, diag_vec, power_vec
       PetscInt, parameter :: one = 1, zero = 0
       CHARACTER(len=255) :: omp_threads_env_char
       integer :: omp_threads_env
+      MatType:: mat_type    
+      PetscInt, allocatable, dimension(:) :: indices
+      real, allocatable, dimension(:) :: v 
       
       ! ~~~~~~~~~~  
 
@@ -720,6 +728,8 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       ! This returns the global index of the local portion of the matrix
       call MatGetOwnershipRange(matrix, global_row_start, global_row_end_plus_one, ierr)  
       call MatGetOwnershipRangeColumn(matrix, global_col_start, global_col_end_plus_one, ierr)  
+
+      reuse_triggered = .NOT. PetscMatIsNull(cmat) 
 
       ! ~~~~~~~~~~
       ! Special case if we just want to return a gmres polynomial with the sparsity of the diagonal
@@ -751,34 +761,44 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          end do
 
          ! If not re-using
-         if (PetscMatIsNull(cmat)) then
+         if (.NOT. reuse_triggered) then
 
-            ! Now rhs_copy should have our diagonal polynomial approximation
-            if (comm_size/=1) then
-               call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                        global_rows, global_cols, &
-                        one, PETSC_NULL_INTEGER_ARRAY, &
-                        zero, PETSC_NULL_INTEGER_ARRAY, &
-                        cmat, ierr)   
-            else
-               call MatCreateSeqAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                        one, PETSC_NULL_INTEGER_ARRAY, &
-                        cmat, ierr)            
-            end if 
+            call MatCreate(MPI_COMM_MATRIX, cmat, ierr)
+            call MatSetSizes(cmat, local_rows, local_cols, &
+                             global_rows, global_cols, ierr)
+            ! Match the output type
+            call MatGetType(matrix, mat_type, ierr)
+            call MatSetType(cmat, mat_type, ierr)
+            call MatSetUp(cmat, ierr)
+
          end if
 
          ! Don't set any off processor entries so no need for a reduction when assembling
          call MatSetOption(cmat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)
          call MatSetOption(cmat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)          
+
+         !allocate(v(local_rows))
+         !v = 1.0         
    
-         ! Set the diagonal
-         do i_loc = global_row_start, global_row_end_plus_one-1
-            call MatSetValue(cmat, i_loc, i_loc, &
-                  1.0, INSERT_VALUES, ierr)
-         end do
-         call MatAssemblyBegin(cmat, MAT_FINAL_ASSEMBLY, ierr)
-         call MatAssemblyEnd(cmat, MAT_FINAL_ASSEMBLY, ierr)    
-   
+         if (.NOT. reuse_triggered) then
+            allocate(indices(local_rows))
+
+            ! Set the diagonal
+            counter = 1
+            do i_loc = global_row_start, global_row_end_plus_one-1
+               indices(counter) = i_loc
+               counter = counter + 1
+            end do
+            ! Set the diagonal
+            call MatSetPreallocationCOO(cmat, local_rows, indices, indices, ierr)
+            deallocate(indices)
+
+         end if            
+
+         ! Don't need to set the values as we do that directly with MatDiagonalSet
+         ! call MatSetValuesCOO(cmat, v, INSERT_VALUES, ierr)    
+         ! deallocate(v)         
+
          ! Set the diagonal to our polynomial
          call MatDiagonalSet(cmat, rhs_copy, INSERT_VALUES, ierr)
       
@@ -815,13 +835,9 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       mat_sparsity_match => matrix_powers(poly_sparsity_order)
 
       ! Copy in the highest unconstrained power
-      ! If not re-using
-      if (PetscMatIsNull(cmat)) then    
-         ! Duplicate & copy the matrix, but ensure there is a diagonal present
-         call mat_duplicate_copy_plus_diag(matrix_powers(poly_sparsity_order), cmat)
-      else
-         call MatCopy(matrix_powers(poly_sparsity_order), cmat, SAME_NONZERO_PATTERN, ierr)
-      end if
+      ! Duplicate & copy the matrix, but ensure there is a diagonal present
+      call mat_duplicate_copy_plus_diag(matrix_powers(poly_sparsity_order), reuse_triggered, cmat)
+
       ! We know we will never have non-zero locations outside of the highest constrained sparsity power 
       call MatSetOption(cmat, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_TRUE,  ierr)     
       call MatSetOption(cmat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr) 
@@ -852,8 +868,20 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          ! ~~~~
          ! Get the cols
          ! ~~~~
-         ! Much more annoying in older petsc
-         call MatMPIAIJGetSeqAIJ(mat_sparsity_match, Ad, Ao, icol, iicol, ierr)
+         call MatGetType(matrix, mat_type, ierr)
+         if (mat_type == "mpiaij") then
+            ! Much more annoying in older petsc
+            call MatMPIAIJGetSeqAIJ(mat_sparsity_match, Ad, Ao, icol, iicol, ierr)            
+         
+         ! If on the gpu, just do a convert to mpiaij format first
+         ! This will be expensive but the best we can do for now without writing our 
+         ! own version of this subroutine in cuda/kokkos
+         else
+            call MatConvert(mat_sparsity_match, MATMPIAIJ, MAT_INITIAL_MATRIX, temp_mat, ierr)
+            call MatMPIAIJGetSeqAIJ(temp_mat, Ad, Ao, icol, iicol, ierr) 
+            mat_sparsity_match => temp_mat
+         end if
+
          call MatGetSize(Ad, rows_ad, cols_ad, ierr)             
          ! We know the col size of Ao is the size of colmap, the number of non-zero offprocessor columns
          call MatGetSize(Ao, rows_ao, cols_ao, ierr)         
@@ -1250,6 +1278,10 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       do order = 2, poly_sparsity_order
          call MatDestroy(matrix_powers(order), ierr)
       end do
+      if (comm_size /= 1 .AND. mat_type /= "mpiaij") then
+         call MatDestroy(temp_mat, ierr)
+      end if
+
       deallocate(col_indices_off_proc_array)
       deallocate(cols, vals, cols_two, vals_two, vals_power_temp, vals_previous_power_temp, cols_index_one, cols_index_two)
 
@@ -1261,7 +1293,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine petsc_horner(mat, coefficients, x, y)
+   subroutine petsc_horner(mat, coefficients, temp_vec, x, y)
 
       ! Uses a horner iteration to apply
       ! y = (coeff(1) + coeff(2) * A + coeff(3) * A^2 + ...) x
@@ -1271,13 +1303,12 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       ! Input
       type(tMat), intent(in)    :: mat
       real, dimension(:)        :: coefficients
-      type(tVec)                :: x
+      type(tVec)                :: x, temp_vec
       type(tVec)                :: y
 
       ! Local
       integer :: order
       PetscErrorCode :: ierr      
-      type(tVec) :: temp_result
 
       ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1306,28 +1337,23 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
                x, ierr)
 
       ! If we are doing a first order polynomial or above, we have to do an extra matvec per order
-      if (size(coefficients, 1) > 1) then
-
-         ! Duplicate y to store the temporary copy
-         call VecDuplicate(y, temp_result, ierr)       
+      if (size(coefficients, 1) > 1) then     
 
          ! Loop down from the second highest order term down to the constant
          do order = size(coefficients, 1)-1, 1, -1
 
-            ! Copy y into temp_result
-            call VecCopy(y, temp_result, ierr)             
+            ! Copy y into temp_vec
+            call VecCopy(y, temp_vec, ierr)             
 
-            ! Now do y = A * temp_result
-            call MatMult(mat, temp_result, y, ierr)
+            ! Now do y = A * temp_vec
+            call MatMult(mat, temp_vec, y, ierr)
 
-            ! Compute y = A * temp_result + alpha_n-i-1 r_0
+            ! Compute y = A * temp_vec + alpha_n-i-1 r_0
             call VecAXPBY(y, &
                      coefficients(order), &
                      1.0, &
                      x, ierr)
          end do
-
-         call VecDestroy(temp_result, ierr)
       end if
 
    end subroutine petsc_horner     
@@ -1362,7 +1388,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       end if
 
       ! Call the Horner iteration
-      call petsc_horner(mat_ctx%mat, mat_ctx%coefficients, x, y)
+      call petsc_horner(mat_ctx%mat, mat_ctx%coefficients, mat_ctx%mf_temp_vec(MF_VEC_TEMP), x, y)
 
    end subroutine petsc_matvec_poly_mf      
 
@@ -1387,7 +1413,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       type(tMat), intent(inout)                         :: reuse_mat, inv_matrix
 
       ! Local variables
-      PetscInt :: global_row_start, global_row_end_plus_one
+      PetscInt :: global_row_start, global_row_end_plus_one, counter
       PetscInt :: global_rows, global_cols, local_rows, local_cols, j_loc
       integer :: comm_size, errorcode, order
       PetscErrorCode :: ierr      
@@ -1396,6 +1422,9 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       type(mat_ctxtype), pointer :: mat_ctx
       PetscInt :: one=1, zero=0
       logical :: reuse_triggered
+      MatType:: mat_type
+      PetscInt, allocatable, dimension(:) :: indices
+      real, allocatable, dimension(:) :: v       
 
       ! ~~~~~~       
 
@@ -1422,6 +1451,9 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
 
             ! Have to dynamically allocate this
             allocate(mat_ctx)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
+            mat_ctx%mat_ida = PETSC_NULL_MAT
+#endif             
 
             ! We pass in the polynomial coefficients as the context
             call MatCreateShell(MPI_COMM_MATRIX, local_rows, local_cols, global_rows, global_cols, &
@@ -1432,6 +1464,10 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
 
             call MatAssemblyBegin(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)
             call MatAssemblyEnd(inv_matrix, MAT_FINAL_ASSEMBLY, ierr) 
+
+            ! Create temporary vector we use during horner
+            ! Make sure to use matrix here to get the right type (as the shell doesn't know about gpus)            
+            call MatCreateVecs(matrix, mat_ctx%mf_temp_vec(MF_VEC_TEMP), PETSC_NULL_VEC, ierr)         
 
          ! Reusing 
          else
@@ -1449,24 +1485,22 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       ! ~~~~~~~~~~~~
       ! If we're here then we want an assembled approximate inverse
       ! ~~~~~~~~~~~~
+      reuse_triggered = .NOT. PetscMatIsNull(inv_matrix) 
 
       ! If we're zeroth order poly this is trivial as it's just the coefficient(1) on the diagonal
       if (poly_order == 0) then
 
          ! If not re-using
-         if (PetscMatIsNull(inv_matrix)) then
+         if (.NOT. reuse_triggered) then
 
-            if (comm_size/=1) then
-               call MatCreateAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                        global_rows, global_cols, &
-                        one, PETSC_NULL_INTEGER_ARRAY, &
-                        zero, PETSC_NULL_INTEGER_ARRAY, &
-                        inv_matrix, ierr)   
-            else
-               call MatCreateSeqAIJ(MPI_COMM_MATRIX, local_rows, local_cols, &
-                        one, PETSC_NULL_INTEGER_ARRAY, &
-                        inv_matrix, ierr)            
-            end if 
+            call MatCreate(MPI_COMM_MATRIX, inv_matrix, ierr)
+            call MatSetSizes(inv_matrix, local_rows, local_cols, &
+                             global_rows, global_cols, ierr)
+            ! Match the output type
+            call MatGetType(matrix, mat_type, ierr)
+            call MatSetType(inv_matrix, mat_type, ierr)
+            call MatSetUp(inv_matrix, ierr)                
+
          end if        
 
          ! Don't set any off processor entries so no need for a reduction when assembling
@@ -1476,13 +1510,27 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          ! Finish off the non-blocking all reduce to compute our coefficients
          call finish_gmres_polynomial_coefficients_power(poly_order, buffers, coefficients)
 
+         allocate(v(local_rows))
          ! Set the diagonal
-         do j_loc = global_row_start, global_row_end_plus_one-1
-            call MatSetValue(inv_matrix, j_loc, j_loc, &
-                  coefficients(1), INSERT_VALUES, ierr)
-         end do
-         call MatAssemblyBegin(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)
-         call MatAssemblyEnd(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)           
+         v = coefficients(1)      
+         
+         ! Set the diagonal
+         if (.NOT. reuse_triggered) then
+            allocate(indices(local_rows))
+
+            ! Set the diagonal
+            counter = 1
+            do j_loc = global_row_start, global_row_end_plus_one-1
+               indices(counter) = j_loc
+               counter = counter + 1
+            end do            
+            call MatSetPreallocationCOO(inv_matrix, local_rows, indices, indices, ierr)
+            deallocate(indices)
+
+         end if
+
+         call MatSetValuesCOO(inv_matrix, v, INSERT_VALUES, ierr)    
+         deallocate(v)                  
                            
          ! Then just return
          return
@@ -1490,13 +1538,9 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       ! For poly_order 1 and poly_sparsity_order 1 this is easy
       else if (poly_order == 1 .AND. poly_sparsity_order == 1) then
 
-         ! If not re-using
-         if (PetscMatIsNull(inv_matrix)) then
-            ! Duplicate & copy the matrix, but ensure there is a diagonal present
-            call mat_duplicate_copy_plus_diag(matrix, inv_matrix)
-         else
-            call MatCopy(matrix, inv_matrix, SAME_NONZERO_PATTERN, ierr)
-         end if
+         ! Duplicate & copy the matrix, but ensure there is a diagonal present
+         call mat_duplicate_copy_plus_diag(matrix, reuse_triggered, inv_matrix)
+
          ! Flags to prevent reductions when assembling (there are assembles in the shift)
          call MatSetOption(inv_matrix, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr) 
          call MatSetOption(inv_matrix, MAT_NEW_NONZERO_LOCATION_ERR, PETSC_TRUE,  ierr)     
@@ -1536,15 +1580,13 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
 
       ! If not re-using
       ! Copy in the initial matrix
-      reuse_triggered = .FALSE.
-      if (PetscMatIsNull(inv_matrix)) then
+      if (.NOT. reuse_triggered) then
          ! Duplicate & copy the matrix, but ensure there is a diagonal present
-         call mat_duplicate_copy_plus_diag(matrix, inv_matrix)
+         call mat_duplicate_copy_plus_diag(matrix, .FALSE., inv_matrix)
       else
          ! For the powers > 1 the pattern of the original matrix will be different
          ! to the resulting inverse
          call MatCopy(matrix, inv_matrix, DIFFERENT_NONZERO_PATTERN, ierr)
-         reuse_triggered = .TRUE.
       end if
 
       ! Don't set any off processor entries so no need for a reduction when assembling

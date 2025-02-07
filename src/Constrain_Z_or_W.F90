@@ -94,28 +94,16 @@ module constrain_z_or_w
       end do
 
       ! If we want to create a constant nullspace vector on the end of left_null_vecs or right_null_vecs
-      if (cst_nullspace) then      
-         call MatGetSize(input_mat, global_rows, global_cols, ierr)    
-         call MatGetLocalSize(input_mat, local_rows, local_cols, ierr)      
+      if (cst_nullspace) then           
 
          if (left) then
-            if (comm_size /= 1) then
-               call VecCreateMPI(MPI_COMM_MATRIX, local_rows, &
-                        global_rows, left_null_vecs(no_nullspace_vecs), ierr)                                                                                         
-            else
-               call VecCreateSeq(PETSC_COMM_SELF, local_rows, left_null_vecs(no_nullspace_vecs), ierr)          
-            end if     
+            call MatCreateVecs(input_mat, left_null_vecs(no_nullspace_vecs), PETSC_NULL_VEC, ierr)
             ! Set to the constant     
             call VecSet(left_null_vecs(no_nullspace_vecs), 1.0, ierr)
          end if
 
          if (right) then
-            if (comm_size /= 1) then
-               call VecCreateMPI(MPI_COMM_MATRIX, local_rows, &
-                        global_rows, right_null_vecs(no_nullspace_vecs), ierr)                                                                                         
-            else
-               call VecCreateSeq(PETSC_COMM_SELF, local_rows, right_null_vecs(no_nullspace_vecs), ierr)          
-            end if          
+            call MatCreateVecs(input_mat, right_null_vecs(no_nullspace_vecs), PETSC_NULL_VEC, ierr)
             ! Set to the constant
             call VecSet(right_null_vecs(no_nullspace_vecs), 1.0, ierr)
          end if         
@@ -156,12 +144,7 @@ module constrain_z_or_w
       call MatGetLocalSize(input_mat, local_rows, local_cols, ierr)
       
       ! Create the vecs
-      if (comm_size /= 1) then
-         call VecCreateMPI(MPI_COMM_MATRIX, local_rows, &
-                  global_rows, vec_rhs, ierr)                                                                                         
-      else
-         call VecCreateSeq(PETSC_COMM_SELF, local_rows, vec_rhs, ierr)          
-      end if 
+      call MatCreateVecs(input_mat, vec_rhs, PETSC_NULL_VEC, ierr)
 
       ! ~~~~~~~~~~~~
       ! Setup a petsc ksp to solve Ax = 0
@@ -248,7 +231,7 @@ module constrain_z_or_w
       integer :: errorcode, comm_size, null_vec
       PetscErrorCode :: ierr      
       MPI_Comm :: MPI_COMM_MATRIX
-      type(tMat) :: row_mat
+      type(tMat) :: row_mat, temp_mat_aij
       PetscInt, dimension(:), allocatable :: cols, col_indices_off_proc_array
       real, dimension(:), allocatable :: vals, row_vals, sols, diff
       logical :: approx_solve
@@ -263,6 +246,7 @@ module constrain_z_or_w
       real(c_double), pointer :: b_c_nonlocal(:), b_c_local(:)
       real, dimension(:,:), allocatable :: b_c_nonlocal_alloc, b_c_vals, bctbc, pseudo, temp_mat
       PetscInt, parameter :: one = 1, zero = 0
+      MatType:: mat_type
 
       ! ~~~~~~
 
@@ -331,17 +315,30 @@ module constrain_z_or_w
       ! We can do the comms for this once by using the VecScatter built into the mat
       ! ~~~~
 
+      call MatGetType(row_mat, mat_type, ierr)
+
       ! Nonlocal if needed
       if (comm_size /= 1) then
 
          ! Much more annoying in older petsc
-         call MatMPIAIJGetSeqAIJ(row_mat, Ad, Ao, icol, iicol, ierr)
+         if (mat_type == "mpiaij") then
+            call MatMPIAIJGetSeqAIJ(row_mat, Ad, Ao, icol, iicol, ierr)
+            A_array = row_mat%v
+
+         ! If on the gpu, just do a convert to mpiaij format first
+         ! This will be expensive but the best we can do for now without writing our 
+         ! own version of this subroutine in cuda/kokkos               
+         else
+            call MatConvert(row_mat, MATMPIAIJ, MAT_INITIAL_MATRIX, temp_mat_aij, ierr)
+            call MatMPIAIJGetSeqAIJ(temp_mat_aij, Ad, Ao, icol, iicol, ierr)             
+            A_array = temp_mat_aij%v
+         end if
+
          call MatGetSize(Ad, rows_ad, cols_ad, ierr)             
          ! We know the col size of Ao is the size of colmap, the number of non-zero offprocessor columns
          call MatGetSize(Ao, rows_ao, cols_ao, ierr)         
 
          ! For the column indices we need to take all the columns of row_mat
-         A_array = row_mat%v
          call get_colmap_c(A_array, colmap_c_ptr)
          call c_f_pointer(colmap_c_ptr, colmap_c, shape=[cols_ao])
 
@@ -535,6 +532,9 @@ module constrain_z_or_w
          z_or_w = new_z_or_w
       end if
 
+      if (comm_size /= 1 .AND. mat_type /= "mpiaij") then
+         call MatDestroy(temp_mat_aij, ierr)
+      end if
 
    end subroutine constrain_grid_transfer
 

@@ -265,7 +265,7 @@ module air_mg_setup
       type(tVec), dimension(:), allocatable, intent(inout)  :: left_null_vecs_c, right_null_vecs_c
 
       PetscErrorCode :: ierr
-      type(tMat) :: minus_mat, sparsity_mat_cf, A_ff_power, inv_dropped_Aff, smoothing_mat
+      type(tMat) :: minus_mat, sparsity_mat_cf, A_ff_power, inv_dropped_Aff, smoothing_mat, temp_identity
       type(tVec), dimension(:), allocatable   :: left_null_vecs_f, right_null_vecs_f
       real :: sol_start, sol_end, strong_r_tol
       integer :: comm_size, errorcode, order, i_loc
@@ -764,7 +764,7 @@ module air_mg_setup
             call VecDestroy(left_null_vecs_f(i_loc), ierr)       
          end do             
          deallocate(left_null_vecs_f)
-      end if   
+      end if                  
 
       ! ~~~~~~~~~~~~~~~~~~~
       ! ~~~~~~~~~~~~~~~~~~~
@@ -773,12 +773,46 @@ module air_mg_setup
       ! ~~~~~~~~~~~~~~~~~~~    
       call compute_R_from_Z(air_data%reuse(our_level)%reuse_mat(MAT_Z_DROP), global_row_start, &
                air_data%IS_fine_index(our_level), air_data%IS_coarse_index(our_level), &
-               air_data%reuse(our_level)%reuse_is(IS_R_Z_COLS), &
+               air_data%reuse(our_level)%reuse_is(IS_R_Z_FINE_COLS), &
                .TRUE., &
                reuse_grid_transfer, &
                air_data%restrictors(our_level))
 
-      call timer_finish(TIMER_ID_AIR_RESTRICT)     
+      call timer_finish(TIMER_ID_AIR_RESTRICT)      
+
+      call timer_start(TIMER_ID_AIR_IDENTIY)            
+
+      ! ~~~~~~~~~
+      ! Previously in the FC smoothing (see dba0a996be147698d7f9ce07741e7d925001ea66) 
+      ! we used VecISCopy to pull out fine and coarse points
+      ! That copies back to the cpu if doing gpu, so now we just build identity restrictors/prolongators
+      ! of various sizes and do matmults
+      ! ~~~~~~~~~              
+      if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then
+
+         ! Build fine to full injector
+         call generate_identity_rect(A, air_data%A_fc(our_level), air_data%IS_fine_index(our_level), &
+                  air_data%i_fine_full(our_level))
+
+         ! Build coarse to full injector
+         call generate_identity_rect(A, air_data%A_cf(our_level), air_data%IS_coarse_index(our_level), &
+                  air_data%i_coarse_full(our_level))
+                  
+         ! Build identity that sets fine in full to zero
+         call generate_identity_is(A, air_data%IS_coarse_index(our_level), &
+                  air_data%i_coarse_full_full(our_level))               
+
+         ! If we're C point smoothing as well
+         if (air_data%options%one_c_smooth .AND. &
+                  .NOT. air_data%options%full_smoothing_up_and_down) then     
+            
+            ! Build identity that sets coarse in full to zero
+            call generate_identity_is(A, air_data%IS_fine_index(our_level), &
+                  air_data%i_fine_full_full(our_level))                         
+         end if 
+      end if       
+      
+      call timer_finish(TIMER_ID_AIR_IDENTIY)            
       
       ! Delete temporary if not reusing
       if (.NOT. air_data%options%reuse_sparsity) then
@@ -787,9 +821,9 @@ module air_mg_setup
          air_data%reuse(our_level)%reuse_mat(MAT_Z_DROP) = PETSC_NULL_MAT
 #endif         
 
-         call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_R_Z_COLS), ierr)
+         call ISDestroy(air_data%reuse(our_level)%reuse_is(IS_R_Z_FINE_COLS), ierr)
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)         
-         air_data%reuse(our_level)%reuse_is(IS_R_Z_COLS) = PETSC_NULL_IS
+         air_data%reuse(our_level)%reuse_is(IS_R_Z_FINE_COLS) = PETSC_NULL_IS
 #endif
       end if      
       
@@ -991,19 +1025,31 @@ module air_mg_setup
       our_level = mat_ctx%our_level
       air_data => mat_ctx%air_data
 
-      ! This is our b_f
-      call VecISCopy(b, air_data%is_fine_index(our_level), SCATTER_REVERSE, air_data%temp_vecs_fine(4)%array(our_level), ierr)         
+      ! ~~~~~~~~~
+      ! Previously (see dba0a996be147698d7f9ce07741e7d925001ea66) we used VecISCopy to pull
+      ! out fine and coarse points
+      ! That copies back to the cpu if doing gpu, so now we just build identity restrictors/prolongators
+      ! of various sizes and do matmults
+      ! ~~~~~~~~~       
+
+      ! Get out just the fine points from b - this is b_f
+      call MatMult(air_data%i_fine_full(our_level), b, &
+                        air_data%temp_vecs_fine(4)%array(our_level), ierr)                          
 
       if (.NOT. guess_zero) then 
 
          ! Get out just the fine points from x - this is x_f^0
-         call VecISCopy(x, air_data%is_fine_index(our_level), SCATTER_REVERSE, air_data%temp_vecs_fine(1)%array(our_level), ierr)
-         ! ! Get the coarse points from x - this is x_c^0
-         call VecISCopy(x, air_data%is_coarse_index(our_level), SCATTER_REVERSE, air_data%temp_vecs_coarse(1)%array(our_level), ierr)         
-         
+         call MatMult(air_data%i_fine_full(our_level), x, &
+                           air_data%temp_vecs_fine(1)%array(our_level), ierr)       
+                           
+         ! Get the coarse points from x - this is x_c^0
+         call MatMult(air_data%i_coarse_full(our_level), x, &
+                  air_data%temp_vecs_coarse(1)%array(our_level), ierr)                             
+
          ! Compute Afc * x_c^0 - this never changes
          call MatMult(air_data%A_fc(our_level), air_data%temp_vecs_coarse(1)%array(our_level), &
-                     air_data%temp_vecs_fine(2)%array(our_level), ierr)
+                  air_data%temp_vecs_fine(2)%array(our_level), ierr)               
+         
          ! This is b_f - A_fc * x_c^0 - this never changes
          call VecAXPY(air_data%temp_vecs_fine(4)%array(our_level), -1.0, air_data%temp_vecs_fine(2)%array(our_level), ierr)                      
 
@@ -1013,7 +1059,7 @@ module air_mg_setup
          ! temp_vecs_fine(4)%array just has b_f in it
          call VecSet(air_data%temp_vecs_fine(3)%array(our_level), 0.0, ierr)
        
-      end if
+      end if     
 
       do f_its = 1, air_data%options%maxits_a_ff
 
@@ -1038,17 +1084,32 @@ module air_mg_setup
 
       end do
 
-      ! ! Reverse put fine x_f back into x
-      ! If we're just doing F point smoothing, don't change the coarse points    
-      call VecISCopy(x, air_data%is_fine_index(our_level), SCATTER_FORWARD, air_data%temp_vecs_fine(1)%array(our_level), ierr)      
+      ! ~~~~~~~~
+      ! Reverse put fine x_f back into x
+      ! ~~~~~~~~
+
+      ! Copy x but only the non-coarse points from x are non-zero
+      ! ie get x_c but in a vec of full size 
+      call MatMult(air_data%i_coarse_full_full(our_level), x, &
+                        air_data%temp_vecs(1)%array(our_level), ierr)        
+
+      ! If we're just doing F point smoothing, don't change the coarse points 
+      ! Not sure why we need the vecset, but on the gpu x is twice the size it should be if we don't
+      ! x should be overwritten by the MatMultTransposeAdd
+      call VecSet(x, 0.0, ierr)
+      call MatMultTransposeAdd(air_data%i_fine_full(our_level), &
+            air_data%temp_vecs_fine(1)%array(our_level), &
+            air_data%temp_vecs(1)%array(our_level), &
+            x, ierr)
 
       ! ~~~~~~~~~~~~~~~~
       ! If we want to let's do a single C-point smooth
       ! ~~~~~~~~~~~~~~~~
-      if (air_data%options%one_c_smooth) then
+      if (air_data%options%one_c_smooth) then        
 
-         ! this is b_c
-         call VecISCopy(b, air_data%is_coarse_index(our_level), SCATTER_REVERSE, air_data%temp_vecs_coarse(4)%array(our_level), ierr)    
+         ! Get out just the coarse points from b - this is b_c
+         call MatMult(air_data%i_coarse_full(our_level), b, &
+                  air_data%temp_vecs_coarse(4)%array(our_level), ierr)           
 
          ! Compute Acf * x_f^0 - this never changes
          call MatMult(air_data%A_cf(our_level), air_data%temp_vecs_fine(1)%array(our_level), &
@@ -1058,7 +1119,7 @@ module air_mg_setup
 
          ! Then A_cc * x_c^n - this changes at each richardson iteration
          call MatMult(air_data%A_cc(our_level), air_data%temp_vecs_coarse(1)%array(our_level), &
-                     air_data%temp_vecs_coarse(3)%array(our_level), ierr)  
+                     air_data%temp_vecs_coarse(3)%array(our_level), ierr)       
 
          ! This is b_c - A_cf * x_f^0 - A_cc * x_c^n
          call VecAYPX(air_data%temp_vecs_coarse(3)%array(our_level), -1.0, air_data%temp_vecs_coarse(4)%array(our_level), ierr)          
@@ -1070,8 +1131,22 @@ module air_mg_setup
          ! Compute x_c^n + A_cc^{-1} (b_c - A_cf * x_f^0 - A_cc * x_c^n)
          call VecAXPY(air_data%temp_vecs_coarse(1)%array(our_level), 1.0, air_data%temp_vecs_coarse(2)%array(our_level), ierr)         
 
-         ! ! Reverse put fine x_c back into x
-         call VecISCopy(x, air_data%is_coarse_index(our_level), SCATTER_FORWARD, air_data%temp_vecs_coarse(1)%array(our_level), ierr)        
+         ! ~~~~~~~~
+         ! Reverse put coarse x_c back into x
+         ! ~~~~~~~~
+
+         ! Copy x but only the non-fine points from x are non-zero
+         ! ie get x_f but in a vec of full size 
+         call MatMult(air_data%i_fine_full_full(our_level), x, &
+                           air_data%temp_vecs(1)%array(our_level), ierr)        
+
+         ! Not sure why we need the vecset, but on the gpu x is twice the size it should be if we don't
+         ! x should be overwritten by the MatMultTransposeAdd
+         call VecSet(x, 0.0, ierr)
+         call MatMultTransposeAdd(air_data%i_coarse_full(our_level), &
+               air_data%temp_vecs_coarse(1)%array(our_level), &
+               air_data%temp_vecs(1)%array(our_level), &
+               x, ierr)         
 
       end if 
       
@@ -1108,7 +1183,7 @@ module air_mg_setup
       PetscErrorCode      :: ierr
       MPI_Comm            :: MPI_COMM_MATRIX
       real                :: ratio_local_nnzs_off_proc
-      logical             :: big_enough, trigger_proc_agglom, proc_agglom_exists
+      logical             :: big_enough, trigger_proc_agglom, proc_agglom_exists, reusing_temp_mg_vecs
       type(tMat)          :: coarse_matrix_temp
       type(tKSP)          :: ksp_smoother_up, ksp_smoother_down, ksp_coarse_solver
       type(tPC)           :: pc_smoother_up, pc_smoother_down, pc_coarse_solver
@@ -1119,6 +1194,7 @@ module air_mg_setup
       type(tVec), dimension(:), allocatable :: left_null_vecs, right_null_vecs
       type(tVec), dimension(:), allocatable :: left_null_vecs_c, right_null_vecs_c
       VecScatter :: vec_scatter
+      VecType :: vec_type
 
       ! ~~~~~~     
 
@@ -1139,6 +1215,7 @@ module air_mg_setup
       proc_stride = 1
       ! Copy the top grid matrix pointer
       air_data%coarse_matrix(1) = pmat
+      reusing_temp_mg_vecs = .TRUE.
 
       ! ~~~~~~~~~~~~~~~~~~~~~
       ! Check if the user has provided a near nullspace before we do anything
@@ -1212,57 +1289,22 @@ module air_mg_setup
             ! Output stats on the coarsening
             if (air_data%options%print_stats_timings .AND. comm_rank == 0) print *, "~~~~~~~~~~~~ Level ", our_level
             if (air_data%options%print_stats_timings  .AND. comm_rank == 0) print *, "Global rows", global_rows, "Global F-points", global_fine_is_size, "Global C-points", global_coarse_is_size   
-
-            ! ~~~~~~~
-            ! Temporary vecs we use in the smoother
-            ! ~~~~~~~
-            ! If we haven't built them already
-            if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then
-               if (comm_size /= 1) then
-                  call VecCreateMPI(MPI_COMM_MATRIX, local_fine_is_size, &
-                           global_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)     
-                  call VecCreateMPI(MPI_COMM_MATRIX, local_coarse_is_size, &
-                           global_coarse_is_size, air_data%temp_vecs_coarse(1)%array(our_level), ierr)                                                                      
-                  ! We need this to trigger the coarse solver
-                  if (our_level == no_levels - 1) then
-                     call VecCreateMPI(MPI_COMM_MATRIX, local_coarse_is_size, &
-                              global_coarse_is_size, air_data%temp_vecs_fine(1)%array(our_level+1), ierr)                      
-                  end if                  
-               else
-                  call VecCreateSeq(PETSC_COMM_SELF, local_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)          
-                  call VecCreateSeq(PETSC_COMM_SELF, local_coarse_is_size, air_data%temp_vecs_coarse(1)%array(our_level), ierr) 
-                  ! We need this to trigger the coarse solver
-                  if (our_level == no_levels - 1) then
-                     call VecCreateSeq(PETSC_COMM_SELF, local_coarse_is_size, air_data%temp_vecs_fine(1)%array(our_level+1), ierr)          
-                  end if
-               end if
-            end if
-               
+       
          ! If this coarse grid is smaller than our minimum, then we are done coarsening
          else
 
             ! Get the size of the previous coarse grid as that is now our bottom grid
-            if (comm_size /= 1) then
-
-               ! If we're on the top grid and we have coarsened fast enough to not have a second level
-               ! should only happen on very small problems               
-               if (our_level == 1) then
-                  global_fine_is_size = global_rows
-                  local_fine_is_size = local_rows
-               else
-                  call ISGetSize(air_data%IS_coarse_index(our_level-1), global_fine_is_size, ierr)
-                  call ISGetLocalSize(air_data%IS_coarse_index(our_level-1), local_fine_is_size, ierr)
-               end if
-               call VecCreateMPI(MPI_COMM_MATRIX, local_fine_is_size, &
-                        global_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)  
+            ! If we're on the top grid and we have coarsened fast enough to not have a second level
+            ! should only happen on very small problems               
+            if (our_level == 1) then
+               global_fine_is_size = global_rows
+               local_fine_is_size = local_rows
             else
-               if (our_level == 1) then
-                  global_fine_is_size = global_rows
-               else
-                  call ISGetSize(air_data%IS_coarse_index(our_level-1), global_fine_is_size, ierr)
-               end if
-               call VecCreateSeq(PETSC_COMM_SELF, global_fine_is_size, air_data%temp_vecs_fine(1)%array(our_level), ierr)    
+               call ISGetSize(air_data%IS_coarse_index(our_level-1), global_fine_is_size, ierr)
+               call ISGetLocalSize(air_data%IS_coarse_index(our_level-1), local_fine_is_size, ierr)
             end if
+            call MatCreateVecs(air_data%A_fc(our_level-1), &
+                     air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)
 
             if (air_data%options%constrain_z) then
                ! Destroy our copy of the left near nullspace vectors
@@ -1287,26 +1329,6 @@ module air_mg_setup
             exit level_loop
 
          end if    
-
-         ! ~~~~~~~~~~~~~~
-         ! If we got here then we want to generate a new coarse matrix
-         ! ~~~~~~~~~~~~~~
-
-         ! Generate the temporary vectors we use to smooth with
-         ! If we haven't built them already
-         if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then         
-            call VecDuplicate(air_data%temp_vecs_fine(1)%array(our_level), air_data%temp_vecs_fine(2)%array(our_level), ierr)
-            call VecDuplicate(air_data%temp_vecs_fine(1)%array(our_level), air_data%temp_vecs_fine(3)%array(our_level), ierr)
-            call VecDuplicate(air_data%temp_vecs_fine(1)%array(our_level), air_data%temp_vecs_fine(4)%array(our_level), ierr)        
-
-            ! If we're doing C point smoothing we need some extra temporaries
-            if (air_data%options%one_c_smooth .AND. &
-                     .NOT. air_data%options%full_smoothing_up_and_down) then
-               call VecDuplicate(air_data%temp_vecs_coarse(1)%array(our_level), air_data%temp_vecs_coarse(2)%array(our_level), ierr)
-               call VecDuplicate(air_data%temp_vecs_coarse(1)%array(our_level), air_data%temp_vecs_coarse(3)%array(our_level), ierr)
-               call VecDuplicate(air_data%temp_vecs_coarse(1)%array(our_level), air_data%temp_vecs_coarse(4)%array(our_level), ierr)         
-            end if
-         end if
 
          ! ~~~~~~~~~~~~~~     
          ! Now let's go and build all our operators
@@ -1365,7 +1387,45 @@ module air_mg_setup
          ! Extract the submatrices and start the comms to compute the approximate inverses
          ! ~~~~~~~~~         
          call get_submatrices_start_poly_coeff_comms(air_data%coarse_matrix(our_level), &
-               our_level, air_data)          
+               our_level, air_data)         
+               
+         ! ~~~~~~~
+         ! Temporary vecs we use in the smoother
+         ! ~~~~~~~
+         ! If we haven't built them already
+         if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then
+            call MatCreateVecs(air_data%A_ff(our_level), &
+                     air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)
+            call MatCreateVecs(air_data%A_fc(our_level), &
+                     air_data%temp_vecs_coarse(1)%array(our_level), PETSC_NULL_VEC, ierr)  
+            call MatCreateVecs(air_data%coarse_matrix(our_level), &
+                     air_data%temp_vecs(1)%array(our_level), PETSC_NULL_VEC, ierr)                                                  
+
+            if (our_level == no_levels - 1) then
+               call MatCreateVecs(air_data%A_fc(our_level), PETSC_NULL_VEC, &
+                        air_data%temp_vecs_fine(1)%array(our_level+1), ierr)                                         
+            end if                  
+         end if   
+         
+         ! ~~~~~~~~~~~~~~
+         ! If we got here then we want to generate a new coarse matrix
+         ! ~~~~~~~~~~~~~~
+
+         ! Generate the temporary vectors we use to smooth with
+         ! If we haven't built them already
+         if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then         
+            call VecDuplicate(air_data%temp_vecs_fine(1)%array(our_level), air_data%temp_vecs_fine(2)%array(our_level), ierr)
+            call VecDuplicate(air_data%temp_vecs_fine(1)%array(our_level), air_data%temp_vecs_fine(3)%array(our_level), ierr)
+            call VecDuplicate(air_data%temp_vecs_fine(1)%array(our_level), air_data%temp_vecs_fine(4)%array(our_level), ierr)        
+
+            ! If we're doing C point smoothing we need some extra temporaries
+            if (air_data%options%one_c_smooth .AND. &
+                     .NOT. air_data%options%full_smoothing_up_and_down) then
+               call VecDuplicate(air_data%temp_vecs_coarse(1)%array(our_level), air_data%temp_vecs_coarse(2)%array(our_level), ierr)
+               call VecDuplicate(air_data%temp_vecs_coarse(1)%array(our_level), air_data%temp_vecs_coarse(3)%array(our_level), ierr)
+               call VecDuplicate(air_data%temp_vecs_coarse(1)%array(our_level), air_data%temp_vecs_coarse(4)%array(our_level), ierr)         
+            end if
+         end if         
 
          ! ~~~~~~~~~
          ! Finish the non-blocking comms and build the approximate inverse, then the 
@@ -1565,11 +1625,16 @@ module air_mg_setup
                   ! ~~~~~~~~~~~~~~~~~~     
                   if (air_data%options%constrain_z .OR. air_data%options%constrain_w) then 
 
-                     ! Can't use matcreatevecs here, if we coarsen down to one process it returns a serial vector
                      call MatGetSize(air_data%coarse_matrix(our_level_coarse), global_rows_repart, global_cols_repart, ierr)
                      call MatGetLocalSize(air_data%coarse_matrix(our_level_coarse), local_rows_repart, local_cols_repart, ierr)
-                     call VecCreateMPI(MPI_COMM_MATRIX, local_rows_repart, &
-                              global_rows_repart, temp_coarse_vec, ierr)  
+                     ! Can't use matcreatevecs here on coarse_matrix(our_level_coarse)
+                     ! if the coarser matrix has gone down to one process it returns a serial vector
+                     ! but we have to have the same type for the scatter (ie mpi and mpi)
+                     call VecGetType(left_null_vecs(1), vec_type, ierr)
+                     call VecCreate(MPI_COMM_MATRIX, temp_coarse_vec, ierr)
+                     call VecSetSizes(temp_coarse_vec, local_rows_repart, global_rows_repart, ierr)
+                     call VecSetType(temp_coarse_vec, vec_type, ierr)
+                     call VecSetUp(temp_coarse_vec, ierr)
 
                      ! Can't seem to pass in PETSC_NULL_IS to the vecscattercreate in petsc 3.14
                      call VecGetLocalSize(temp_coarse_vec, local_vec_size, ierr)
@@ -1636,6 +1701,31 @@ module air_mg_setup
             end if
          end if
 
+         ! ~~~~~~~~~~~~~~
+         ! Go and create the temporary vecs for our PCMG on this level
+         ! It would normally create these automatically during pcmg setup
+         ! We allocate it as we need it to have the same type as our coarse matrices
+         ! even though we sometimes delete our coarse matrix and use a matshell instead
+         ! There is a MatShellSetVecType in C we could use to tell the matshell what type 
+         ! to produce, but that isn't available in fortran
+         ! ~~~~~~~~~~~~~~
+         ! If we're not re-using
+         if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then
+            reusing_temp_mg_vecs = .FALSE.
+            if (our_level == 1) then
+               ! Only need r on the top grid
+               call MatCreateVecs(air_data%coarse_matrix(our_level), &
+                        air_data%temp_vecs_r(our_level), PETSC_NULL_VEC, ierr)   
+            else
+               call MatCreateVecs(air_data%coarse_matrix(our_level), &
+                        air_data%temp_vecs_b(our_level), PETSC_NULL_VEC, ierr)                 
+               call VecDuplicate(air_data%temp_vecs_b(our_level), air_data%temp_vecs_x(our_level), ierr)                        
+               call VecDuplicate(air_data%temp_vecs_b(our_level), air_data%temp_vecs_r(our_level), ierr)
+            end if
+         end if
+
+         ! ~~~~~~~~~~~~~~
+
          air_data%allocated_matrices_A_ff(our_level) = .TRUE.
          if (air_data%options%one_c_smooth .AND. &
                   .NOT. air_data%options%full_smoothing_up_and_down) then          
@@ -1662,6 +1752,9 @@ module air_mg_setup
          allocate(mat_ctx)
          mat_ctx%our_level = our_level
          mat_ctx%air_data => air_data
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
+         mat_ctx%mat_ida = PETSC_NULL_MAT
+#endif         
 
          if (.NOT. air_data%options%full_smoothing_up_and_down) then
             call MatCreateShell(MPI_COMM_MATRIX, local_rows, local_cols, global_rows, global_cols, &
@@ -1748,6 +1841,27 @@ module air_mg_setup
             ! Level is reverse ordering
             our_level = no_levels - int(petsc_level)
             our_level_coarse = our_level + 1
+
+            ! Set the temporary storage in the PCMG
+            if (.NOT. reusing_temp_mg_vecs) then
+               if (our_level == 1) then
+                  ! Only need r on the top grid
+                  call PCMGSetR(pcmg, petsc_level, air_data%temp_vecs_r(our_level), ierr)
+                  ! The reference counter is increased by PCMGSetRhs etc, so we have to destroy 
+                  ! our copy, the pcmg then owns this memory
+                  call VecDestroy(air_data%temp_vecs_r(our_level), ierr)              
+               else
+                  ! We don't bother creating this space on the coarse grid
+                  ! as we always have an assembled mat and the pcmg will auto 
+                  ! create the right vec types then
+                  call PCMGSetRhs(pcmg, petsc_level, air_data%temp_vecs_b(our_level), ierr)
+                  call VecDestroy(air_data%temp_vecs_b(our_level), ierr)
+                  call PCMGSetR(pcmg, petsc_level, air_data%temp_vecs_r(our_level), ierr)
+                  call VecDestroy(air_data%temp_vecs_r(our_level), ierr)
+                  call PCMGSetX(pcmg, petsc_level, air_data%temp_vecs_x(our_level), ierr)
+                  call VecDestroy(air_data%temp_vecs_x(our_level), ierr)
+               end if
+            end if
 
             ! Set the restrictor/prolongator
             if (.NOT. air_data%options%symmetric) then
@@ -1898,6 +2012,20 @@ module air_mg_setup
          call PCSetUp(pc_coarse_solver, ierr)
          call KSPSetUp(ksp_coarse_solver, ierr)   
 
+         ! Set the temporary storage in the PCMG for the coarsest grid
+         if (.NOT. reusing_temp_mg_vecs) then
+            call MatCreateVecs(air_data%coarse_matrix(no_levels), &
+                     air_data%temp_vecs_b(no_levels), PETSC_NULL_VEC, ierr)                 
+            call VecDuplicate(air_data%temp_vecs_b(no_levels), air_data%temp_vecs_x(no_levels), ierr)             
+
+            ! Don't need r on the coarsest grid
+            call PCMGSetRhs(pcmg, petsc_level, air_data%temp_vecs_b(no_levels), ierr)
+            call VecDestroy(air_data%temp_vecs_b(no_levels), ierr)
+            call PCMGSetX(pcmg, petsc_level, air_data%temp_vecs_x(no_levels), ierr)
+            call VecDestroy(air_data%temp_vecs_x(no_levels), ierr)            
+         end if
+
+
       ! If we've only got one level just precondition with jacobi
       else
          call PCSetType(pcmg, PCJACOBI, ierr)
@@ -1934,7 +2062,6 @@ module air_mg_setup
       integer :: our_level
       PetscErrorCode :: ierr
       MatType:: mat_type
-      type(mat_ctxtype), pointer :: mat_ctx
       integer :: i_loc
       logical :: reuse
       ! ~~~~~~    
@@ -1968,6 +2095,12 @@ module air_mg_setup
                   if (.NOT. air_data%options%symmetric) then
                      call MatDestroy(air_data%restrictors(our_level), ierr)
                   end if                  
+
+                  call MatDestroy(air_data%i_fine_full(our_level), ierr)
+                  call MatDestroy(air_data%i_coarse_full(our_level), ierr)
+                  call MatDestroy(air_data%i_fine_full_full(our_level), ierr)
+                  call MatDestroy(air_data%i_coarse_full_full(our_level), ierr)
+
                   air_data%allocated_matrices_A_ff(our_level) = .FALSE.
                   call reset_inverse_mat(air_data%inv_A_ff(our_level))
                   if (associated(air_data%inv_A_ff_poly_data(our_level)%coefficients)) then
@@ -1979,6 +2112,7 @@ module air_mg_setup
                      air_data%inv_A_ff_poly_data_dropped(our_level)%coefficients => null()
                   end if
 
+                  call VecDestroy(air_data%temp_vecs(1)%array(our_level), ierr)
                   call VecDestroy(air_data%temp_vecs_fine(1)%array(our_level), ierr)
                   call VecDestroy(air_data%temp_vecs_fine(2)%array(our_level), ierr)
                   call VecDestroy(air_data%temp_vecs_fine(3)%array(our_level), ierr)
@@ -2086,7 +2220,6 @@ module air_mg_setup
 
       integer :: our_level
       MatType:: mat_type
-      type(mat_ctxtype), pointer :: mat_ctx
       ! ~~~~~~    
 
       call reset_air_data(air_data)
@@ -2154,6 +2287,11 @@ module air_mg_setup
          deallocate(air_data%restrictors)
          deallocate(air_data%prolongators)  
 
+         deallocate(air_data%i_fine_full)
+         deallocate(air_data%i_coarse_full) 
+         deallocate(air_data%i_fine_full_full)
+         deallocate(air_data%i_coarse_full_full)                   
+
          deallocate(air_data%coarse_matrix)
          deallocate(air_data%A_ff)
          deallocate(air_data%inv_A_ff)
@@ -2170,6 +2308,7 @@ module air_mg_setup
          deallocate(air_data%allocated_is)
          deallocate(air_data%allocated_coarse_matrix)         
     
+         deallocate(air_data%temp_vecs(1)%array)
          deallocate(air_data%temp_vecs_fine(1)%array)
          deallocate(air_data%temp_vecs_fine(2)%array)
          deallocate(air_data%temp_vecs_fine(3)%array)
@@ -2178,6 +2317,10 @@ module air_mg_setup
          deallocate(air_data%temp_vecs_coarse(2)%array)
          deallocate(air_data%temp_vecs_coarse(3)%array)
          deallocate(air_data%temp_vecs_coarse(4)%array)
+
+         deallocate(air_data%temp_vecs_b)
+         deallocate(air_data%temp_vecs_x)
+         deallocate(air_data%temp_vecs_r)
          
          deallocate(air_data%reuse)
          

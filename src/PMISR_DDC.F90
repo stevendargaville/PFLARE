@@ -175,6 +175,7 @@ module pmisr_ddc
       ! If in parallel we're going to have to do scatters
       if (comm_size/=1) then
 
+         ! This is fine being mpi type specifically as strength_mat is always a mataij
          call VecCreateMPIWithArray(MPI_COMM_MATRIX, one, &
             local_rows, global_rows, cf_markers_local_real, cf_markers_vec, ierr)            
 
