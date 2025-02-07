@@ -23,7 +23,8 @@ LDFLAGS_INPUT := $(LDFLAGS)
 LDFLAGS 		:= -L$(LIBDIR) -lpflare -Wl,-rpath,$(LIBDIR)
 # Include petsc
 LDFLAGS     := $(LDFLAGS) -L$(PETSC_DIR)/$(PETSC_ARCH)/lib -lpetsc -Wl,-rpath,$(PETSC_DIR)/$(PETSC_ARCH)/lib
-# Have to link to blas, lapack 
+# Have to link to blas, lapack - on cray machines often have to remove the explicit links to blas
+# and lapack as the compiler wrappers do that
 LDFLAGS     := $(LDFLAGS) -lblas -llapack -lm
 # Given we have C files in our library need to add gfortran
 LDFLAGS     := $(LDFLAGS) -lgfortran
