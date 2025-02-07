@@ -3,10 +3,25 @@
 # Makefile for PFLARE
 #
 # Must have defined PETSC_DIR and PETSC_ARCH before calling
-# PETSc must be at least version 3.14
+# PETSc must be at least version 3.15
 # ~~~~~~~~~~~~~~~~~
 
-# Compiler options - need both a fortran and cpp compiler
+# The Makefiles in PFLARE are written for GNU compilers
+# For LLVM compilers (e.g., flang or amdflang), replace flags in this Makefile by calling: 
+#  sed -i -e 's/-fdefault-double-8 -ffixed-line-length-none -ffree-line-length-none//g' Makefile
+# and the tests/Makefile by calling:
+#  sed -i -e 's/-fdefault-double-8 -ffixed-line-length-none -ffree-line-length-none//g' tests/Makefile
+#    
+# For Cray compilers, replace flags in this Makefile by calling: 
+#  sed -i -e 's/-fdefault-real-8/-s real64/g' Makefile
+#  sed -i -e 's/-fdefault-double-8 -ffixed-line-length-none -ffree-line-length-none//g' Makefile
+#  sed -i -e 's/-shared/-shared -Wl,--allow-multiple-definition/g' Makefile
+# and the tests/Makefile by calling:
+#  sed -i -e 's/-fdefault-real-8/-s real64/g' tests/Makefile
+#  sed -i -e 's/-fdefault-double-8 -ffixed-line-length-none -ffree-line-length-none//g' tests/Makefile
+#  sed -i -e 's/-lblas -llapack//g' tests/Makefile
+ 
+# Compiler options - need both a fortran and c compiler
 # with appropriate mpi wrappings
 
 # If you want to override these just pass in the values when you call this make
