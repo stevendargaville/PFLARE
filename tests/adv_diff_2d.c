@@ -184,7 +184,6 @@ int main(int argc,char **argv)
 
   // Do a preliminary KSPSolve so all the vecs and mats get copied to the gpu
   // before the solve we're trying to time
-  PetscPrintf(PETSC_COMM_WORLD, "Preliminary KSPSolve so GPU copies occur \n");
   ierr = PetscLogStagePush(gpu_copy);CHKERRQ(ierr);
   ierr = KSPSolve(ksp,b,x);CHKERRQ(ierr);
   ierr = PetscLogStagePop();CHKERRQ(ierr);
@@ -193,7 +192,6 @@ int main(int argc,char **argv)
   // We set x to 1 rather than random as the vecrandom doesn't yet have a
   // gpu implementation and we don't want a copy occuring back to the cpu
   ierr = VecSet(x, 1.0);CHKERRQ(ierr);
-  PetscPrintf(PETSC_COMM_WORLD, "Timed KSPSolve \n");
   ierr = KSPSolve(ksp,b,x);CHKERRQ(ierr);
 
   // Write out the iteration count

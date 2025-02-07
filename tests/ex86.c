@@ -156,7 +156,6 @@ int main(int argc, char **args)
   KSPGetPC(ksp, &pc);
   VecSet(x, 1.0);
 
-  PetscPrintf(PETSC_COMM_WORLD, "Preliminary KSPSolve so GPU copies occur \n");
   PetscLogStagePush(gpu_copy);
   KSPSolve(ksp, b, x);
   PetscLogStagePop();
@@ -167,7 +166,6 @@ int main(int argc, char **args)
   // We set x to 1 rather than random as the vecrandom doesn't yet have a
   // gpu implementation and we don't want a copy occuring back to the cpu     
   VecSet(x, 1.0); 
-  PetscPrintf(PETSC_COMM_WORLD, "Timed KSPSolve \n");
   KSPSolve(ksp, b, x);
 
   KSPGetIterationNumber(ksp,&its);
