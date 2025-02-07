@@ -401,7 +401,7 @@ Running a test with OpenMP then requires setting the ``OMP_NUM_THREADS`` variabl
 
 ## GPU support           
 
-If PETSc has been configured with GPU support (e.g., CUDA, Kokkos, etc) then PCPFLAREINV and PCAIR support GPUs. This relies on the matrix and vector types being set correctly by the user, which is typically done through command line options. By default the setup/solve occurs on the CPU. For example, if we solve the 1D advection problem ``tests/ex86`` using a 30th order GMRES polynomial applied matrix-free with the command line options:
+If PETSc has been configured with GPU support (e.g., CUDA, HIP, Kokkos) then PCPFLAREINV and PCAIR support GPUs. This relies on the matrix and vector types being set correctly by the user, which is typically done through command line options. By default the setup/solve occurs on the CPU. For example, if we solve the 1D advection problem ``tests/ex86`` using a 30th order GMRES polynomial applied matrix-free with the command line options:
 
 ``./ex86.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30``
 
@@ -411,6 +411,10 @@ If PETSc has been configured with CUDA support for example:
 
 ``./ex86.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijcusparse -vec_type cuda``
 
+Or if PETSc has been configured with HIP support:
+
+``./ex86.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijhipsparse -vec_type hip``
+
 Or if PETSc has been configured with KOKKOS support:
 
 ``./ex86.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijkokkos -vec_type kokkos``
@@ -419,7 +423,7 @@ For both PCPFLAREINV and PCAIR, the entirity of the solve happens on GPUs withou
 
 The setup however occurs on both the CPU and GPU depending on the options used, with copies occuring between the two where needed. The command line option  ``-log_view`` shows how many copies to/from the CPU/GPU occur.
 
-Currently the setup can be quite slow, with substantial differences between the CUDA and KOKKOS setup performance. Development of the setup on the GPU is ongoing, please get in touch if you would like to contribute. The main areas requiring development are:
+Currently the setup can be quite slow, with substantial differences between the CUDA, HIP and KOKKOS setup performance. Development of the setup on the GPU is ongoing, please get in touch if you would like to contribute. The main areas requiring development are:
 
 1) CF splittings on the GPU - Porting PMISR DDC should only require a small modification of an existing GPU compatible PMIS method
 2) Aplying drop tolerances to matrices
@@ -434,7 +438,7 @@ Currently the setup can be quite slow, with substantial differences between the 
 
 3 - Multigrid methods on GPUs will often pin the coarse grids to the CPU, as GPUs are not very fast at the small solves that occur on coarse grids. We do not do this in PCAIR; instead we recommend using the GMRES polynomials applied matrix free as a coarse solver. In particular the polynomials which use the Newton basis are stable at high order and can therefore be combined with heavy truncation of the multigrid hierarchy. 
 
-For example, on a single GPU with a 2D structured grid advection problem, truncating the number of levels to 11 (typically the coarsening gives 25 levels) and applying a 10th order Newton polynomial matrix-free as a coarse grid solver:
+For example, on a single NVIDIA GPU with a 2D structured grid advection problem, truncating the number of levels to 11 (typically the coarsening gives 25 levels) and applying a 10th order Newton polynomial matrix-free as a coarse grid solver:
 
 ``./adv_diff_2d.o -da_grid_x 1000 -da_grid_y 1000 -ksp_type richardson -pc_type air -pc_air_max_levels 11 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_poly_order 10 -dm_mat_type aijcusparse -dm_vec_type cuda``
 
