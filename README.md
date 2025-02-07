@@ -407,19 +407,19 @@ If PETSc has been configured with GPU support (e.g., CUDA, HIP, Kokkos) then PCP
 
 the setup/solve will occur on the CPU. If we want to run on GPUs, we must ensure the matrix/vector types match the appropriate GPU types. In both ``tests/ex86`` and ``tests/adv_diff_2d``, these types can be set through command line arguments. The types are specified with either ``-mat_type`` and ``-vec_type``, or if set by a DM directly (like in ``tests/adv_diff_2d``), use ``-dm_mat_type`` and ``-dm_vec_type``. 
 
-If PETSc has been configured with CUDA support for example:
+If using CUDA directly:
 
 ``./ex86.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijcusparse -vec_type cuda``
 
-Or if PETSc has been configured with HIP support:
+If using HIP directly:
 
 ``./ex86.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijhipsparse -vec_type hip``
 
-Or if PETSc has been configured with KOKKOS support:
+If using KOKKOS (with either the CUDA or HIP back-end):
 
 ``./ex86.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijkokkos -vec_type kokkos``
 
-For both PCPFLAREINV and PCAIR, the entirity of the solve happens on GPUs without any copies between the CPU/GPU. 
+For both PCPFLAREINV and PCAIR, the entirity of the solve happens on GPUs without any copies between the CPU/GPU if using either CUDA directly, or using KOKKOS with the CUDA or HIP back-end. Using HIP directly incurs copies during the solve so we would not recommend this currently. 
 
 The setup however occurs on both the CPU and GPU depending on the options used, with copies occuring between the two where needed. The command line option  ``-log_view`` shows how many copies to/from the CPU/GPU occur.
 
