@@ -162,7 +162,7 @@ module gmres_poly_newton
       ! Local variables
       PetscInt :: global_rows, global_cols, local_rows, local_cols
       integer :: lwork, subspace_size, rank, i_loc, comm_size, comm_rank, errorcode, iwork_size, j_loc
-      integer :: total_extra, counter, k_loc
+      integer :: total_extra, counter, k_loc, m
       PetscErrorCode :: ierr      
       MPI_Comm :: MPI_COMM_MATRIX
       real, dimension(poly_order+2,poly_order+1) :: H_n
@@ -214,7 +214,7 @@ module gmres_poly_newton
       
       ! Do the Arnoldi and compute H_n
       ! Use the same lucky tolerance as petsc
-      call arnoldi(matrix, poly_order, 1e-30, V_n, w_j, beta, H_n)
+      call arnoldi(matrix, poly_order, 1e-30, V_n, w_j, beta, H_n, m)
 
       ! ~~~~~~~~~~~
       ! Now the Ritz values are just the eigenvalues of the square part of H_n

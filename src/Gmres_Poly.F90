@@ -276,7 +276,7 @@ module gmres_poly
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine arnoldi(matrix, poly_order, lucky_tol, V_n, w_j, beta, H_n, C_n, y, input_rel_tol)
+   subroutine arnoldi(matrix, poly_order, lucky_tol, V_n, w_j, beta, H_n, m, C_n, y, input_rel_tol)
 
       ! Arnoldi to compute H_n and optionally C_n (although computing C_n 
       ! won't be stable at high order)
@@ -292,9 +292,10 @@ module gmres_poly
       real, dimension(:,:), optional, intent(inout)     :: C_n
       real, optional, intent(in)                        :: input_rel_tol
       real, dimension(:), optional, intent(inout)       :: y
+      integer, intent(out)                              :: m
 
       ! Local variables
-      integer :: i_loc, j_loc, subspace_size, errorcode, lwork
+      integer :: i_loc, subspace_size, errorcode, lwork
       PetscErrorCode :: ierr      
       real, dimension(poly_order+2) :: c_j, g0
       real, dimension(size(H_n,1), size(H_n,2)) :: H_n_copy
@@ -334,52 +335,52 @@ module gmres_poly
 
       ! Now loop through and do the iterations up to the max order of the polynomial
       ! we want to build
-      do j_loc = 1, subspace_size
+      do m = 1, subspace_size
 
          ! Compute w_j = A v_j
          call MatMult(matrix, &
-                  V_n(j_loc), &
+                  V_n(m), &
                   w_j, ierr)  
 
          ! Now compute the updated relationship between K_n and V_n
          if (compute_cn) then
             c_j = 0.0      
-            ! This is [0 c1..cn] for column j_loc
-            c_j(2:j_loc + 1) = C_n(1:j_loc, j_loc)  
+            ! This is [0 c1..cn] for column m
+            c_j(2:m + 1) = C_n(1:m, m)  
          end if
                   
          ! Now loop 
-         do i_loc = 1, j_loc
+         do i_loc = 1, m
 
             ! Computes the hessenberg entry by the dot product of w_j and v_i
-            call VecDot(w_j, V_n(i_loc), H_n(i_loc, j_loc), ierr)               
+            call VecDot(w_j, V_n(i_loc), H_n(i_loc, m), ierr)               
 
             ! w_j = w_j - h_ij v_i
-            call VecAXPY(w_j, -H_n(i_loc, j_loc), V_n(i_loc), ierr)
+            call VecAXPY(w_j, -H_n(i_loc, m), V_n(i_loc), ierr)
 
             ! This is doing -C_n * h_n
-            if (compute_cn) c_j(1:i_loc) = c_j(1:i_loc) - C_n(1:i_loc, i_loc) * H_n(i_loc, j_loc)
+            if (compute_cn) c_j(1:i_loc) = c_j(1:i_loc) - C_n(1:i_loc, i_loc) * H_n(i_loc, m)
 
          end do
 
          ! Now compute new hessenberg entry
-         call VecNorm(w_j, NORM_2, H_n(j_loc+1, j_loc), ierr)
+         call VecNorm(w_j, NORM_2, H_n(m+1, m), ierr)
 
          ! GMRES lucky tolerance, we're fully converged
-         if (H_n(j_loc+1, j_loc) < lucky_tol) then
+         if (H_n(m+1, m) < lucky_tol) then
             ! Don't forget to update the ls solution if you exit early
-            if (rel_tol > 0) call ls_solve_arnoldi(beta, j_loc, H_n, y)
+            if (rel_tol > 0) call ls_solve_arnoldi(beta, m, H_n, y)
             exit
          end if
 
          ! v_j+1 = w_j / h_j+1,j
-         call VecAXPBY(V_n(j_loc + 1), &
-                  1.0/H_n(j_loc+1, j_loc), &
+         call VecAXPBY(V_n(m + 1), &
+                  1.0/H_n(m+1, m), &
                   0.0, &
                   w_j, ierr)           
 
-         ! Now we've taken out the H_n(j_loc+1, j_loc) factor from above
-         if (compute_cn) C_n(1:j_loc+1, j_loc + 1) = c_j(1:j_loc+1)/H_n(j_loc+1, j_loc)
+         ! Now we've taken out the H_n(m+1, m) factor from above
+         if (compute_cn) C_n(1:m+1, m + 1) = c_j(1:m+1)/H_n(m+1, m)
 
          ! ~~~~~~
          ! Compute the residual if the user requested only solving to a specific 
@@ -389,10 +390,10 @@ module gmres_poly
          ! ~~~~~~
          if (rel_tol > 0) then
 
-            call ls_solve_arnoldi(beta, j_loc, H_n, y)
+            call ls_solve_arnoldi(beta, m, H_n, y)
             
             ! Compute H_n y
-            call dgemv("N", j_loc+1, j_loc, &
+            call dgemv("N", m+1, m, &
                   1.0, H_n, size(H_n,1), &
                   y, 1, &
                   0.0, g0(1), 1) 
@@ -400,11 +401,14 @@ module gmres_poly
             ! Minus away e1 beta
             g0(1) = g0(1) - beta
             ! This is the relative residual
-            !print *, j_loc, "rel residual", norm2(g0(1:j_loc))/beta
-            if (norm2(g0(1:j_loc))/beta < rel_tol) exit
+            !print *, m, "rel residual", norm2(g0(1:m))/beta
+            if (norm2(g0(1:m))/beta < rel_tol) exit
          end if
 
       end do
+
+      ! Fortran allocates loop variables one bigger if we get to the end of the loop
+      if (m == subspace_size + 1) m = m - 1
 
    end subroutine arnoldi      
 
@@ -427,7 +431,7 @@ module gmres_poly
 
       ! Local variables
       PetscInt :: global_rows, global_cols, local_rows, local_cols
-      integer :: i_loc, lwork, subspace_size, iwork_size, rank
+      integer :: i_loc, lwork, subspace_size, iwork_size, rank, m
       integer :: comm_size, comm_rank
       integer :: errorcode
       PetscErrorCode :: ierr      
@@ -475,12 +479,14 @@ module gmres_poly
       ! Do the Arnoldi and compute H_n and C_n
       ! We only compute H_n until we hit a relative residual of 1e-14 against the random rhs
       ! or we hit the given poly_order
-      call arnoldi(matrix, poly_order, 1e-30, V_n, w_j, beta, H_n, C_n, y, 1e-14)
+      call arnoldi(matrix, poly_order, 1e-30, V_n, w_j, beta, H_n, m, C_n, y, 1e-14)
 
       ! ~~~~~~~~~~~~~
       ! Compute the polynomial coefficients, this is C_n(1:m, 1:m) y
       ! ~~~~~~~~~~~~~
-      call dgemv("N", subspace_size, subspace_size, &
+      ! Set to zero is necessary as m may be less than the subspace_size
+      coefficients = 0
+      call dgemv("N", m, m, &
                1.0, C_n, size(C_n,1), &
                y, 1, &
                0.0, coefficients(1), 1) 
