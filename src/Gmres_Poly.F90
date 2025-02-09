@@ -237,7 +237,6 @@ module gmres_poly
       ! Local variables
       integer :: errorcode, lwork
       real, dimension(size(H_n,1), size(H_n,2)) :: H_n_copy
-      real, dimension(m) :: least_squares_sol
       real, dimension(m+1) :: g0
       real, dimension(:), allocatable :: work
 
@@ -277,7 +276,7 @@ module gmres_poly
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine arnoldi(matrix, poly_order, lucky_tol, V_n, w_j, beta, H_n, C_n, least_squares_sol, input_rel_tol)
+   subroutine arnoldi(matrix, poly_order, lucky_tol, V_n, w_j, beta, H_n, C_n, y, input_rel_tol)
 
       ! Arnoldi to compute H_n and optionally C_n (although computing C_n 
       ! won't be stable at high order)
@@ -292,7 +291,7 @@ module gmres_poly
       real, dimension(:,:), intent(inout)               :: H_n
       real, dimension(:,:), optional, intent(inout)     :: C_n
       real, optional, intent(in)                        :: input_rel_tol
-      real, dimension(:), optional, intent(inout)       :: least_squares_sol
+      real, dimension(:), optional, intent(inout)       :: y
 
       ! Local variables
       integer :: i_loc, j_loc, subspace_size, errorcode, lwork
@@ -369,7 +368,7 @@ module gmres_poly
          ! GMRES lucky tolerance, we're fully converged
          if (H_n(j_loc+1, j_loc) < lucky_tol) then
             ! Don't forget to update the ls solution if you exit early
-            if (rel_tol > 0) call ls_solve_arnoldi(beta, j_loc, H_n, least_squares_sol)
+            if (rel_tol > 0) call ls_solve_arnoldi(beta, j_loc, H_n, y)
             exit
          end if
 
@@ -390,12 +389,12 @@ module gmres_poly
          ! ~~~~~~
          if (rel_tol > 0) then
 
-            call ls_solve_arnoldi(beta, j_loc, H_n, least_squares_sol)
+            call ls_solve_arnoldi(beta, j_loc, H_n, y)
             
             ! Compute H_n y
             call dgemv("N", j_loc+1, j_loc, &
                   1.0, H_n, size(H_n,1), &
-                  least_squares_sol, 1, &
+                  y, 1, &
                   0.0, g0(1), 1) 
 
             ! Minus away e1 beta
@@ -436,7 +435,7 @@ module gmres_poly
       real, dimension(poly_order+2,poly_order+1) :: H_n
       real, dimension(poly_order+2,poly_order+2) :: C_n
       real, dimension(poly_order+2) :: g0, c_j, s
-      real, dimension(poly_order+1) :: least_squares_sol
+      real, dimension(poly_order+1) :: y
       real, dimension(:), allocatable :: work
       real :: beta
       type(tVec) :: w_j
@@ -476,14 +475,14 @@ module gmres_poly
       ! Do the Arnoldi and compute H_n and C_n
       ! We only compute H_n until we hit a relative residual of 1e-14 against the random rhs
       ! or we hit the given poly_order
-      call arnoldi(matrix, poly_order, 1e-30, V_n, w_j, beta, H_n, C_n, least_squares_sol, 1e-14)
+      call arnoldi(matrix, poly_order, 1e-30, V_n, w_j, beta, H_n, C_n, y, 1e-14)
 
       ! ~~~~~~~~~~~~~
       ! Compute the polynomial coefficients, this is C_n(1:m, 1:m) y
       ! ~~~~~~~~~~~~~
       call dgemv("N", subspace_size, subspace_size, &
                1.0, C_n, size(C_n,1), &
-               least_squares_sol, 1, &
+               y, 1, &
                0.0, coefficients(1), 1) 
 
       do i_loc = 1, subspace_size+1
