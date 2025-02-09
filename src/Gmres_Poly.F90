@@ -269,13 +269,15 @@ module gmres_poly
          call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
       end if  
 
+      ! Set to zero necessary as sometimes we terminate our arnoldi early
+      y = 0
       y(1:m) = g0(1:m)
 
    end subroutine ls_solve_arnoldi   
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine arnoldi(matrix, poly_order, lucky_tol, V_n, w_j, beta, H_n, C_n, input_rel_tol)
+   subroutine arnoldi(matrix, poly_order, lucky_tol, V_n, w_j, beta, H_n, C_n, least_squares_sol, input_rel_tol)
 
       ! Arnoldi to compute H_n and optionally C_n (although computing C_n 
       ! won't be stable at high order)
@@ -290,6 +292,7 @@ module gmres_poly
       real, dimension(:,:), intent(inout)               :: H_n
       real, dimension(:,:), optional, intent(inout)     :: C_n
       real, optional, intent(in)                        :: input_rel_tol
+      real, dimension(:), optional, intent(inout)       :: least_squares_sol
 
       ! Local variables
       integer :: i_loc, j_loc, subspace_size, errorcode, lwork
@@ -297,7 +300,6 @@ module gmres_poly
       real, dimension(poly_order+2) :: c_j, g0
       real, dimension(size(H_n,1), size(H_n,2)) :: H_n_copy
       logical :: compute_cn
-      real, dimension(poly_order+1) :: least_squares_sol
       real, dimension(:), allocatable :: work
       real :: rel_tol
 
@@ -366,6 +368,8 @@ module gmres_poly
 
          ! GMRES lucky tolerance, we're fully converged
          if (H_n(j_loc+1, j_loc) < lucky_tol) then
+            ! Don't forget to update the ls solution if you exit early
+            if (rel_tol > 0) call ls_solve_arnoldi(beta, j_loc, H_n, least_squares_sol)
             exit
          end if
 
@@ -381,19 +385,20 @@ module gmres_poly
          ! ~~~~~~
          ! Compute the residual if the user requested only solving to a specific 
          ! relative residual - we don't need it otherwise
-         ! The residual is just ||e_1 beta - H_m y||_2, so we have to solve that least squares problem to find 
+         ! The residual is just ||H_m y - e_1 beta||_2, so we have to solve that least squares problem to find 
          ! y and then just compute 
          ! ~~~~~~
          if (rel_tol > 0) then
 
             call ls_solve_arnoldi(beta, j_loc, H_n, least_squares_sol)
             
-            ! Use H_n as H_n_copy has been messed with in-place
+            ! Compute H_n y
             call dgemv("N", j_loc+1, j_loc, &
                   1.0, H_n, size(H_n,1), &
                   least_squares_sol, 1, &
                   0.0, g0(1), 1) 
 
+            ! Minus away e1 beta
             g0(1) = g0(1) - beta
             ! This is the relative residual
             !print *, j_loc, "rel residual", norm2(g0(1:j_loc))/beta
@@ -471,43 +476,7 @@ module gmres_poly
       ! Do the Arnoldi and compute H_n and C_n
       ! We only compute H_n until we hit a relative residual of 1e-14 against the random rhs
       ! or we hit the given poly_order
-      call arnoldi(matrix, poly_order, 1e-30, V_n, w_j, beta, H_n, C_n, 1e-14)
-
-      ! This is the vector we will use as rhs in the least square solve
-      g0 = 0.0
-      g0(1) = beta
-
-      ! We've now finished orthogonalising, let's solve our least squares system
-      allocate(work(1))
-      allocate(iwork(1))
-      lwork = -1      
-
-      ! Now we are using dgelsd here as there is no guarantee H_n will be full rank
-      ! eg if our matrix is a (scaled) version of the identity, the columns of H_n
-      ! will be very close (given the random rhs)
-      ! to orthogonal and we likely hit the happy ending above
-      ! If this happens all columns except the first are zero
-      ! and dgels fails without full rank
-      call dgelsd(size(H_n, 1), size(H_n, 2), 1, H_n(1,1), size(H_n, 1), &
-                     g0, size(g0), s, rcond, rank, &
-                     work, lwork, iwork, errorcode)
-      lwork = int(work(1))
-      iwork_size = iwork(1)
-      deallocate(work, iwork)
-      allocate(work(lwork)) 
-      allocate(iwork(iwork_size))
-      call dgelsd(size(H_n, 1), size(H_n, 2), 1, H_n(1,1), size(H_n, 1), &
-                     g0, size(g0), s, rcond, rank, &
-                     work, lwork, iwork, errorcode)
-      deallocate(work, iwork)
-
-      if (errorcode /= 0) then
-         print *, "LS solve failed"
-         call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
-      end if  
-
-      ! This should be the solution of our least-squares problem
-      least_squares_sol = g0(1:subspace_size)            
+      call arnoldi(matrix, poly_order, 1e-30, V_n, w_j, beta, H_n, C_n, least_squares_sol, 1e-14)
 
       ! ~~~~~~~~~~~~~
       ! Compute the polynomial coefficients, this is C_n(1:m, 1:m) y
