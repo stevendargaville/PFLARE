@@ -396,7 +396,7 @@ module gmres_poly
 
             g0(1) = g0(1) - beta
             ! This is the relative residual
-            print *, j_loc, "rel residual", norm2(g0(1:j_loc))/beta
+            !print *, j_loc, "rel residual", norm2(g0(1:j_loc))/beta
             if (norm2(g0(1:j_loc))/beta < rel_tol) exit
          end if
 
