@@ -124,6 +124,16 @@ module gmres_poly
                matvecs = matvecs - 1
             end if
          end do
+
+      ! For power or Arnoldi   
+      else
+         ! The size of the zero check is exactly 0.0, normally can only happen
+         ! in an Arnoldi that terminates early
+         do i_loc = 1, size(coefficients,1)
+            if (abs(coefficients(i_loc,1)) == 0.0) then
+               matvecs = matvecs - 1
+            end if
+         end do         
       end if      
 
    end subroutine compute_mf_gmres_poly_num_matvecs   
@@ -1394,6 +1404,9 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
 
          ! Loop down from the second highest order term down to the constant
          do order = size(coefficients, 1)-1, 1, -1
+
+            ! Skip this coefficient if zero
+            if (coefficients(order) == 0.0) cycle
 
             ! Copy y into temp_vec
             call VecCopy(y, temp_vec, ierr)             
