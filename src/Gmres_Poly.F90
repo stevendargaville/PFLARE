@@ -220,11 +220,62 @@ module gmres_poly
 
       ! ~~~~~~~~~~~~
 
-   end subroutine create_temp_space_box_mueller   
+   end subroutine create_temp_space_box_mueller  
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine arnoldi(matrix, poly_order, lucky_tol, V_n, w_j, beta, H_n, C_n)
+   subroutine ls_solve_arnoldi(beta, m, H_n, y)
+
+      ! Do the least-squares solve used in an arnoldi
+
+      ! ~~~~~~
+      real, intent(in)                     :: beta
+      integer, intent(in)                  :: m
+      real, dimension(:,:), intent(in)     :: H_n
+      real, dimension(:), intent(inout)    :: y
+
+      ! Local variables
+      integer :: errorcode, lwork
+      real, dimension(size(H_n,1), size(H_n,2)) :: H_n_copy
+      real, dimension(m) :: least_squares_sol
+      real, dimension(m+1) :: g0
+      real, dimension(:), allocatable :: work
+
+      ! ~~~~~~   
+            
+      ! This is the vector we will use as rhs in the least square solve
+      g0 = 0.0
+      g0(1) = beta 
+
+      ! Let's solve our least squares system
+      allocate(work(1))
+      lwork = -1      
+
+      ! Make a copy as we do a least-squares solve in place
+      H_n_copy(1:m+1, 1:m) = H_n(1:m+1, 1:m)
+
+      lwork = -1
+      ! Overwrite y
+      errorcode = 0
+      call dgels('N', m+1, m, 1, H_n_copy(1,1), size(H_n_copy, 1), g0, size(g0), work, lwork, errorcode)
+      lwork = work(1)
+      deallocate(work)
+      allocate(work(lwork))  
+      call dgels('N', m+1, m, 1, H_n_copy(1,1), size(H_n_copy, 1), g0, size(g0), work, lwork, errorcode)
+      deallocate(work)            
+
+      if (errorcode /= 0) then
+         print *, "LS solve failed"
+         call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
+      end if  
+
+      y(1:m) = g0(1:m)
+
+   end subroutine ls_solve_arnoldi   
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine arnoldi(matrix, poly_order, lucky_tol, V_n, w_j, beta, H_n, C_n, input_rel_tol)
 
       ! Arnoldi to compute H_n and optionally C_n (although computing C_n 
       ! won't be stable at high order)
@@ -238,17 +289,25 @@ module gmres_poly
       real, intent(out)                                 :: beta
       real, dimension(:,:), intent(inout)               :: H_n
       real, dimension(:,:), optional, intent(inout)     :: C_n
+      real, optional, intent(in)                        :: input_rel_tol
 
       ! Local variables
-      integer :: i_loc, j_loc, subspace_size
+      integer :: i_loc, j_loc, subspace_size, errorcode, lwork
       PetscErrorCode :: ierr      
-      real, dimension(poly_order+2) :: c_j
+      real, dimension(poly_order+2) :: c_j, g0
+      real, dimension(size(H_n,1), size(H_n,2)) :: H_n_copy
       logical :: compute_cn
+      real, dimension(poly_order+1) :: least_squares_sol
+      real, dimension(:), allocatable :: work
+      real :: rel_tol
 
       ! ~~~~~~   
             
       compute_cn = .FALSE.
       if (present(C_n)) compute_cn = .TRUE.
+      ! Only compute H_n until we hit a given relative residual tolerance if it is input by the user
+      rel_tol = -1
+      if (present(input_rel_tol)) rel_tol = input_rel_tol
 
       ! This is how many columns we have in K_m
       subspace_size = poly_order + 1       
@@ -306,9 +365,6 @@ module gmres_poly
          call VecNorm(w_j, NORM_2, H_n(j_loc+1, j_loc), ierr)
 
          ! GMRES lucky tolerance, we're fully converged
-         ! The tolerance for this is tricky to pick
-         ! but we have to ensure we don't blow up the entries in C_n
-         ! and lose all our precision
          if (H_n(j_loc+1, j_loc) < lucky_tol) then
             exit
          end if
@@ -321,6 +377,28 @@ module gmres_poly
 
          ! Now we've taken out the H_n(j_loc+1, j_loc) factor from above
          if (compute_cn) C_n(1:j_loc+1, j_loc + 1) = c_j(1:j_loc+1)/H_n(j_loc+1, j_loc)
+
+         ! ~~~~~~
+         ! Compute the residual if the user requested only solving to a specific 
+         ! relative residual - we don't need it otherwise
+         ! The residual is just ||e_1 beta - H_m y||_2, so we have to solve that least squares problem to find 
+         ! y and then just compute 
+         ! ~~~~~~
+         if (rel_tol > 0) then
+
+            call ls_solve_arnoldi(beta, j_loc, H_n, least_squares_sol)
+            
+            ! Use H_n as H_n_copy has been messed with in-place
+            call dgemv("N", j_loc+1, j_loc, &
+                  1.0, H_n, size(H_n,1), &
+                  least_squares_sol, 1, &
+                  0.0, g0(1), 1) 
+
+            g0(1) = g0(1) - beta
+            ! This is the relative residual
+            print *, j_loc, "rel residual", norm2(g0(1:j_loc))/beta
+            if (norm2(g0(1:j_loc))/beta < rel_tol) exit
+         end if
 
       end do
 
@@ -391,8 +469,9 @@ module gmres_poly
       call VecDuplicate(V_n(1), w_j, ierr)         
 
       ! Do the Arnoldi and compute H_n and C_n
-      ! Have to use a low lucky tolerance!
-      call arnoldi(matrix, poly_order, 1e-10, V_n, w_j, beta, H_n, C_n)
+      ! We only compute H_n until we hit a relative residual of 1e-14 against the random rhs
+      ! or we hit the given poly_order
+      call arnoldi(matrix, poly_order, 1e-30, V_n, w_j, beta, H_n, C_n, 1e-14)
 
       ! This is the vector we will use as rhs in the least square solve
       g0 = 0.0
