@@ -1267,13 +1267,12 @@ module air_mg_setup
 
             call timer_start(TIMER_ID_AIR_TRUNCATE)   
 
-            ! Set up a GMRES polynomial inverse data for the coarse grid solve
-            ! Never go onto a subcomm for this
+            ! Set up our coarse inverse data
             call setup_gmres_poly_data(global_rows, &
                      air_data%options%coarsest_inverse_type, &
                      air_data%options%coarsest_poly_order, &
                      air_data%options%coarsest_inverse_sparsity_order, &
-                     .FALSE., &
+                     air_data%options%coarsest_subcomm, &
                      proc_stride, &
                      air_data%inv_coarsest_poly_data)  
 
