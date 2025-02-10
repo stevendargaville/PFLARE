@@ -27,5 +27,5 @@ jobs:
         with:
           platforms: linux/amd64
           push: true
-          file: /dockerfiles/Dockerfile          
+          file: ./dockerfiles/Dockerfile          
           tags: ${{ env.REPO }}:latest
