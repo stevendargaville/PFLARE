@@ -19,7 +19,7 @@ module timers
                               TIMER_ID_AIR_PROC_AGGLOM = 8, &
                               TIMER_ID_AIR_COARSEN = 9, &
                               TIMER_ID_AIR_CONSTRAIN = 10, &
-                              TIMER_ID_AIR_IDENTIY = 11, &
+                              TIMER_ID_AIR_IDENTITY = 11, &
                               TIMER_ID_AIR_TRUNCATE = 12
 
    public :: timer_start, timer_finish, timer_reset, timer_clear
@@ -49,7 +49,7 @@ subroutine print_timers()
    print *,  "prolong time     :", timer_time(TIMER_ID_AIR_PROLONG)
    print *,  "constrain time   :", timer_time(TIMER_ID_AIR_CONSTRAIN)       
    print *,  "rap time         :", timer_time(TIMER_ID_AIR_RAP)
-   print *,  "identity time    :", timer_time(TIMER_ID_AIR_IDENTIY)
+   print *,  "identity time    :", timer_time(TIMER_ID_AIR_IDENTITY)
    print *,  "drop time        :", timer_time(TIMER_ID_AIR_DROP)
    print *,  "truncate time    :", timer_time(TIMER_ID_AIR_TRUNCATE)
 

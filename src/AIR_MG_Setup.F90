@@ -780,7 +780,7 @@ module air_mg_setup
 
       call timer_finish(TIMER_ID_AIR_RESTRICT)      
 
-      call timer_start(TIMER_ID_AIR_IDENTIY)            
+      call timer_start(TIMER_ID_AIR_IDENTITY)            
 
       ! ~~~~~~~~~
       ! Previously in the FC smoothing (see dba0a996be147698d7f9ce07741e7d925001ea66) 
@@ -812,7 +812,7 @@ module air_mg_setup
          end if 
       end if       
       
-      call timer_finish(TIMER_ID_AIR_IDENTIY)            
+      call timer_finish(TIMER_ID_AIR_IDENTITY)            
       
       ! Delete temporary if not reusing
       if (.NOT. air_data%options%reuse_sparsity) then
