@@ -1259,6 +1259,9 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          ! the term loop
          do term = poly_sparsity_order+2, size(coefficients)
 
+            ! Skip this term if the coefficient is zero
+            if (coefficients(term) == 0.0) cycle
+
             ! We need to sum up the product of vals_previous_power_temp(j_loc) * matching columns
             vals_temp = 0
 
