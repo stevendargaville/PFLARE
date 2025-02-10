@@ -155,6 +155,44 @@ module pcair_interfaces
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
+   subroutine PCAIRGetAutoTruncateStartLevel(pc, start_level, ierr) 
+
+      ! ~~~~~~~~
+      type(tPC), intent(inout)      :: pc
+      PetscInt, intent(out)         :: start_level
+      PetscErrorCode, intent(out)   :: ierr
+
+      type(air_options), pointer :: options
+      ! ~~~~~~~~
+
+      ! Get the options
+      call PCAIRGetOptions(pc, options)    
+      start_level = options%auto_truncate_start_level
+      ierr = 0
+
+   end subroutine PCAIRGetAutoTruncateStartLevel   
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetAutoTruncateTol(pc, tol, ierr) 
+
+      ! ~~~~~~~~
+      type(tPC), intent(inout)      :: pc
+      PetscReal, intent(out)        :: tol
+      PetscErrorCode, intent(out)   :: ierr
+
+      type(air_options), pointer :: options
+      ! ~~~~~~~~
+
+      ! Get the options
+      call PCAIRGetOptions(pc, options)    
+      tol = options%auto_truncate_tol
+      ierr = 0
+
+   end subroutine PCAIRGetAutoTruncateTol   
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
    subroutine PCAIRGetNumLevels(pc, num_levels, ierr) 
 
       ! ~~~~~~~~
@@ -1155,6 +1193,44 @@ module pcair_interfaces
       ierr = 0
 
    end subroutine PCAIRSetCoarseEqLimit   
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetAutoTruncateStartLevel(pc, start_level, ierr) 
+
+      ! ~~~~~~~~
+      type(tPC), intent(inout)      :: pc
+      PetscInt, intent(in)          :: start_level
+      PetscErrorCode, intent(out)   :: ierr
+
+      type(air_options), pointer :: options
+      ! ~~~~~~~~
+
+      ! Set the options
+      call PCAIRGetOptions(pc, options)    
+      options%auto_truncate_start_level = int(start_level)
+      ierr = 0
+
+   end subroutine PCAIRSetAutoTruncateStartLevel   
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetAutoTruncateTol(pc, tol, ierr) 
+
+      ! ~~~~~~~~
+      type(tPC), intent(inout)      :: pc
+      PetscReal, intent(in)         :: tol
+      PetscErrorCode, intent(out)   :: ierr
+
+      type(air_options), pointer :: options
+      ! ~~~~~~~~
+
+      ! Set the options
+      call PCAIRGetOptions(pc, options)    
+      options%auto_truncate_tol = tol
+      ierr = 0
+
+   end subroutine PCAIRSetAutoTruncateTol   
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 

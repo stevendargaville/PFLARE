@@ -780,7 +780,7 @@ module air_mg_setup
 
       call timer_finish(TIMER_ID_AIR_RESTRICT)      
 
-      call timer_start(TIMER_ID_AIR_IDENTIY)            
+      call timer_start(TIMER_ID_AIR_IDENTITY)            
 
       ! ~~~~~~~~~
       ! Previously in the FC smoothing (see dba0a996be147698d7f9ce07741e7d925001ea66) 
@@ -812,7 +812,7 @@ module air_mg_setup
          end if 
       end if       
       
-      call timer_finish(TIMER_ID_AIR_IDENTIY)            
+      call timer_finish(TIMER_ID_AIR_IDENTITY)            
       
       ! Delete temporary if not reusing
       if (.NOT. air_data%options%reuse_sparsity) then
@@ -1182,12 +1182,12 @@ module air_mg_setup
       integer             :: no_levels, our_level, our_level_coarse, errorcode, comm_rank, comm_size
       PetscErrorCode      :: ierr
       MPI_Comm            :: MPI_COMM_MATRIX
-      real                :: ratio_local_nnzs_off_proc
-      logical             :: big_enough, trigger_proc_agglom, proc_agglom_exists, reusing_temp_mg_vecs
+      real                :: ratio_local_nnzs_off_proc, achieved_rel_tol, norm_b
+      logical             :: continue_coarsening, trigger_proc_agglom, proc_agglom_exists, reusing_temp_mg_vecs
       type(tMat)          :: coarse_matrix_temp
       type(tKSP)          :: ksp_smoother_up, ksp_smoother_down, ksp_coarse_solver
       type(tPC)           :: pc_smoother_up, pc_smoother_down, pc_coarse_solver
-      type(tVec)          :: temp_coarse_vec
+      type(tVec)          :: temp_coarse_vec, rand_vec, sol_vec, temp_vec
       type(tIS)           :: is_unchanged, is_full
       type(mat_ctxtype), pointer :: mat_ctx
       PetscInt, parameter :: one=1, zero=0
@@ -1195,6 +1195,8 @@ module air_mg_setup
       type(tVec), dimension(:), allocatable :: left_null_vecs_c, right_null_vecs_c
       VecScatter :: vec_scatter
       VecType :: vec_type
+      logical :: auto_truncated
+      PetscRandom :: rctx
 
       ! ~~~~~~     
 
@@ -1225,10 +1227,20 @@ module air_mg_setup
 
       ! ~~~~~~~~~~~~~~~~~~~~~
 
+      ! If we have an exact IS, we know Aff is diagonal and our inverse is exact
+      if (air_data%options%strong_threshold == 0.0) then   
+         ! Only have to do one "smooth" to apply the exact inverse
+         air_data%options%maxits_a_ff = 1        
+      end if                 
+
       if (air_data%options%print_stats_timings .AND. comm_rank == 0) print *, "Timers are cumulative"
 
+      auto_truncated = .FALSE.
+
+      ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~
       ! Loop over the number of levels
       ! We will exit this loop once we coarsen far enough
+      ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~
       level_loop: do our_level = 1, no_levels-1
 
          ! This is our coarse level
@@ -1240,22 +1252,103 @@ module air_mg_setup
          ! This returns the global index of the local portion of the matrix
          call MatGetOwnershipRange(air_data%coarse_matrix(our_level), global_row_start, global_row_end_plus_one, ierr)           
 
+         continue_coarsening = .TRUE.
+
+         ! ~~~~~~~~~~
+         ! We can also check if our coarse grid approximations are good enough to work as a coarse grid solver
+         ! If so we can stop coarsening here   
+         ! This is really only a sensible idea when using a matrix-free polynomial for the coarse grid solve
+         ! Otherwise building assembled approximation inverses can be very expensive!      
+         ! ~~~~~~~~~~
+         ! We already know how many coarse levels we have if we are re-using
+         if (.NOT. air_data%allocated_matrices_A_ff(our_level) .AND. &
+                     our_level .ge. air_data%options%auto_truncate_start_level .AND. &
+                     air_data%options%auto_truncate_start_level /= -1) then         
+
+            call timer_start(TIMER_ID_AIR_TRUNCATE)   
+
+            ! Set up a GMRES polynomial inverse data for the coarse grid solve
+            ! Never go onto a subcomm for this
+            call setup_gmres_poly_data(global_rows, &
+                     air_data%options%coarsest_inverse_type, &
+                     air_data%options%coarsest_poly_order, &
+                     air_data%options%coarsest_inverse_sparsity_order, &
+                     .FALSE., &
+                     proc_stride, &
+                     air_data%inv_coarsest_poly_data)  
+
+            ! Start the approximate inverse we'll use on this level
+            call start_approximate_inverse(air_data%coarse_matrix(our_level), &
+                  air_data%options%coarsest_inverse_type, &
+                  air_data%inv_coarsest_poly_data%gmres_poly_order, &
+                  air_data%inv_coarsest_poly_data%buffers, air_data%inv_coarsest_poly_data%coefficients)                       
+
+            ! This will be a vec of randoms that differ from those used to create the gmres polynomials
+            ! We will solve Ax = rand_vec to test how good our coarse solver is
+            call PetscRandomCreate(MPI_COMM_MATRIX, rctx, ierr)
+            call MatCreateVecs(air_data%coarse_matrix(our_level), &
+                     rand_vec, PETSC_NULL_VEC, ierr)            
+
+            call VecSetRandom(rand_vec, rctx, ierr)
+            call PetscRandomDestroy(rctx, ierr)
+
+            call VecDuplicate(rand_vec, sol_vec, ierr)
+            call VecDuplicate(rand_vec, temp_vec, ierr)
+
+            ! Finish our approximate inverse
+            call finish_approximate_inverse(air_data%coarse_matrix(our_level), &
+                  air_data%options%coarsest_inverse_type, &
+                  air_data%inv_coarsest_poly_data%gmres_poly_order, air_data%inv_coarsest_poly_data%gmres_poly_sparsity_order, &
+                  air_data%inv_coarsest_poly_data%buffers, air_data%inv_coarsest_poly_data%coefficients, &
+                  air_data%options%coarsest_matrix_free_polys, &
+                  air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF), &
+                  air_data%inv_A_ff(our_level))             
+
+            ! sol_vec = A^-1 * rand_vec
+            call MatMult(air_data%inv_A_ff(our_level), rand_vec, sol_vec, ierr)
+            ! Now calculate a residual
+            ! A * sol_vec
+            call MatMult(air_data%coarse_matrix(our_level), sol_vec, temp_vec, ierr)
+            ! Now A * sol_vec - rand_vec
+            call VecAXPY(temp_vec, -1.0, rand_vec, ierr)
+            call VecNorm(temp_vec, NORM_2, achieved_rel_tol, ierr)    
+            call VecNorm(rand_vec, NORM_2, norm_b, ierr)    
+
+            ! If it's good enough we can truncate on this level and our coarse solver has been computed
+            if (achieved_rel_tol/norm_b < air_data%options%auto_truncate_tol) then
+               auto_truncated = .TRUE.
+
+               ! Delete temporary if not reusing
+               if (.NOT. air_data%options%reuse_sparsity) then
+                  call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
+                  air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF) = PETSC_NULL_MAT
+#endif            
+               end if                  
+
+            ! If this isn't good enough, destroy everything we used - no chance for reuse
+            else
+               call MatDestroy(air_data%inv_A_ff(our_level), ierr)               
+               call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
+               air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF) = PETSC_NULL_MAT
+#endif                
+            end if      
+
+            call VecDestroy(rand_vec, ierr)
+            call VecDestroy(sol_vec, ierr)
+            call VecDestroy(temp_vec, ierr)
+
+            call timer_finish(TIMER_ID_AIR_TRUNCATE)   
+         end if
+
          ! ~~~~~~~~~~~~
          ! Compute the coarsening
          ! ~~~~~~~~~~~~     
-         ! Do we have enough DOFs to need another coarse level    
-         big_enough = .TRUE.
-         
-         ! If we have an exact IS, we know Aff is diagonal and our inverse is exact
-         if (air_data%options%strong_threshold == 0.0) then   
-            ! Only have to do one "smooth" to apply the exact inverse
-            air_data%options%maxits_a_ff = 1        
-         end if  
-
          call timer_start(TIMER_ID_AIR_COARSEN)     
          
          ! Are we reusing our CF splitting
-         if (.NOT. air_data%allocated_is(our_level)) then
+         if (.NOT. air_data%allocated_is(our_level) .AND. .NOT. auto_truncated) then
 
             ! Do the CF splitting
             call compute_cf_splitting(air_data%coarse_matrix(our_level), &
@@ -1271,20 +1364,32 @@ module air_mg_setup
          call timer_finish(TIMER_ID_AIR_COARSEN)   
 
          ! ~~~~~~~~~~~~~~
-         ! Get the resulting sizes of C and F points
+         ! Get the sizes of C and F points
          ! ~~~~~~~~~~~~~~
-         call ISGetSize(air_data%IS_fine_index(our_level), global_fine_is_size, ierr)
-         call ISGetLocalSize(air_data%IS_fine_index(our_level), local_fine_is_size, ierr)
-         call ISGetSize(air_data%IS_coarse_index(our_level), global_coarse_is_size, ierr)
-         call ISGetLocalSize(air_data%IS_coarse_index(our_level), local_coarse_is_size, ierr)               
+         if (.NOT. auto_truncated) then
 
-         ! Test if the problem is still big enough
-         ! Also have to double check that the coarsening resulted in any fine points, sometimes
+            call ISGetSize(air_data%IS_fine_index(our_level), global_fine_is_size, ierr)
+            call ISGetLocalSize(air_data%IS_fine_index(our_level), local_fine_is_size, ierr)
+            call ISGetSize(air_data%IS_coarse_index(our_level), global_coarse_is_size, ierr)
+            call ISGetLocalSize(air_data%IS_coarse_index(our_level), local_coarse_is_size, ierr)  
+
+         ! We're not continuing the coarsening anyway, this is just to ensure the continue_coarsening
+         ! test below doesn't break
+         else
+            global_fine_is_size = 0
+            global_coarse_is_size = 0
+         end if             
+
+         ! Do we want to keep coarsening?
+         ! We check if our coarse grid solve is already good enough and
+         ! if the problem is still big enough and
+         ! that the coarsening resulted in any fine points, sometimes
          ! you can have it such that no fine points are selected                  
-         big_enough = global_coarse_is_size > air_data%options%coarse_eq_limit .AND. global_fine_is_size /= 0       
+         continue_coarsening = .NOT. auto_truncated .AND. &
+                  (global_coarse_is_size > air_data%options%coarse_eq_limit .AND. global_fine_is_size /= 0)  
 
-         ! Did we end up with a coarse grid that is still big enough to continue coarsening?
-         if (big_enough) then
+         ! Did we end up with a coarse grid we still want to coarsen?
+         if (continue_coarsening) then
 
             ! Output stats on the coarsening
             if (air_data%options%print_stats_timings .AND. comm_rank == 0) print *, "~~~~~~~~~~~~ Level ", our_level
@@ -1302,9 +1407,10 @@ module air_mg_setup
             else
                call ISGetSize(air_data%IS_coarse_index(our_level-1), global_fine_is_size, ierr)
                call ISGetLocalSize(air_data%IS_coarse_index(our_level-1), local_fine_is_size, ierr)
+
+               call MatCreateVecs(air_data%A_fc(our_level-1), &
+                        air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)               
             end if
-            call MatCreateVecs(air_data%A_fc(our_level-1), &
-                     air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)
 
             if (air_data%options%constrain_z) then
                ! Destroy our copy of the left near nullspace vectors
@@ -1795,19 +1901,23 @@ module air_mg_setup
       ! Start the inverse for the coarse grid
       ! These comms will be finished below
       if (.NOT. (.NOT. PetscMatIsNull(air_data%inv_A_ff(air_data%no_levels)) .AND. air_data%options%reuse_poly_coeffs)) then
-         call start_approximate_inverse(air_data%coarse_matrix(no_levels), &
-               air_data%options%coarsest_inverse_type, &
-               air_data%inv_coarsest_poly_data%gmres_poly_order, &
-               air_data%inv_coarsest_poly_data%buffers, air_data%inv_coarsest_poly_data%coefficients)                   
+
+         ! We've already created our coarse solver if we've auto truncated         
+         if (.NOT. auto_truncated) then
+            call start_approximate_inverse(air_data%coarse_matrix(no_levels), &
+                  air_data%options%coarsest_inverse_type, &
+                  air_data%inv_coarsest_poly_data%gmres_poly_order, &
+                  air_data%inv_coarsest_poly_data%buffers, air_data%inv_coarsest_poly_data%coefficients)                   
+         end if
       end if
       call timer_finish(TIMER_ID_AIR_INVERSE)  
 
       ! ~~~~~~~~~~~~~~~
       ! Let's setup the PETSc pc we need
       ! ~~~~~~~~~~~~~~~
-      call PCSetOperators(pcmg, amat, pmat, ierr)
-
       if (no_levels > 1) then
+
+         call PCSetOperators(pcmg, amat, pmat, ierr)
          call PCSetType(pcmg, PCMG, ierr)
          no_levels_petsc_int = no_levels
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 15)
@@ -1975,27 +2085,31 @@ module air_mg_setup
          ! Coarse grid polynomial coefficients
          call timer_start(TIMER_ID_AIR_INVERSE) 
 
-         call finish_approximate_inverse(air_data%coarse_matrix(no_levels), &
-               air_data%options%coarsest_inverse_type, &
-               air_data%inv_coarsest_poly_data%gmres_poly_order, air_data%inv_coarsest_poly_data%gmres_poly_sparsity_order, &
-               air_data%inv_coarsest_poly_data%buffers, air_data%inv_coarsest_poly_data%coefficients, &
-               air_data%options%coarsest_matrix_free_polys, &
-               air_data%reuse(air_data%no_levels)%reuse_mat(MAT_INV_AFF), &
-               air_data%inv_A_ff(air_data%no_levels))             
+         ! We've already created our coarse solver if we've auto truncated
+         if (.NOT. auto_truncated) then
+
+            call finish_approximate_inverse(air_data%coarse_matrix(no_levels), &
+                  air_data%options%coarsest_inverse_type, &
+                  air_data%inv_coarsest_poly_data%gmres_poly_order, air_data%inv_coarsest_poly_data%gmres_poly_sparsity_order, &
+                  air_data%inv_coarsest_poly_data%buffers, air_data%inv_coarsest_poly_data%coefficients, &
+                  air_data%options%coarsest_matrix_free_polys, &
+                  air_data%reuse(air_data%no_levels)%reuse_mat(MAT_INV_AFF), &
+                  air_data%inv_A_ff(air_data%no_levels))           
+
+            ! Delete temporary if not reusing
+            if (.NOT. air_data%options%reuse_sparsity) then
+               call MatDestroy(air_data%reuse(air_data%no_levels)%reuse_mat(MAT_INV_AFF), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
+               air_data%reuse(air_data%no_levels)%reuse_mat(MAT_INV_AFF) = PETSC_NULL_MAT
+#endif            
+            end if                      
+         end if  
 
          ! Use the mf coarse grid solver or not
          ! Let's store the coarse grid solver in inv_A_ff(no_levels)
          if (.NOT. air_data%options%coarsest_matrix_free_polys) then
             if (air_data%options%print_stats_timings) call get_nnzs_petsc_sparse(air_data%inv_A_ff(air_data%no_levels), air_data%inv_A_ff_nnzs(air_data%no_levels))
-         end if
-
-         ! Delete temporary if not reusing
-         if (.NOT. air_data%options%reuse_sparsity) then
-            call MatDestroy(air_data%reuse(air_data%no_levels)%reuse_mat(MAT_INV_AFF), ierr)
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
-            air_data%reuse(air_data%no_levels)%reuse_mat(MAT_INV_AFF) = PETSC_NULL_MAT
-#endif            
-         end if          
+         end if      
 
          ! Now we've finished the coarse grid solver, output the time
          call timer_finish(TIMER_ID_AIR_INVERSE)               
@@ -2025,11 +2139,23 @@ module air_mg_setup
             call VecDestroy(air_data%temp_vecs_x(no_levels), ierr)            
          end if
 
-
-      ! If we've only got one level just precondition with jacobi
+      ! If we've only got one level 
       else
-         call PCSetType(pcmg, PCJACOBI, ierr)
-         if (comm_rank == 0) print *, "Only a single level, defaulting to Jacobi PC"
+         ! Precondition with the "coarse grid" solver we used to determine auto truncation
+         if (auto_truncated) then
+            call PetscObjectReference(amat, ierr) 
+            call PCSetOperators(pcmg, amat, &
+                        air_data%inv_A_ff(no_levels), ierr)         
+            call PCSetType(pcmg, PCMAT, ierr)
+
+         ! Otherwise just do a jacobi and tell the user
+         else
+            
+            ! If we've only got one level just precondition with jacobi
+            call PCSetOperators(pcmg, amat, pmat, ierr)
+            call PCSetType(pcmg, PCJACOBI, ierr)
+            if (comm_rank == 0) print *, "Only a single level, defaulting to Jacobi PC"
+         end if
       end if      
 
       ! Call the setup on our PC
@@ -2229,6 +2355,8 @@ module air_mg_setup
 
       air_data%options%max_levels = 300
       air_data%options%coarse_eq_limit = 6
+      air_data%options%auto_truncate_start_level = -1
+      air_data%options%auto_truncate_tol = 1e-14
       air_data%options%processor_agglom = .TRUE.
       air_data%options%processor_agglom_ratio = 2
       air_data%options%processor_agglom_factor = 2
