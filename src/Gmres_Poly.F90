@@ -1673,6 +1673,9 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
 
       do order = 2, poly_order
 
+         ! Skip this term if the coefficient is zero
+         if (coefficients(order+1) == 0.0) cycle
+
          ! TODO - these can be reused
          if (order == 2) then
             call MatMatMult(matrix, matrix, &
