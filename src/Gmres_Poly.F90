@@ -182,6 +182,10 @@ module gmres_poly
       ! If that changes this should be rewritten so this all happens on the gpu  
       ! ~~~~~~~~~~      
 
+      ! If you ever change this to use PetscRandomCreate and VecSetRandom in petsc
+      ! make sure the seed is different than when random is used to evaluate 
+      ! the auto truncation in AIR_MG_Setup
+
       call random_seed(size=seed_size)
       allocate(seed(seed_size))
       ! Ensure we seed the same so subsequent runs get the same random
@@ -286,7 +290,7 @@ module gmres_poly
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine arnoldi(matrix, poly_order, lucky_tol, V_n, w_j, beta, H_n, m, C_n, y, input_rel_tol)
+   subroutine arnoldi(matrix, poly_order, lucky_tol, V_n, w_j, beta, H_n, m, C_n, y, user_rel_tol)
 
       ! Arnoldi to compute H_n and optionally C_n (although computing C_n 
       ! won't be stable at high order)
@@ -300,7 +304,7 @@ module gmres_poly
       real, intent(out)                                 :: beta
       real, dimension(:,:), intent(inout)               :: H_n
       real, dimension(:,:), optional, intent(inout)     :: C_n
-      real, optional, intent(in)                        :: input_rel_tol
+      real, optional, intent(inout)                     :: user_rel_tol
       real, dimension(:), optional, intent(inout)       :: y
       integer, intent(out)                              :: m
 
@@ -319,7 +323,7 @@ module gmres_poly
       if (present(C_n)) compute_cn = .TRUE.
       ! Only compute H_n until we hit a given relative residual tolerance if it is input by the user
       rel_tol = -1
-      if (present(input_rel_tol)) rel_tol = input_rel_tol
+      if (present(user_rel_tol)) rel_tol = user_rel_tol
 
       ! This is how many columns we have in K_m
       subspace_size = poly_order + 1       
@@ -411,8 +415,9 @@ module gmres_poly
             ! Minus away e1 beta
             g0(1) = g0(1) - beta
             ! This is the relative residual
-            !print *, m, "rel residual", norm2(g0(1:m))/beta
-            if (norm2(g0(1:m))/beta < rel_tol) exit
+            user_rel_tol = norm2(g0(1:m))/beta
+            !print *, m, "rel residual", user_rel_tol
+            if (user_rel_tol < rel_tol) exit
          end if
 
       end do
@@ -424,7 +429,7 @@ module gmres_poly
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine calculate_gmres_polynomial_coefficients_arnoldi(matrix, poly_order, coefficients)
+   subroutine calculate_gmres_polynomial_coefficients_arnoldi(matrix, poly_order, coefficients, user_rel_tol)
 
       ! Computes a fixed order gmres polynomial for the matrix passed in
       ! and stores each of the polynomial coefficients in coefficients
@@ -438,6 +443,7 @@ module gmres_poly
       type(tMat), intent(in)                            :: matrix
       integer, intent(in)                               :: poly_order
       real, dimension(:), intent(out)                   :: coefficients
+      real, optional, intent(inout)                     :: user_rel_tol
 
       ! Local variables
       PetscInt :: global_rows, global_cols, local_rows, local_cols
@@ -455,7 +461,7 @@ module gmres_poly
       type(tVec) :: w_j
       type(tVec), dimension(poly_order+2) :: V_n
       integer, dimension(:), allocatable :: iwork
-      real :: rcond = -1.0
+      real :: rcond = -1.0, rel_tol
 
       ! ~~~~~~    
 
@@ -489,7 +495,10 @@ module gmres_poly
       ! Do the Arnoldi and compute H_n and C_n
       ! We only compute H_n until we hit a relative residual of 1e-14 against the random rhs
       ! or we hit the given poly_order
-      call arnoldi(matrix, poly_order, 1e-30, V_n, w_j, beta, H_n, m, C_n, y, 1e-14)
+      rel_tol = 1e-14
+      if (present(user_rel_tol)) rel_tol = user_rel_tol
+      call arnoldi(matrix, poly_order, 1e-30, V_n, w_j, beta, H_n, m, C_n, y, rel_tol)
+      if (present(user_rel_tol)) user_rel_tol = rel_tol
 
       ! ~~~~~~~~~~~~~
       ! Compute the polynomial coefficients, this is C_n(1:m, 1:m) y
