@@ -436,13 +436,19 @@ Currently the setup can be quite slow, with substantial differences between the 
 
 2 - The default parameters used in the processor agglomeration in PCAIR (e.g., ``-pc_air_process_eq_limit``) have not been optimised for GPUs.
 
-3 - Multigrid methods on GPUs will often pin the coarse grids to the CPU, as GPUs are not very fast at the small solves that occur on coarse grids. We do not do this in PCAIR; instead we recommend using the GMRES polynomials applied matrix free as a coarse solver. In particular the polynomials which use the Newton basis are stable at high order and can therefore be combined with heavy truncation of the multigrid hierarchy. 
+3 - Multigrid methods on GPUs will often pin the coarse grids to the CPU, as GPUs are not very fast at the small solves that occur on coarse grids. We do not do this in PCAIR; instead we use the same approach we used in [2] to improve parallel scaling on CPUs. 
 
-For example, on a single NVIDIA GPU with a 2D structured grid advection problem, truncating the number of levels to 11 (typically the coarsening gives 25 levels) and applying a 10th order Newton polynomial matrix-free as a coarse grid solver:
+This is based around using the high-order polynomials applied matrix free as a coarse solver. For many problems GMRES polynomials in the Newton basis are stable at high order and can therefore be combined with heavy truncation of the multigrid hierarchy. We now also have an automated way to determine at what level of the multigrid hierarchy to truncate. 
 
-``./adv_diff_2d.o -da_grid_x 1000 -da_grid_y 1000 -ksp_type richardson -pc_type air -pc_air_max_levels 11 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_poly_order 10 -dm_mat_type aijcusparse -dm_vec_type cuda``
+For example, on a single NVIDIA GPU with a 2D structured grid advection problem we apply a high order (10th order) Newton polynomial matrix-free as a coarse grid solver:
 
-gives the same iteration count as without truncation and we see an overall speedup of ~1.35x in the solve on GPUs with this approach. The level of truncation and polynomial orders required are currently problem dependent, but automated methods to determine this are under development. 
+``./adv_diff_2d.o -da_grid_x 1000 -da_grid_y 1000 -ksp_type richardson -pc_type air -pc_air_coarsest_inverse_type newton -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_poly_order 10 -dm_mat_type aijcusparse -dm_vec_type cuda``
+
+The hierarchy in this case has 29 levels. If we turn on the auto truncation and set a very large truncation tolerance  
+
+``./adv_diff_2d.o -da_grid_x 1000 -da_grid_y 1000 -ksp_type richardson -pc_type air -pc_air_max_levels 11 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_poly_order 10 -dm_mat_type aijcusparse -dm_vec_type cuda -pc_air_auto_truncate_start_level 1 -pc_air_auto_truncate_tol 1e-1``
+
+we find that the 10th order polynomials are good enough coarse solvers to enable truncation of the hierarchy at level 11. This gives the same iteration count as without truncation and we see an overall speedup of ~1.47x in the solve on GPUs with this approach.
 
 ## CF splittings
 
