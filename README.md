@@ -68,6 +68,7 @@ PFLARE is compatible with 64-bit integers if PETSc has been configured with 64-b
 
 A Dockerfile is also provided which builds all the dependencies, compiles the library and runs all the tests. To run this Docker image, from the top level directory use:
 
+     cd dockerfiles
      docker build -t "pflare" .
      docker run pflare
 
