@@ -23,6 +23,7 @@ module air_data_type
    ! advection equations (ie purely hyperbolic) on a 2D unstructured
    ! triangular mesh
    ! Can be changed via command line arguments
+   ! These defaults need to match those in destroy_air_data
    type air_options
 
       ! Print out stats and timings
@@ -37,6 +38,12 @@ module air_data_type
       ! Minimum number of global unknowns on the coarse grid
       ! -pc_air_coarse_eq_limit
       PetscInt :: coarse_eq_limit = 6
+      ! From this level onwards, evaluate if a coarse grid solver is good enough would be
+      ! and use that to determine if we should truncate on that level
+      integer :: auto_truncate_start_level = -1
+      ! What relative tolerance to use to determine if a coarse grid solver is good enough
+      ! -pc_air_auto_truncate_tol
+      real :: auto_truncate_tol = 1e-14
 
       ! Perform processor agglomeration throughout the hierarchy
       ! This reduces the number of active MPI ranks as we coarsen

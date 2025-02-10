@@ -1182,7 +1182,7 @@ module air_mg_setup
       integer             :: no_levels, our_level, our_level_coarse, errorcode, comm_rank, comm_size
       PetscErrorCode      :: ierr
       MPI_Comm            :: MPI_COMM_MATRIX
-      real                :: ratio_local_nnzs_off_proc, desired_rel_tol, achieved_rel_tol, norm_b
+      real                :: ratio_local_nnzs_off_proc, achieved_rel_tol, norm_b
       logical             :: continue_coarsening, trigger_proc_agglom, proc_agglom_exists, reusing_temp_mg_vecs
       type(tMat)          :: coarse_matrix_temp
       type(tKSP)          :: ksp_smoother_up, ksp_smoother_down, ksp_coarse_solver
@@ -1261,7 +1261,9 @@ module air_mg_setup
          ! Otherwise building assembled approximation inverses can be very expensive!      
          ! ~~~~~~~~~~
          ! We already know how many coarse levels we have if we are re-using
-         if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then         
+         if (.NOT. air_data%allocated_matrices_A_ff(our_level) .AND. &
+                     our_level .ge. air_data%options%auto_truncate_start_level .AND. &
+                     air_data%options%auto_truncate_start_level /= -1) then         
 
             call timer_start(TIMER_ID_AIR_TRUNCATE)   
 
@@ -1275,22 +1277,11 @@ module air_mg_setup
                      proc_stride, &
                      air_data%inv_coarsest_poly_data)  
 
-            ! Calculate the approximate inverse we'll use on this level
+            ! Start the approximate inverse we'll use on this level
             call start_approximate_inverse(air_data%coarse_matrix(our_level), &
                   air_data%options%coarsest_inverse_type, &
                   air_data%inv_coarsest_poly_data%gmres_poly_order, &
-                  air_data%inv_coarsest_poly_data%buffers, air_data%inv_coarsest_poly_data%coefficients)     
-                  
-            call finish_approximate_inverse(air_data%coarse_matrix(our_level), &
-                  air_data%options%coarsest_inverse_type, &
-                  air_data%inv_coarsest_poly_data%gmres_poly_order, air_data%inv_coarsest_poly_data%gmres_poly_sparsity_order, &
-                  air_data%inv_coarsest_poly_data%buffers, air_data%inv_coarsest_poly_data%coefficients, &
-                  air_data%options%coarsest_matrix_free_polys, &
-                  air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF), &
-                  air_data%inv_A_ff(our_level))                   
-                  
-            ! What tolerance we want to hit
-            desired_rel_tol = 1e-2
+                  air_data%inv_coarsest_poly_data%buffers, air_data%inv_coarsest_poly_data%coefficients)                       
 
             ! This will be a vec of randoms that differ from those used to create the gmres polynomials
             ! We will solve Ax = rand_vec to test how good our coarse solver is
@@ -1304,6 +1295,15 @@ module air_mg_setup
             call VecDuplicate(rand_vec, sol_vec, ierr)
             call VecDuplicate(rand_vec, temp_vec, ierr)
 
+            ! Finish our approximate inverse
+            call finish_approximate_inverse(air_data%coarse_matrix(our_level), &
+                  air_data%options%coarsest_inverse_type, &
+                  air_data%inv_coarsest_poly_data%gmres_poly_order, air_data%inv_coarsest_poly_data%gmres_poly_sparsity_order, &
+                  air_data%inv_coarsest_poly_data%buffers, air_data%inv_coarsest_poly_data%coefficients, &
+                  air_data%options%coarsest_matrix_free_polys, &
+                  air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF), &
+                  air_data%inv_A_ff(our_level))             
+
             ! sol_vec = A^-1 * rand_vec
             call MatMult(air_data%inv_A_ff(our_level), rand_vec, sol_vec, ierr)
             ! Now calculate a residual
@@ -1314,19 +1314,27 @@ module air_mg_setup
             call VecNorm(temp_vec, NORM_2, achieved_rel_tol, ierr)    
             call VecNorm(rand_vec, NORM_2, norm_b, ierr)    
 
-            ! If it's good enough we can truncate on this level
-            if (achieved_rel_tol/norm_b < desired_rel_tol) then
+            ! If it's good enough we can truncate on this level and our coarse solver has been computed
+            if (achieved_rel_tol/norm_b < air_data%options%auto_truncate_tol) then
                auto_truncated = .TRUE.
 
-            ! If this isn't good enough, destroy 
+               ! Delete temporary if not reusing
+               if (.NOT. air_data%options%reuse_sparsity) then
+                  call MatDestroy(air_data%reuse(air_data%no_levels)%reuse_mat(MAT_INV_AFF), ierr)
+#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
+                  air_data%reuse(air_data%no_levels)%reuse_mat(MAT_INV_AFF) = PETSC_NULL_MAT
+#endif            
+               end if                  
+
+            ! If this isn't good enough, destroy everything we used - no chance for reuse
             else
-               call MatDestroy(air_data%inv_A_ff(our_level), ierr)
+               call MatDestroy(air_data%inv_A_ff(our_level), ierr)               
                call MatDestroy(air_data%reuse(air_data%no_levels)%reuse_mat(MAT_INV_AFF), ierr)
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
                air_data%reuse(air_data%no_levels)%reuse_mat(MAT_INV_AFF) = PETSC_NULL_MAT
 #endif                
             end if      
-            
+
             call VecDestroy(rand_vec, ierr)
             call VecDestroy(sol_vec, ierr)
             call VecDestroy(temp_vec, ierr)
@@ -2334,6 +2342,8 @@ module air_mg_setup
 
       air_data%options%max_levels = 300
       air_data%options%coarse_eq_limit = 6
+      air_data%options%auto_truncate_start_level = -1
+      air_data%options%auto_truncate_tol = 1e-14
       air_data%options%processor_agglom = .TRUE.
       air_data%options%processor_agglom_ratio = 2
       air_data%options%processor_agglom_factor = 2
