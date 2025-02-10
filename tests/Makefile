@@ -238,6 +238,12 @@ run_tests:
 	 -pc_pflareinv_matrix_free -pc_pflareinv_order 50
 # 
 	@echo ""
+	@echo "Test auto truncation with matrix-free Newton polynomials as coarse grid solver" 
+	./adv_diff_2d.o -da_grid_x 10 -da_grid_y 10 -ksp_type richardson -pc_type air \
+	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys \
+	 -pc_air_auto_truncate_start_level 1 -pc_air_auto_truncate_tol 1e-2
+# 
+	@echo ""
 	@echo "Test PMISR DDC CF splitting in C"
 	./ex6_cf_splitting.o  -f data/mat_stream_2364
 	@echo "Test PMISR DDC CF splitting in C in parallel"
