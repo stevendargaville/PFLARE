@@ -1320,18 +1320,18 @@ module air_mg_setup
 
                ! Delete temporary if not reusing
                if (.NOT. air_data%options%reuse_sparsity) then
-                  call MatDestroy(air_data%reuse(air_data%no_levels)%reuse_mat(MAT_INV_AFF), ierr)
+                  call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF), ierr)
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
-                  air_data%reuse(air_data%no_levels)%reuse_mat(MAT_INV_AFF) = PETSC_NULL_MAT
+                  air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF) = PETSC_NULL_MAT
 #endif            
                end if                  
 
             ! If this isn't good enough, destroy everything we used - no chance for reuse
             else
                call MatDestroy(air_data%inv_A_ff(our_level), ierr)               
-               call MatDestroy(air_data%reuse(air_data%no_levels)%reuse_mat(MAT_INV_AFF), ierr)
+               call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF), ierr)
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
-               air_data%reuse(air_data%no_levels)%reuse_mat(MAT_INV_AFF) = PETSC_NULL_MAT
+               air_data%reuse(our_level)%reuse_mat(MAT_INV_AFF) = PETSC_NULL_MAT
 #endif                
             end if      
 
@@ -1407,9 +1407,10 @@ module air_mg_setup
             else
                call ISGetSize(air_data%IS_coarse_index(our_level-1), global_fine_is_size, ierr)
                call ISGetLocalSize(air_data%IS_coarse_index(our_level-1), local_fine_is_size, ierr)
+
+               call MatCreateVecs(air_data%A_fc(our_level-1), &
+                        air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)               
             end if
-            call MatCreateVecs(air_data%A_fc(our_level-1), &
-                     air_data%temp_vecs_fine(1)%array(our_level), PETSC_NULL_VEC, ierr)
 
             if (air_data%options%constrain_z) then
                ! Destroy our copy of the left near nullspace vectors
@@ -1914,9 +1915,9 @@ module air_mg_setup
       ! ~~~~~~~~~~~~~~~
       ! Let's setup the PETSc pc we need
       ! ~~~~~~~~~~~~~~~
-      call PCSetOperators(pcmg, amat, pmat, ierr)
-
       if (no_levels > 1) then
+
+         call PCSetOperators(pcmg, amat, pmat, ierr)
          call PCSetType(pcmg, PCMG, ierr)
          no_levels_petsc_int = no_levels
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 15)
@@ -2138,11 +2139,23 @@ module air_mg_setup
             call VecDestroy(air_data%temp_vecs_x(no_levels), ierr)            
          end if
 
-
-      ! If we've only got one level just precondition with jacobi
+      ! If we've only got one level 
       else
-         call PCSetType(pcmg, PCJACOBI, ierr)
-         if (comm_rank == 0) print *, "Only a single level, defaulting to Jacobi PC"
+         ! Precondition with the "coarse grid" solver we used to determine auto truncation
+         if (auto_truncated) then
+            call PetscObjectReference(amat, ierr) 
+            call PCSetOperators(pcmg, amat, &
+                        air_data%inv_A_ff(no_levels), ierr)         
+            call PCSetType(pcmg, PCMAT, ierr)
+
+         ! Otherwise just do a jacobi and tell the user
+         else
+            
+            ! If we've only got one level just precondition with jacobi
+            call PCSetOperators(pcmg, amat, pmat, ierr)
+            call PCSetType(pcmg, PCJACOBI, ierr)
+            if (comm_rank == 0) print *, "Only a single level, defaulting to Jacobi PC"
+         end if
       end if      
 
       ! Call the setup on our PC

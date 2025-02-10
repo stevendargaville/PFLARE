@@ -72,6 +72,40 @@ module pcair_c_fortran_bindings
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
+   subroutine PCAIRGetAutoTruncateStartLevel_c(pc_ptr, start_level) bind(C, name='PCAIRGetAutoTruncateStartLevel_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, intent(out)               :: start_level
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetAutoTruncateStartLevel(pc, start_level, ierr)
+
+   end subroutine PCAIRGetAutoTruncateStartLevel_c   
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRGetAutoTruncateTol_c(pc_ptr, tol) bind(C, name='PCAIRGetAutoTruncateTol_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscReal, intent(out)        :: tol
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRGetAutoTruncateTol(pc, tol, ierr)
+
+   end subroutine PCAIRGetAutoTruncateTol_c   
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
    subroutine PCAIRGetNumLevels_c(pc_ptr, num_levels) bind(C, name='PCAIRGetNumLevels_c')
 
       ! ~~~~~~~~
@@ -833,6 +867,40 @@ module pcair_c_fortran_bindings
       call PCAIRSetCoarseEqLimit(pc, coarse_eq_limit, ierr)
 
    end subroutine PCAIRSetCoarseEqLimit_c   
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetAutoTruncateStartLevel_c(pc_ptr, start_level) bind(C, name='PCAIRSetAutoTruncateStartLevel_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscInt, value, intent(in)          :: start_level
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetAutoTruncateStartLevel(pc, start_level, ierr)
+
+   end subroutine PCAIRSetAutoTruncateStartLevel_c   
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine PCAIRSetAutoTruncateTol_c(pc_ptr, tol) bind(C, name='PCAIRSetAutoTruncateTol_c')
+
+      ! ~~~~~~~~
+      integer(c_long_long), intent(inout) :: pc_ptr
+      PetscReal, value, intent(in)         :: tol
+
+      type(tPC)                  :: pc
+      PetscErrorCode         :: ierr
+      ! ~~~~~~~~
+
+      pc%v = pc_ptr
+      call PCAIRSetAutoTruncateTol(pc, tol, ierr)
+
+   end subroutine PCAIRSetAutoTruncateTol_c   
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 

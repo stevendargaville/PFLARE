@@ -16,6 +16,8 @@ PETSC_EXTERN void create_pc_air_shell_c(void **pc_air_data, PC *pc);
 PETSC_EXTERN PetscErrorCode PCAIRGetPrintStatsTimings_c(PC *pc, PetscBool *input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRGetMaxLevels_c(PC *pc, PetscInt *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetCoarseEqLimit_c(PC *pc, PetscInt *input_int);
+PETSC_EXTERN PetscErrorCode PCAIRGetAutoTruncateStartLevel_c(PC *pc, PetscInt *input_int);
+PETSC_EXTERN PetscErrorCode PCAIRGetAutoTruncateTol_c(PC *pc, PetscReal *input_real);
 PETSC_EXTERN PetscErrorCode PCAIRGetNumLevels_c(PC *pc, PetscInt *input_int);
 PETSC_EXTERN PetscErrorCode PCAIRGetProcessorAgglom_c(PC *pc, PetscBool *input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRGetProcessorAgglomRatio_c(PC *pc, PetscReal *input_real);
@@ -59,6 +61,8 @@ PETSC_EXTERN PetscErrorCode PCAIRGetPolyCoeffs_c(PC *pc, PetscInt petsc_level, i
 PETSC_EXTERN PetscErrorCode PCAIRSetPrintStatsTimings_c(PC *pc, PetscBool input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRSetMaxLevels_c(PC *pc, PetscInt input_int);
 PETSC_EXTERN PetscErrorCode PCAIRSetCoarseEqLimit_c(PC *pc, PetscInt input_int);
+PETSC_EXTERN PetscErrorCode PCAIRSetAutoTruncateStartLevel_c(PC *pc, PetscInt input_int);
+PETSC_EXTERN PetscErrorCode PCAIRSetAutoTruncateTol_c(PC *pc, PetscReal input_real);
 PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglom_c(PC *pc, PetscBool input_bool);
 PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglomRatio_c(PC *pc, PetscReal input_real);
 PETSC_EXTERN PetscErrorCode PCAIRSetProcessorAgglomFactor_c(PC *pc, PetscInt input_int);
@@ -186,6 +190,18 @@ PETSC_EXTERN PetscErrorCode PCAIRGetCoarseEqLimit(PC pc, PetscInt *input_int)
 {
    PetscFunctionBegin;
    PCAIRGetCoarseEqLimit_c(&pc, input_int);
+   PetscFunctionReturn(0);
+}
+PETSC_EXTERN PetscErrorCode PCAIRGetAutoTruncateStartLevel(PC pc, PetscInt *input_int)
+{
+   PetscFunctionBegin;
+   PCAIRGetAutoTruncateStartLevel_c(&pc, input_int);
+   PetscFunctionReturn(0);
+}
+PETSC_EXTERN PetscErrorCode PCAIRGetAutoTruncateTol(PC pc, PetscReal *input_real)
+{
+   PetscFunctionBegin;
+   PCAIRGetAutoTruncateTol_c(&pc, input_real);
    PetscFunctionReturn(0);
 }
 // Returns the number of levels in the underlying PCMG
@@ -464,6 +480,33 @@ PETSC_EXTERN PetscErrorCode PCAIRSetCoarseEqLimit(PC pc, PetscInt input_int)
    if (old_int == input_int) PetscFunctionReturn(0);
    PCReset_AIR_c(pc);
    PCAIRSetCoarseEqLimit_c(&pc, input_int);
+   PetscFunctionReturn(0);
+}
+// From this level onwards, build and then evaluate if the coarse grid solver
+// is good enough and use that to determine if we should truncate on that level
+// Default: -1
+// -pc_air_auto_truncate_start_level
+PETSC_EXTERN PetscErrorCode PCAIRSetAutoTruncateStartLevel(PC pc, PetscInt input_int)
+{
+   PetscFunctionBegin;
+   PetscInt old_int;
+   PCAIRGetAutoTruncateStartLevel(pc, &old_int);
+   if (old_int == input_int) PetscFunctionReturn(0);
+   PCReset_AIR_c(pc);
+   PCAIRSetAutoTruncateStartLevel_c(&pc, input_int);
+   PetscFunctionReturn(0);
+}
+// What relative tolerance to use to determine if a coarse grid solver is good enough
+// Default: 1e-14
+// -pc_air_auto_truncate_tol
+PETSC_EXTERN PetscErrorCode PCAIRSetAutoTruncateTol(PC pc, PetscReal input_real)
+{
+   PetscFunctionBegin;
+   PetscReal old_real;
+   PCAIRGetAutoTruncateTol(pc, &old_real);
+   if (old_real == input_real) PetscFunctionReturn(0);
+   PCReset_AIR_c(pc);    
+   PCAIRSetAutoTruncateTol_c(&pc, input_real);
    PetscFunctionReturn(0);
 }
 // Perform processor agglomeration throughout the hierarchy
@@ -1098,7 +1141,12 @@ static PetscErrorCode PCSetFromOptions_AIR_c(PetscOptionItems *PetscOptionsObjec
    PCAIRGetProcessorAgglomRatio(pc, &old_real);
    input_real = old_real;
    PetscOptionsReal("-pc_air_processor_agglom_ratio", "Ratio to trigger processor agglomeration", "PCAIRSetProcessorAgglomRatio", old_real, &input_real, NULL);
-   PCAIRSetProcessorAgglomRatio(pc, input_real);
+   PCAIRSetProcessorAgglomRatio(pc, input_real);   
+   // ~~~~
+   PCAIRGetAutoTruncateTol(pc, &old_real);
+   input_real = old_real;
+   PetscOptionsReal("-pc_air_auto_truncate_tol", "Tolerance to use with auto truncation", "PCAIRSetAutoTruncateTol", old_real, &input_real, NULL);
+   PCAIRSetAutoTruncateTol(pc, input_real);
    // ~~~~
    PCAIRGetStrongThreshold(pc, &old_real);
    input_real = old_real;
@@ -1150,6 +1198,11 @@ static PetscErrorCode PCSetFromOptions_AIR_c(PetscOptionItems *PetscOptionsObjec
    input_int = old_int;
    PetscOptionsInt("-pc_air_coarse_eq_limit", "Minimum number of global unknowns on the coarse grid", "PCAIRSetCoarseEqLimit", old_int, &input_int, NULL);
    PCAIRSetCoarseEqLimit(pc, input_int);   
+   // ~~~~    
+   PCAIRGetAutoTruncateStartLevel(pc, &old_int);
+   input_int = old_int;
+   PetscOptionsInt("-pc_air_auto_truncate_start_level", "Use auto truncation from this level", "PCAIRSetAutoTruncateStartLevel", old_int, &input_int, NULL);
+   PCAIRSetAutoTruncateStartLevel(pc, input_int);
    // ~~~~ 
    const char *const PCPFLAREINVTypes[] = {"POWER", "ARNOLDI", "NEWTON", "NEWTON_NO_EXTRA", "NEUMANN", "SAI", "ISAI", "WJACOBI", "JACOBI", "PCPFLAREINVType", "PFLAREINV_", NULL};
    PCAIRGetInverseType(pc, &old_type);
@@ -1255,7 +1308,15 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
       ierr =  PCAIRGetMaxLevels(pc, &input_int);
       PetscViewerASCIIPrintf(viewer, "  Max number of levels=%"PetscInt_FMT" \n", input_int);
       ierr =  PCAIRGetCoarseEqLimit(pc, &input_int);
-      PetscViewerASCIIPrintf(viewer, "  Coarse eq limit=%"PetscInt_FMT" \n", input_int);      
+      PetscViewerASCIIPrintf(viewer, "  Coarse eq limit=%"PetscInt_FMT" \n", input_int);  
+      
+      ierr =  PCAIRGetAutoTruncateStartLevel(pc, &input_int);
+      ierr =  PCAIRGetAutoTruncateTol(pc, &input_real);
+      if (input_int != -1) 
+      {
+         PetscViewerASCIIPrintf(viewer, "  Auto truncate start level=%"PetscInt_FMT", with tolerance %.2e \n", input_int, input_real);      
+      }
+
       ierr =  PCAIRGetRDrop(pc, &input_real);
       ierr =  PCAIRGetADrop(pc, &input_real_two);
       PetscViewerASCIIPrintf(viewer, "  A drop tolerance=%f, R drop tolerance %f \n", input_real_two, input_real);
