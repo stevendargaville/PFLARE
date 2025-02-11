@@ -25,7 +25,7 @@ jobs:
       - name: Determine branch to build
         id: branch
         run: |
-          # For pull requests, use the head ref (the branch that triggered the PR).
+          # For pull requests, use the head ref (the branch that triggered the PR)
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "BRANCH=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
           else
@@ -37,7 +37,8 @@ jobs:
         run: |
           echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV} 
 
-      - name: Build and push
+      - name: Build and push Docker image for push events
+        if: ${{ github.event_name != 'pull_request' }}
         uses: docker/build-push-action@v2
         with:
           platforms: linux/amd64
@@ -47,12 +48,35 @@ jobs:
           build-args: |
             BRANCH=${{ env.BRANCH }}
 
-      - name: Build and push 64 bit
+      - name: Build Docker image for pull requests
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: docker/build-push-action@v2
+        with:
+          platforms: linux/amd64
+          push: false
+          file: ./dockerfiles/Dockerfile
+          tags: ${{ env.REPO }}:pr-build
+          build-args: |
+            BRANCH=${{ env.BRANCH }}
+
+      - name: Build and push 64-bit Docker image for push events
+        if: ${{ github.event_name != 'pull_request' }}
         uses: docker/build-push-action@v2
         with:
           platforms: linux/amd64
           push: true
           file: ./dockerfiles/Dockerfile_64_bit
           tags: ${{ env.REPO }}_64_bit:latest
+          build-args: |
+            BRANCH=${{ env.BRANCH }}
+
+      - name: Build 64-bit Docker image for pull requests
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: docker/build-push-action@v2
+        with:
+          platforms: linux/amd64
+          push: false
+          file: ./dockerfiles/Dockerfile_64_bit
+          tags: ${{ env.REPO }}_64_bit:pr-build
           build-args: |
             BRANCH=${{ env.BRANCH }}
