@@ -101,5 +101,7 @@
 
       call PetscFinalize(ierr)
 
-      error stop 1
+      if (reason < 0) then
+         error stop 1
+      end if
       end

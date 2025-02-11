@@ -110,6 +110,7 @@ int main(int argc,char **args)
   }
   else{
    ierr = PetscPrintf(PETSC_COMM_WORLD, "NOT OK \n");
+   return 1;
   }
 
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -122,5 +123,5 @@ int main(int argc,char **args)
   ierr = ISDestroy(&is_fine); CHKERRQ(ierr);
   ierr = ISDestroy(&is_coarse); CHKERRQ(ierr);
   ierr = PetscFinalize();
-  return ierr;
+  return 0;
 }
