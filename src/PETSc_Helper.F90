@@ -39,7 +39,7 @@ module petsc_helper
       PetscInt :: local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
       PetscInt :: global_col_start, global_col_end_plus_one, diagonal_index, counter, max_nnzs_total
       PetscErrorCode :: ierr
-      integer :: errorcode, comm_size, local_rows
+      integer :: errorcode, comm_size
       PetscInt, dimension(:), allocatable :: cols
       real, dimension(:), allocatable :: vals
       PetscInt, allocatable, dimension(:) :: row_indices, col_indices
