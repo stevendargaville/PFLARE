@@ -29,3 +29,11 @@ jobs:
           push: true
           file: ./dockerfiles/Dockerfile          
           tags: ${{ env.REPO }}:latest
+
+      - name: Build and push 64 bit
+        uses: docker/build-push-action@v2
+        with:
+          platforms: linux/amd64
+          push: true
+          file: ./dockerfiles/Dockerfile_64_bit
+          tags: ${{ env.REPO }}_64_bit:latest          
