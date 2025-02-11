@@ -101,5 +101,5 @@
 
       call PetscFinalize(ierr)
 
-      return 1;
+      error stop 1
       end
