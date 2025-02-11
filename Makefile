@@ -5,21 +5,6 @@
 # Must have defined PETSC_DIR and PETSC_ARCH before calling
 # PETSc must be at least version 3.15
 # ~~~~~~~~~~~~~~~~~
-
-# The Makefiles in PFLARE are written for GNU compilers
-# For LLVM compilers (e.g., flang or amdflang), replace flags in this Makefile by calling: 
-#  sed -i -e 's/-fdefault-double-8 -ffixed-line-length-none -ffree-line-length-none//g' Makefile
-# and the tests/Makefile by calling:
-#  sed -i -e 's/-fdefault-double-8 -ffixed-line-length-none -ffree-line-length-none//g' tests/Makefile
-#    
-# For Cray compilers, replace flags in this Makefile by calling: 
-#  sed -i -e 's/-fdefault-real-8/-s real64/g' Makefile
-#  sed -i -e 's/-fdefault-double-8 -ffixed-line-length-none -ffree-line-length-none//g' Makefile
-#  sed -i -e 's/-shared/-shared -Wl,--allow-multiple-definition/g' Makefile
-# and the tests/Makefile by calling:
-#  sed -i -e 's/-fdefault-real-8/-s real64/g' tests/Makefile
-#  sed -i -e 's/-fdefault-double-8 -ffixed-line-length-none -ffree-line-length-none//g' tests/Makefile
-#  sed -i -e 's/-lblas -llapack//g' tests/Makefile
  
 # Compiler options - need both a fortran and c compiler
 # with appropriate mpi wrappings
@@ -46,7 +31,14 @@ export MPIEXEC := mpiexec
 #    but that would then trigger the threaded blas/lapack
 #    The only omp we want is internal to PFLARE
 CFLAGS := ${CFLAGS} -O3 -fPIC
-FFLAGS := ${FFLAGS} -O3 -fPIC -fdefault-real-8 -fdefault-double-8 -ffixed-line-length-none -ffree-line-length-none
+FFLAGS := ${FFLAGS} -O3 -fPIC
+
+SHARED_FLAG := -shared
+FORTMOD     := -J
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~
+# We currently don't require any compiler specific flags
+# ~~~~~~~~~~~~~~~~~~~~~~~~
 
 INCLUDEDIR  := include
 SRCDIR      := src
@@ -55,7 +47,9 @@ OBJDIR      := obj
 export LIBDIR	:= $(CURDIR)/lib
 
 # Include directories
-INCLUDE		:= -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
+# We only include the currrent directory here as the intel compiler ignores the -J flag and instead
+# wants -module - but we don't want any compiler specific flags here for simplicity
+INCLUDE		:= -I$(CURDIR) -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
 
 # Output the library
 OUT = $(LIBDIR)/libpflare.so
@@ -111,7 +105,7 @@ $(OBJDIR):
 # Fortran
 # Place the .o and .mod files in the $(OBJDIR) directory
 $(OBJDIR)/%.o: $(SRCDIR)/%.F90
-	$(FC) $(FFLAGS) -c $(INCLUDE) $^ -o $@ -J$(INCLUDEDIR)
+	$(FC) $(FFLAGS) -c $(INCLUDE) $^ -o $@ $(FORTMOD) $(INCLUDEDIR)
 
 # C files
 # Place the .o files in the $(OBJDIR) directory
@@ -120,7 +114,7 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c
 
 # Make our shared library
 $(OUT): $(OBJS) 
-	$(FC) -shared -fPIC $^ -o $(OUT)
+	$(FC) $(SHARED_FLAG) -fPIC $^ -o $(OUT)
 
 # Build the tests
 build_tests: $(OUT)
@@ -153,6 +147,7 @@ clean:
 	$(RM) -r $(LIBDIR)
 	$(RM) $(INCLUDEDIR)/*.mod
 	$(RM) $(SRCDIR)/*.mod
+	$(RM) $(CURDIR)/*.mod
 	$(MAKE) -C tests clean
 	$(MAKE) -C python clean
 

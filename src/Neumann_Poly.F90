@@ -51,8 +51,8 @@ module neumann_poly
 
       ! Now do x - D^-1 A x
       call VecAXPBY(y, &
-               1.0, &
-               -1.0, &
+               1d0, &
+               -1d0, &
                x, ierr)      
 
    end subroutine petsc_matvec_ida_neumann_poly_mf     
@@ -121,8 +121,8 @@ module neumann_poly
       type(tMat), intent(inout)           :: reuse_mat, inv_matrix
 
       ! Local variables
-      real, dimension(:), pointer :: coefficients
-      real, dimension(poly_order + 1), target :: coefficients_stack
+      PetscReal, dimension(:), pointer :: coefficients
+      PetscReal, dimension(poly_order + 1), target :: coefficients_stack
       integer :: comm_size, errorcode
       PetscErrorCode :: ierr      
       MPI_Comm :: MPI_COMM_MATRIX
@@ -151,7 +151,7 @@ module neumann_poly
          if (PetscMatIsNull(inv_matrix)) then
 
             allocate(coefficients(poly_order + 1))
-            coefficients = 1.0 
+            coefficients = 1d0 
 
             ! Have to dynamically allocate this
             allocate(mat_ctx)
@@ -218,7 +218,7 @@ module neumann_poly
 
          coefficients => coefficients_stack
          ! A Neumann polynomial has coefficients of 1
-         coefficients = 1.0 
+         coefficients = 1d0 
 
          ! Need to build an assembled I - D^-1 A
          call MatConvert(matrix, MATSAME, MAT_INITIAL_MATRIX, temp_mat, ierr)
@@ -228,8 +228,8 @@ module neumann_poly
          call MatDiagonalScale(temp_mat, diag_vec, PETSC_NULL_VEC, ierr) 
    
          ! Computes: I - D^-1 A
-         call MatScale(temp_mat, -1.0, ierr)
-         call MatShift(temp_mat, 1.0, ierr)
+         call MatScale(temp_mat, -1d0, ierr)
+         call MatShift(temp_mat, 1d0, ierr)
          
          ! If we feed in coefficients=1 and leave buffers%R_buffer_receive unallocated as it will just skip 
          ! the "gmres" coefficient calculation and just calculate the sum of (potentailly fixed sparsity) matrix powers

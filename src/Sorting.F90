@@ -29,7 +29,7 @@ module sorting
       integer, intent(in)                               :: max_no
 
       integer                                           :: i, j, temp_int
-      real                                              :: rand_temp
+      real(8)                                           :: rand_temp
       !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
       
       do i = 1, max_no
@@ -40,7 +40,7 @@ module sorting
       do i = max_no, 1, -1
       
          call RANDOM_NUMBER(rand_temp)
-         j = int(rand_temp * real(i) + 1)
+         j = int(rand_temp * dble(i) + 1)
          temp_int = shuffle(j)
          shuffle(j) = shuffle(i)
          shuffle(i) = temp_int         
@@ -60,7 +60,7 @@ module sorting
       
       integer, allocatable, dimension(:)        :: shuffle
       integer                                   :: i, j, temp_int
-      real                                      :: rand_temp
+      PetscReal                                 :: rand_temp
       !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
       
       allocate(shuffle(size(input_array)))

@@ -73,7 +73,7 @@
 !   - Always specify global rows and columns of matrix entries.
 
       do 10, II=Istart,Iend-1
-        v = -1.0
+        v = -1d0
         i = II/n
         j = II - i*n
         if (i.gt.0) then
@@ -207,7 +207,7 @@
       call MatAssemblyEnd(A,MAT_FINAL_ASSEMBLY,ierr)
 
 ! Set the exact solution; compute the right-hand-side vector
-      val = 1.0*real(count)
+      val = 1d0*dble(count)
       call VecSet(u,val,ierr)
       call MatMult(A,u,b,ierr)
 

@@ -23,14 +23,14 @@ module gmres_poly_newton
       ! with positive imag e'vals first
 
       ! ~~~~~~
-      real, dimension(:), intent(inout)  :: real_roots, imag_roots
+      PetscReal, dimension(:), intent(inout)  :: real_roots, imag_roots
       integer, dimension(:), allocatable, intent(inout) :: indices
 
       ! Local variables
       integer :: i_loc, k_loc, counter
       integer :: max_loc(1)
-      real, dimension(:), allocatable :: magnitude
-      real :: a, b, squares, max_mag
+      PetscReal, dimension(:), allocatable :: magnitude
+      PetscReal :: a, b, squares, max_mag
       logical, dimension(size(real_roots)) :: sorted
 
       ! ~~~~~~    
@@ -53,7 +53,7 @@ module gmres_poly_newton
       sorted(indices(counter)) = .TRUE.
       counter = counter + 1
       ! If it was imaginary its complex conjugate is next to this one
-      if (imag_roots(indices(counter-1)) /= 0.0) then
+      if (imag_roots(indices(counter-1)) /= 0d0) then
          ! dgeev returns roots with the positive imaginary part first
          if (imag_roots(indices(counter-1)) > 0) then
             ! So if positive we know the conjugate is ahead one
@@ -69,14 +69,14 @@ module gmres_poly_newton
       ! Do while we still have some sorting to do
       do while (counter-1 < size(real_roots))
 
-         max_mag = -huge(0.0)
+         max_mag = -huge(0d0)
 
          ! For each value compute a product of differences
          do i_loc = 1, size(real_roots)
 
             ! Skip any we've already sorted
             if (sorted(i_loc)) cycle
-            magnitude(i_loc) = 1.0
+            magnitude(i_loc) = 1d0
 
             ! Loop over all those we've sorted so far
             do k_loc = 1, counter-1
@@ -114,7 +114,7 @@ module gmres_poly_newton
          sorted(indices(counter)) = .TRUE.
          counter = counter + 1
          ! If it was imaginary its complex conjugate is next to this one
-         if (imag_roots(indices(counter - 1)) /= 0.0) then
+         if (imag_roots(indices(counter - 1)) /= 0d0) then
             ! dgeev returns roots with the positive imaginary part first
             ! We did actually find a situation where due to rounding differnces, the 
             ! conjugate with negative imaginary root had a bigger product of factors
@@ -157,7 +157,7 @@ module gmres_poly_newton
       type(tMat), intent(in)                            :: matrix
       integer, intent(in)                               :: poly_order
       logical, intent(in)                               :: add_roots
-      real, dimension(:, :), pointer, intent(inout)     :: coefficients
+      PetscReal, dimension(:, :), pointer, intent(inout)     :: coefficients
 
       ! Local variables
       PetscInt :: global_rows, global_cols, local_rows, local_cols
@@ -165,22 +165,22 @@ module gmres_poly_newton
       integer :: total_extra, counter, k_loc, m
       PetscErrorCode :: ierr      
       MPI_Comm :: MPI_COMM_MATRIX
-      real, dimension(poly_order+2,poly_order+1) :: H_n
-      real, dimension(poly_order+1,poly_order+2) :: H_n_T
-      real, dimension(poly_order+1,poly_order+1) :: H_n_square
-      real, dimension(poly_order+1) :: e_d, r, col_scale, solution, gamma, s, pof
+      PetscReal, dimension(poly_order+2,poly_order+1) :: H_n
+      PetscReal, dimension(poly_order+1,poly_order+2) :: H_n_T
+      PetscReal, dimension(poly_order+1,poly_order+1) :: H_n_square
+      PetscReal, dimension(poly_order+1) :: e_d, r, col_scale, solution, gamma, s, pof
       integer, dimension(poly_order+1) :: iwork, pivots, extra_pair_roots, overflow
       integer, dimension(:), allocatable :: iwork_allocated, indices
-      real, dimension(1) :: ferr, berr
-      real, dimension(:), allocatable :: work
-      real, dimension(:,:), allocatable :: VL, VR
-      real :: beta, div_real, div_imag, a, b, c, d, div_mag
-      real, dimension(:, :), allocatable :: coefficients_temp
+      PetscReal, dimension(1) :: ferr, berr
+      PetscReal, dimension(:), allocatable :: work
+      PetscReal, dimension(:,:), allocatable :: VL, VR
+      PetscReal :: beta, div_real, div_imag, a, b, c, d, div_mag
+      PetscReal, dimension(:, :), allocatable :: coefficients_temp
       type(tVec) :: w_j
       type(tVec), dimension(poly_order+2) :: V_n
       character(1) :: equed
       logical :: use_harmonic_ritz = .TRUE.
-      real :: rcond = 1e-12
+      PetscReal :: rcond = 1e-12
 
       ! ~~~~~~    
 
@@ -214,7 +214,7 @@ module gmres_poly_newton
       
       ! Do the Arnoldi and compute H_n
       ! Use the same lucky tolerance as petsc
-      call arnoldi(matrix, poly_order, 1e-30, V_n, w_j, beta, H_n, m)
+      call arnoldi(matrix, poly_order, 1d-30, V_n, w_j, beta, H_n, m)
 
       ! ~~~~~~~~~~~
       ! Now the Ritz values are just the eigenvalues of the square part of H_n
@@ -502,7 +502,7 @@ module gmres_poly_newton
       ! MF_VEC_TEMP = x
       call VecCopy(x, mat_ctx%mf_temp_vec(MF_VEC_TEMP), ierr)
       ! y = 0
-      call VecSet(y, 0.0, ierr)
+      call VecSet(y, 0d0, ierr)
 
       ! ~~~~~~~~~~~~
       ! Iterate over the order
@@ -511,7 +511,7 @@ module gmres_poly_newton
       do while (order .le. size(mat_ctx%real_roots) - 1)
 
          ! If real this is easy
-         if (mat_ctx%imag_roots(order) == 0.0) then
+         if (mat_ctx%imag_roots(order) == 0d0) then
 
             ! Skips eigenvalues that are numerically zero - see 
             ! the comment in calculate_gmres_polynomial_roots_newton 
@@ -522,8 +522,8 @@ module gmres_poly_newton
 
             ! y = y + theta_i * MF_VEC_TEMP
             call VecAXPBY(y, &
-                     1.0/mat_ctx%real_roots(order), &
-                     1.0, &
+                     1d0/mat_ctx%real_roots(order), &
+                     1d0, &
                      mat_ctx%mf_temp_vec(MF_VEC_TEMP), ierr)   
                                           
             ! MF_VEC_DIAG = A * MF_VEC_TEMP
@@ -531,8 +531,8 @@ module gmres_poly_newton
             call MatMult(mat_ctx%mat, mat_ctx%mf_temp_vec(MF_VEC_TEMP), mat_ctx%mf_temp_vec(MF_VEC_DIAG), ierr)
             ! MF_VEC_TEMP = MF_VEC_TEMP - theta_i * MF_VEC_DIAG
             call VecAXPBY(mat_ctx%mf_temp_vec(MF_VEC_TEMP), &
-                     -1.0/mat_ctx%real_roots(order), &
-                     1.0, &
+                     -1d0/mat_ctx%real_roots(order), &
+                     1d0, &
                      mat_ctx%mf_temp_vec(MF_VEC_DIAG), ierr) 
 
             order = order + 1
@@ -553,13 +553,13 @@ module gmres_poly_newton
             ! MF_VEC_DIAG = 2 * Re(theta_i) * MF_VEC_TEMP - MF_VEC_DIAG
             call VecAXPBY(mat_ctx%mf_temp_vec(MF_VEC_DIAG), &
                   2 * mat_ctx%real_roots(order), &
-                  -1.0, &
+                  -1d0, &
                   mat_ctx%mf_temp_vec(MF_VEC_TEMP), ierr)
 
             ! y = y + 1/(Re(theta_i)^2 + Imag(theta_i)^2) * MF_VEC_DIAG
             call VecAXPBY(y, &
-                     1.0/(mat_ctx%real_roots(order)**2 + mat_ctx%imag_roots(order)**2), &
-                     1.0, &
+                     1d0/(mat_ctx%real_roots(order)**2 + mat_ctx%imag_roots(order)**2), &
+                     1d0, &
                      mat_ctx%mf_temp_vec(MF_VEC_DIAG), ierr)  
                      
             if (order .le. size(mat_ctx%real_roots) - 2) then
@@ -568,8 +568,8 @@ module gmres_poly_newton
 
                ! MF_VEC_TEMP = MF_VEC_TEMP - 1/(Re(theta_i)^2 + Imag(theta_i)^2) * MF_VEC_RHS
                call VecAXPBY(mat_ctx%mf_temp_vec(MF_VEC_TEMP), &
-                        -1.0/(mat_ctx%real_roots(order)**2 + mat_ctx%imag_roots(order)**2), &
-                        1.0, &
+                        -1d0/(mat_ctx%real_roots(order)**2 + mat_ctx%imag_roots(order)**2), &
+                        1d0, &
                         mat_ctx%mf_temp_vec(MF_VEC_RHS), ierr)               
             end if
 
@@ -580,15 +580,15 @@ module gmres_poly_newton
       end do
 
       ! Final step if last root is real
-      if (mat_ctx%imag_roots(size(mat_ctx%real_roots)) == 0.0) then
+      if (mat_ctx%imag_roots(size(mat_ctx%real_roots)) == 0d0) then
 
          ! Skips eigenvalues that are numerically zero
          if (abs(mat_ctx%real_roots(order)) > 1e-12) then
 
             ! y = y + theta_i * MF_VEC_TEMP
             call VecAXPBY(y, &
-                     1.0/mat_ctx%real_roots(order), &
-                     1.0, &
+                     1d0/mat_ctx%real_roots(order), &
+                     1d0, &
                      mat_ctx%mf_temp_vec(MF_VEC_TEMP), ierr) 
          end if
       end if
@@ -608,7 +608,7 @@ module gmres_poly_newton
       ! ~~~~~~
       type(tMat), intent(in)                                      :: matrix
       integer, intent(in)                                         :: poly_order
-      real, dimension(:, :), target, contiguous, intent(inout)    :: coefficients
+      PetscReal, dimension(:, :), target, contiguous, intent(inout)    :: coefficients
       type(tMat), intent(inout)                                   :: inv_matrix
 
       ! Local variables

@@ -26,7 +26,7 @@
       PC               pc
       KSPConvergedReason reason
 
-      none = -1.0
+      none = -1d0
       call PetscInitialize(PETSC_NULL_CHARACTER,ierr)
       if (ierr .ne. 0) then
         print*,'Unable to initialize PETSc'

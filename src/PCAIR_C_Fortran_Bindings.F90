@@ -735,7 +735,8 @@ module pcair_c_fortran_bindings
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine PCAIRGetPolyCoeffs_c(pc_ptr, petsc_level, which_inverse, coeffs_ptr, row_size, col_size) bind(C, name='PCAIRGetPolyCoeffs_c')
+   subroutine PCAIRGetPolyCoeffs_c(pc_ptr, petsc_level, which_inverse, &   
+      coeffs_ptr, row_size, col_size) bind(C, name='PCAIRGetPolyCoeffs_c')
 
       ! The C interface to this differs by sending out a pointer, rather than a copy of the coefficients
       ! in an allocatable array - hence you will have to take a copy of the values externally if you want 
@@ -1516,7 +1517,8 @@ module pcair_c_fortran_bindings
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine PCAIRSetPolyCoeffs_c(pc_ptr, petsc_level, which_inverse, coeffs_ptr, row_size, col_size) bind(C, name='PCAIRSetPolyCoeffs_c')
+   subroutine PCAIRSetPolyCoeffs_c(pc_ptr, petsc_level, which_inverse, &
+               coeffs_ptr, row_size, col_size) bind(C, name='PCAIRSetPolyCoeffs_c')
 
       ! ~~~~~~~~
       integer(c_long_long), intent(inout) :: pc_ptr
@@ -1531,7 +1533,7 @@ module pcair_c_fortran_bindings
       PetscInt                               :: num_levels
       type(tPC)                              :: pc_shell
       type(pc_air_multigrid_data), pointer   :: pc_air_data   
-      real, pointer :: coeffs_c(:,:)   
+      PetscReal, pointer :: coeffs_c(:,:)   
 
       ! ~~~~~~~~
 

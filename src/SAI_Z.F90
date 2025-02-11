@@ -42,7 +42,8 @@ module sai_z
       PetscInt :: global_rows, global_cols, iterations_taken
       PetscInt :: i_loc, j_loc, max_nnzs, cols_ad, rows_ad
       PetscInt :: rows_ao, cols_ao, ifree, row_size, i_size, j_size
-      PetscInt :: global_col_start, global_col_end_plus_one, global_row_start_aff, global_row_end_plus_one_aff
+      PetscInt :: global_col_start, global_col_end_plus_one
+      PetscInt :: global_row_start_aff, global_row_end_plus_one_aff
       integer :: lwork, intersect_count, location
       integer :: errorcode, comm_size
       PetscErrorCode :: ierr
@@ -52,10 +53,10 @@ module sai_z
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0, maxits=1000
       PetscInt, dimension(:), allocatable :: cols, j_rows, i_rows, ad_indices
       integer, dimension(:), allocatable :: pivots, j_indices, i_indices
-      real, dimension(:), allocatable :: vals, e_row, j_vals, sols, e_row_plus_constraints
-      real, dimension(:,:), allocatable :: submat_vals, submat_vals_plus_constraints
+      PetscReal, dimension(:), allocatable :: vals, e_row, j_vals, sols, e_row_plus_constraints
+      PetscReal, dimension(:,:), allocatable :: submat_vals, submat_vals_plus_constraints
       type(itree) :: i_rows_tree
-      real, dimension(:), allocatable :: work, tau
+      PetscReal, dimension(:), allocatable :: work, tau
       type(tVec) :: solution, rhs, b_f
       logical :: approx_solve
       ! In fortran this needs to be of size n+1 where n is the number of submatrices we want
@@ -70,8 +71,8 @@ module sai_z
       PetscInt, dimension(:), allocatable :: col_indices_off_proc_array
       integer(c_long_long) :: A_array, B_array, C_array
       logical :: constrain
-      real, dimension(:), pointer :: b_f_vals, b_vals
-      real :: lambda, b_c
+      PetscReal, dimension(:), pointer :: b_f_vals, b_vals
+      PetscReal :: lambda, b_c
       MatType:: mat_type
 
       ! ~~~~~~
@@ -251,8 +252,8 @@ module sai_z
          call KSPCreate(PETSC_COMM_SELF, ksp, ierr)
          call KSPSetType(ksp, KSPGMRES, ierr)
          ! Solve to relative 1e-3
-         call KSPSetTolerances(ksp, 1e-3, &
-                  & 1e-50, &
+         call KSPSetTolerances(ksp, 1d-3, &
+                  & 1d-50, &
                   & PETSC_DEFAULT_REAL, &
                   & maxits, ierr) 
          call KSPGetPC(ksp,pc,ierr)
@@ -267,8 +268,8 @@ module sai_z
          call KSPSetType(ksp, KSPLSQR, ierr)
 
          ! Solve to relative 1e-3
-         call KSPSetTolerances(ksp, 1e-3, &
-                  & 1e-50, &
+         call KSPSetTolerances(ksp, 1d-3, &
+                  & 1d-50, &
                   & PETSC_DEFAULT_REAL, &
                   & maxits, ierr)      
                   
@@ -379,7 +380,8 @@ module sai_z
             call intersect_pre_sorted_indices_only(i_rows, j_rows, i_indices, j_indices, intersect_count)       
          else
             ! The i_rows are the global column indexes, the j_rows are the local
-            call intersect_pre_sorted_indices_only(i_rows, col_indices_off_proc_array(j_rows+1), i_indices, j_indices, intersect_count)       
+            call intersect_pre_sorted_indices_only(i_rows, col_indices_off_proc_array(j_rows+1), &
+                     i_indices, j_indices, intersect_count)       
          end if
 
          ! Create the sequential IS we want with the cols we want (written as global indices)
@@ -520,11 +522,13 @@ module sai_z
 
                allocate(work(1))
                lwork = -1
-               call dgels('N', size(i_rows), size(j_rows), 1, submat_vals, size(i_rows), e_row, size(i_rows), work, lwork, errorcode)
+               call dgels('N', size(i_rows), size(j_rows), 1, submat_vals, size(i_rows), &
+                           e_row, size(i_rows), work, lwork, errorcode)
                lwork = int(work(1))
                deallocate(work)
                allocate(work(lwork))  
-               call dgels('N', size(i_rows), size(j_rows), 1, submat_vals, size(i_rows), e_row, size(i_rows), work, lwork, errorcode)
+               call dgels('N', size(i_rows), size(j_rows), 1, submat_vals, size(i_rows), &
+                           e_row, size(i_rows), work, lwork, errorcode)
                deallocate(work)
 
             end if
@@ -589,7 +593,7 @@ module sai_z
       ! ~~~~~~~~~~~
 
       call generate_identity(matrix, minus_I)
-      call MatScale(minus_I, -1.0, ierr)
+      call MatScale(minus_I, -1d0, ierr)
       
       ! Calculate our approximate inverse
       ! Now given we are using the same code as SAI Z

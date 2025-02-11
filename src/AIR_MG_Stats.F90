@@ -95,7 +95,7 @@ module air_mg_stats
       PetscErrorCode :: ierr
       PCType pc_type
       type(tKSP) :: ksp
-      real :: rtol, atol, dtol
+      PetscReal :: rtol, atol, dtol
       integer(kind=8) maxits_long, maxits_aff_long, gmres_size_long, poly_order_long
       MatType:: mat_type
       logical :: zero_root
@@ -179,9 +179,11 @@ module air_mg_stats
             gmres_size_long = int(non_zero_order, kind=8)
 
             if (mat_type==MATSHELL) then
-               nnzs = nnzs + maxits_long * maxits_aff_long * gmres_size_long * air_data%A_ff_nnzs(our_level) + maxits_long * (maxits_aff_long) * air_data%A_ff_nnzs(our_level)
+               nnzs = nnzs + maxits_long * maxits_aff_long * gmres_size_long * air_data%A_ff_nnzs(our_level) + &
+                           maxits_long * (maxits_aff_long) * air_data%A_ff_nnzs(our_level)
             else
-               nnzs = nnzs + maxits_long * maxits_aff_long * air_data%inv_A_ff_nnzs(our_level) + maxits_long * (maxits_aff_long) * air_data%A_ff_nnzs(our_level)
+               nnzs = nnzs + maxits_long * maxits_aff_long * air_data%inv_A_ff_nnzs(our_level) + &
+                           maxits_long * (maxits_aff_long) * air_data%A_ff_nnzs(our_level)
             end if
 
             ! Add in the minus Afc - this is done once before we F-point smooth
@@ -199,9 +201,11 @@ module air_mg_stats
                ! Are we mf?
                call MatGetType(air_data%inv_A_cc(our_level), mat_type, ierr)
                if (mat_type==MATSHELL) then  
-                  nnzs = nnzs + maxits_long * gmres_size_long * air_data%A_cc_nnzs(our_level) + maxits_long * air_data%A_cc_nnzs(our_level)
+                  nnzs = nnzs + maxits_long * gmres_size_long * air_data%A_cc_nnzs(our_level) + &
+                           maxits_long * air_data%A_cc_nnzs(our_level)
                else          
-                  nnzs = nnzs + maxits_long * air_data%inv_A_cc_nnzs(our_level) + maxits_long * air_data%A_cc_nnzs(our_level)
+                  nnzs = nnzs + maxits_long * air_data%inv_A_cc_nnzs(our_level) + &
+                           maxits_long * air_data%A_cc_nnzs(our_level)
                end if
                ! Add in the minus Acf
                nnzs = nnzs + maxits_long * air_data%A_cf_nnzs(our_level)
@@ -221,9 +225,11 @@ module air_mg_stats
 
             ! The two is because we do up and down smoothing
             if (mat_type==MATSHELL) then
-               nnzs = nnzs + 2 * maxits_long * gmres_size_long * air_data%coarse_matrix_nnzs(our_level) + maxits_long  * air_data%coarse_matrix_nnzs(our_level)
+               nnzs = nnzs + 2 * maxits_long * gmres_size_long * air_data%coarse_matrix_nnzs(our_level) + &
+                           maxits_long  * air_data%coarse_matrix_nnzs(our_level)
             else
-               nnzs = nnzs + 2 * maxits_long * air_data%inv_A_ff_nnzs(our_level) + maxits_long * air_data%coarse_matrix_nnzs(our_level)
+               nnzs = nnzs + 2 * maxits_long * air_data%inv_A_ff_nnzs(our_level) + &
+                           maxits_long * air_data%coarse_matrix_nnzs(our_level)
             end if
          end if
 
@@ -249,15 +255,17 @@ module air_mg_stats
       ! ~~~~~~
       type(air_multigrid_data), intent(inout) :: air_data
       type(tPC), intent(in)                   :: pcmg
-      real, intent(out)                       :: grid_complx, op_complx, cycle_complx, storage_complx, reuse_storage_complx
+      PetscReal, intent(out)  :: grid_complx, op_complx, cycle_complx, storage_complx, reuse_storage_complx
 
       integer :: our_level, i_loc
       PetscInt :: maxits_coarse
       PetscInt :: global_rows, global_cols
       PetscErrorCode :: ierr
       type(tKSP) :: ksp
-      real :: rtol, atol, dtol
+      PetscReal :: rtol, atol, dtol
       integer(kind=8) :: nnzs_air_v, mat_storage_nnzs, op_complx_nnzs, mat_reuse_storage_nnzs, mat_nnzs
+      type(tMat) :: temp_mat
+      type(tIS) :: temp_is
 
       ! ~~~~~~    
 
@@ -274,16 +282,16 @@ module air_mg_stats
       grid_complx = 0
       do our_level = 1, air_data%no_levels-1
          call MatGetSize(air_data%coarse_matrix(our_level), global_rows, global_cols, ierr)
-         grid_complx = grid_complx + real(global_rows)
+         grid_complx = grid_complx + dble(global_rows)
       end do
       ! Don't forget the bottom grid
       if (air_data%no_levels /= 1) then
          call MatGetSize(air_data%coarse_matrix(air_data%no_levels), global_rows, global_cols, ierr)
-         grid_complx = grid_complx + real(global_rows)
+         grid_complx = grid_complx + dble(global_rows)
       end if
 
       call MatGetSize(air_data%coarse_matrix(1), global_rows, global_cols, ierr)
-      grid_complx = grid_complx/real(global_rows)      
+      grid_complx = grid_complx/dble(global_rows)      
       
       
       ! ~~~~~~~~~
@@ -341,14 +349,16 @@ module air_mg_stats
       do our_level = 1, air_data%no_levels-1
          ! Loop over all the reused matrices
          do i_loc = 1, size(air_data%reuse(our_level)%reuse_mat)
-            if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(i_loc))) then
+            temp_mat = air_data%reuse(our_level)%reuse_mat(i_loc)
+            if (.NOT. PetscMatIsNull(temp_mat)) then
                call get_nnzs_petsc_sparse(air_data%reuse(our_level)%reuse_mat(i_loc), mat_nnzs)
                mat_reuse_storage_nnzs = mat_reuse_storage_nnzs + mat_nnzs
             end if
          end do
          ! Include any IS's
          do i_loc = 1, size(air_data%reuse(our_level)%reuse_is)
-            if (.NOT. PetscISIsNull(air_data%reuse(our_level)%reuse_is(i_loc))) then
+            temp_is = air_data%reuse(our_level)%reuse_is(i_loc)
+            if (.NOT. PetscISIsNull(temp_is)) then
                call ISGetSize(air_data%reuse(our_level)%reuse_is(i_loc), global_rows, ierr)
                mat_reuse_storage_nnzs = mat_reuse_storage_nnzs + global_rows
             end if
@@ -356,10 +366,10 @@ module air_mg_stats
       end do
 
       ! Now compute the other complexities
-      op_complx = real(op_complx_nnzs)/real(air_data%coarse_matrix_nnzs(1))
-      cycle_complx = real(nnzs_air_v)/real(air_data%coarse_matrix_nnzs(1))
-      storage_complx = real(mat_storage_nnzs)/real(air_data%coarse_matrix_nnzs(1))  
-      reuse_storage_complx = real(mat_reuse_storage_nnzs)/real(air_data%coarse_matrix_nnzs(1))  
+      op_complx = dble(op_complx_nnzs)/dble(air_data%coarse_matrix_nnzs(1))
+      cycle_complx = dble(nnzs_air_v)/dble(air_data%coarse_matrix_nnzs(1))
+      storage_complx = dble(mat_storage_nnzs)/dble(air_data%coarse_matrix_nnzs(1))  
+      reuse_storage_complx = dble(mat_reuse_storage_nnzs)/dble(air_data%coarse_matrix_nnzs(1))  
 
    end subroutine compute_stats
 
@@ -373,7 +383,7 @@ module air_mg_stats
       type(air_multigrid_data), intent(inout) :: air_data
       type(tPC), intent(in)                   :: pcmg
 
-      real :: grid_complx, op_complx, cycle_complx, storage_complx, reuse_storage_complx
+      PetscReal :: grid_complx, op_complx, cycle_complx, storage_complx, reuse_storage_complx
       integer :: comm_rank, errorcode
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX

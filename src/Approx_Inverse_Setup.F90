@@ -53,8 +53,8 @@ module approx_inverse_setup
       ! we muck about with the rank and if this pointer is not declared
       ! contiguous it creates a temporary copy which then disappears and
       ! we segfault when trying to apply mf
-      real, dimension(:, :), contiguous, pointer   :: coefficients
-      real, dimension(poly_order + 1, 1), target   :: coefficients_stack
+      PetscReal, dimension(:, :), contiguous, pointer   :: coefficients
+      PetscReal, dimension(poly_order + 1, 1), target   :: coefficients_stack
       type(mat_ctxtype), pointer :: mat_ctx => null()
       PetscErrorCode :: ierr
       type(tMat) :: reuse_mat, inv_matrix_temp
@@ -144,7 +144,7 @@ module approx_inverse_setup
       type(tMat), intent(in)                            :: matrix
       integer, intent(in)                               :: inverse_type, poly_order
       type(tsqr_buffers), intent(inout)                 :: buffers 
-      real, dimension(:, :), pointer, intent(inout)     :: coefficients
+      PetscReal, dimension(:, :), pointer, intent(inout)     :: coefficients
 
       PetscErrorCode :: ierr
       integer :: MPI_COMM_MATRIX, errorcode
@@ -264,7 +264,7 @@ module approx_inverse_setup
       integer, intent(in)                               :: inverse_type, poly_order
       integer, intent(in)                               :: inverse_sparsity_order
       type(tsqr_buffers), intent(inout)                 :: buffers      
-      real, dimension(:, :), pointer, contiguous, intent(inout) :: coefficients
+      PetscReal, dimension(:, :), pointer, contiguous, intent(inout) :: coefficients
       logical, intent(in)                               :: matrix_free
       type(tMat), intent(inout)                         :: reuse_mat, inv_matrix
 

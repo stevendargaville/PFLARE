@@ -88,19 +88,20 @@ module cf_splitting
       ! Input 
       type(tMat), intent(in)     :: input_mat
       type(tMat), intent(inout)  :: output_mat
-      real, intent(in)           :: strong_threshold
+      PetscReal, intent(in)           :: strong_threshold
       logical, intent(in)        :: symmetrize, square
       logical, intent(in), optional :: allow_drop_diagonal
       
       PetscInt :: col, ncols, ifree, max_nnzs
-      PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
+      PetscInt :: local_rows, local_cols, global_rows, global_cols
+      PetscInt :: global_row_start, global_row_end_plus_one
       PetscInt :: global_col_start, global_col_end_plus_one, jfree, diagonal_index
       integer :: counter, errorcode, comm_size
       PetscErrorCode :: ierr
       PetscInt, dimension(:), allocatable :: nnzs_row, onzs_row, cols, cols_mod
-      real, dimension(:), allocatable :: vals, vals_copy
+      PetscReal, dimension(:), allocatable :: vals, vals_copy
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
-      real :: rel_row_tol, abs_biggest_entry
+      PetscReal :: rel_row_tol, abs_biggest_entry
       MPI_Comm :: MPI_COMM_MATRIX
       type(tMat) :: transpose_mat, temp_mat
       type(tIS) :: zero_diags
@@ -153,8 +154,8 @@ module cf_splitting
          ! Get the row
          call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)
 
-         ! Be careful here to use huge(0.0) rather than huge(0)!
-         abs_biggest_entry = -huge(0.0)
+         ! Be careful here to use huge(0d0) rather than huge(0)!
+         abs_biggest_entry = -huge(0d0)
          ! Find the biggest entry in the row thats not the diagonal and the diagonal index
          do jfree = 1, ncols
             if (cols(jfree) == ifree) then
@@ -219,8 +220,8 @@ module cf_splitting
          ! Get the row
          call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)  
          
-         ! Be careful here to use huge(0.0) rather than huge(0)!
-         abs_biggest_entry = -huge(0.0)
+         ! Be careful here to use huge(0d0) rather than huge(0)!
+         abs_biggest_entry = -huge(0d0)
          ! Find the biggest entry in the row thats not the diagonal and the diagonal index
          do jfree = 1, ncols
             if (cols(jfree) == ifree) then
@@ -235,7 +236,7 @@ module cf_splitting
 
          cols_mod(1:ncols) = cols(1:ncols)
          ! Just set one to indicate strength
-         vals_copy(1:ncols) = 1.0
+         vals_copy(1:ncols) = 1d0
                   
          do col = 1, ncols
             ! Get petsc to not insert the value here - drop diagonals
@@ -265,7 +266,7 @@ module cf_splitting
          ! but its so much simpler to just add the two together - and the symbolic will be the expensive part
          ! anyway
          call MatTranspose(output_mat, MAT_INITIAL_MATRIX, transpose_mat, ierr)
-         call MatAXPY(output_mat, 1.0, transpose_mat, DIFFERENT_NONZERO_PATTERN, ierr)     
+         call MatAXPY(output_mat, 1d0, transpose_mat, DIFFERENT_NONZERO_PATTERN, ierr)     
 
          ! Don't forget to destroy the explicit transpose
          call MatDestroy(transpose_mat, ierr)
@@ -277,16 +278,16 @@ module cf_splitting
 
          if (symmetrize) then
             call MatMatMult(output_mat, output_mat, &
-                        MAT_INITIAL_MATRIX, 1.0, transpose_mat, ierr)     
+                        MAT_INITIAL_MATRIX, 1d0, transpose_mat, ierr)     
          else
             call MatTransposeMatMult(output_mat, output_mat, &
-                        MAT_INITIAL_MATRIX, 1.0, transpose_mat, ierr)          
+                        MAT_INITIAL_MATRIX, 1d0, transpose_mat, ierr)          
          endif     
 
          ! Also have to add in the original distance 1 connections to the square
          ! as the dist 1 strength matrix has had the diagonals removed, so the square won't 
          ! have the dist 1 connetions in it
-         call MatAXPY(transpose_mat, 1.0, output_mat, DIFFERENT_NONZERO_PATTERN, ierr)     
+         call MatAXPY(transpose_mat, 1d0, output_mat, DIFFERENT_NONZERO_PATTERN, ierr)     
          call MatDestroy(output_mat, ierr)
 
          ! Can end up with diagonal entries we have to remove
@@ -307,7 +308,7 @@ module cf_splitting
             end if
          
             ! Set the diagonal to 0
-            call MatSetValue(transpose_mat, ifree - 1 + global_row_start, ifree - 1 + global_row_start, 0.0, INSERT_VALUES, ierr)
+            call MatSetValue(transpose_mat, ifree - 1 + global_row_start, ifree - 1 + global_row_start, 0d0, INSERT_VALUES, ierr)
          end do
          
          call MatAssemblyBegin(transpose_mat, MAT_FINAL_ASSEMBLY, ierr)
@@ -316,7 +317,7 @@ module cf_splitting
          ! Could call MatEliminateZeros in later versions of petsc, but for here
          ! given we know the entries are ==1, we will just create a copy with "small" stuff removed
          ! ie the zero diagonal
-         call remove_small_from_sparse(transpose_mat, 1e-100, output_mat, allow_drop_diagonal = .TRUE.) 
+         call remove_small_from_sparse(transpose_mat, 1d-100, output_mat, allow_drop_diagonal = .TRUE.) 
          call MatDestroy(transpose_mat, ierr)
 
       end if   
@@ -330,7 +331,7 @@ module cf_splitting
             call MatRestoreRow(output_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)               
          end do
          allocate(vals(max_nnzs))
-         vals = 1.0
+         vals = 1d0
          ! Set all the values in the matrix to one
          do ifree = global_row_start, global_row_end_plus_one-1     
             ! Set every entry in this row
@@ -352,7 +353,7 @@ module cf_splitting
       ! ~~~~~~
       type(tMat), target, intent(in)      :: input_mat
       logical, intent(in)                 :: symmetric
-      real, intent(in)                    :: strong_threshold
+      PetscReal, intent(in)                    :: strong_threshold
       integer, intent(in)                 :: max_luby_steps, cf_splitting_type
       integer, dimension(:), allocatable, intent(inout) :: cf_markers_local
 
@@ -452,7 +453,7 @@ module cf_splitting
          ! ! and then do the PtaP on the full S
          ! ! Also S is symmetric so Scf = Sfc'
          ! call MatPtap(strength_mat, prolongators, &
-         !          MAT_INITIAL_MATRIX, 1.58, temp_mat, ierr)   
+         !          MAT_INITIAL_MATRIX, 1.58d0, temp_mat, ierr)   
          
          ! call ISGetIndicesF90(is_fine, is_pointer_fine, ierr)
          ! call ISGetIndicesF90(is_coarse, is_pointer_coarse, ierr)           
@@ -476,7 +477,7 @@ module cf_splitting
          !    end if
          
          !    ! Set the diagonal to 0
-         !    call MatSetValue(temp_mat, i_loc - 1 + global_row_start_dist2, i_loc - 1 + global_row_start_dist2, 0.0, INSERT_VALUES, ierr)
+         !    call MatSetValue(temp_mat, i_loc - 1 + global_row_start_dist2, i_loc - 1 + global_row_start_dist2, 0d0, INSERT_VALUES, ierr)
          ! end do
          
          ! call MatAssemblyBegin(temp_mat, MAT_FINAL_ASSEMBLY, ierr)
@@ -578,9 +579,9 @@ module cf_splitting
       ! ~~~~~~
       type(tMat), target, intent(in)      :: input_mat
       logical, intent(in)                 :: symmetric
-      real, intent(in)                    :: strong_threshold
+      PetscReal, intent(in)                    :: strong_threshold
       integer, intent(in)                 :: max_luby_steps, cf_splitting_type
-      real, intent(in)                    :: fraction_swap
+      PetscReal, intent(in)                    :: fraction_swap
       type(tIS), intent(inout)            :: is_fine, is_coarse
 
       PetscErrorCode :: ierr
@@ -597,13 +598,13 @@ module cf_splitting
       ! Only do the DDC pass if we're doing PMISR_DDC
       ! and if we haven't requested an exact independent set, ie strong threshold is not zero
       ! as this gives diagonal Aff)
-      if (strong_threshold /= 0.0 .AND. cf_splitting_type == CF_PMISR_DDC) then
+      if (strong_threshold /= 0d0 .AND. cf_splitting_type == CF_PMISR_DDC) then
 
          ! Do the second pass cleanup - this will directly modify the values in cf_markers_local
          call ddc(input_mat, is_fine, fraction_swap, cf_markers_local)
 
          ! If we did anything in our ddc second pass
-         if (fraction_swap /= 0.0) then
+         if (fraction_swap /= 0d0) then
          
             ! These are now outdated
             call ISDestroy(is_fine, ierr)

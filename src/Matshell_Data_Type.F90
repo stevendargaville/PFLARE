@@ -3,6 +3,8 @@ module matshell_data_type
    use petsc
    use air_data_type
 
+#include "petsc/finclude/petsc.h"   
+
    implicit none
 
    public
@@ -19,10 +21,10 @@ module matshell_data_type
    type :: mat_ctxtype
 
       integer :: our_level = -1
-      real, dimension(:), pointer :: coefficients => null()
+      PetscReal, dimension(:), pointer :: coefficients => null()
       logical                     :: own_coefficients = .FALSE.
-      real, dimension(:), pointer :: real_roots => null()
-      real, dimension(:), pointer :: imag_roots => null()
+      PetscReal, dimension(:), pointer :: real_roots => null()
+      PetscReal, dimension(:), pointer :: imag_roots => null()
       type(tMat) :: mat, mat_ida
       ! Temporary vectors we use
       type(tVec), dimension(3) :: mf_temp_vec

@@ -59,7 +59,7 @@ module pcpflareinv_interfaces
          use iso_c_binding
 #include "finclude/pflare_types.h"
          integer(c_long_long), value   :: A_array
-         PetscBool                     :: b
+         integer                       :: b
          PetscErrorCode                :: PCPFLAREINVGetMatrixFree_mine
       end function PCPFLAREINVGetMatrixFree_mine 
    end interface    
@@ -107,7 +107,7 @@ module pcpflareinv_interfaces
          use iso_c_binding
 #include "finclude/pflare_types.h"
          integer(c_long_long), value   :: A_array
-         PetscBool, value              :: b
+         integer, value                :: b
          PetscErrorCode                :: PCPFLAREINVSetMatrixFree_mine
       end function PCPFLAREINVSetMatrixFree_mine 
    end interface  
@@ -181,10 +181,13 @@ module pcpflareinv_interfaces
       PetscErrorCode, intent(inout) :: ierr
 
       integer(c_long_long) :: pc_ptr
+      integer :: flag_int
       ! ~~~~~~~~~~
 
       pc_ptr= pc%v
-      ierr = PCPFLAREINVGetMatrixFree_mine(pc_ptr, flag)
+      flag_int = 0
+      if (flag) flag_int = 1
+      ierr = PCPFLAREINVGetMatrixFree_mine(pc_ptr, flag_int)
 
    end subroutine PCPFLAREINVGetMatrixFree   
 
@@ -253,10 +256,13 @@ module pcpflareinv_interfaces
       PetscErrorCode, intent(inout) :: ierr
 
       integer(c_long_long) :: pc_ptr
+      integer :: flag_int
       ! ~~~~~~~~~~
 
       pc_ptr= pc%v
-      ierr = PCPFLAREINVSetMatrixFree_mine(pc_ptr, flag)
+      flag_int = 0
+      if (flag) flag_int = 1
+      ierr = PCPFLAREINVSetMatrixFree_mine(pc_ptr, flag_int)
 
    end subroutine PCPFLAREINVSetMatrixFree    
 

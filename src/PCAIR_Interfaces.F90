@@ -227,7 +227,7 @@ module pcair_interfaces
       type(tPC), intent(inout)                           :: pc
       PetscInt, intent(in)                               :: petsc_level
       integer, intent(in)                                :: which_inverse
-      real, dimension(:,:), pointer, intent(inout)       :: coeffs
+      PetscReal, dimension(:,:), pointer, intent(inout)       :: coeffs
       PetscErrorCode, intent(out)                        :: ierr
 
       type(tPC)                             :: pc_shell
@@ -345,7 +345,7 @@ module pcair_interfaces
       type(tPC), intent(inout)                           :: pc
       PetscInt, intent(in)                               :: petsc_level
       integer, intent(in)                                :: which_inverse
-      real, dimension(:,:), pointer, intent(in)          :: coeffs
+      PetscReal, dimension(:,:), pointer, intent(in)          :: coeffs
       PetscErrorCode, intent(out)                        :: ierr
 
       type(tPC)                             :: pc_shell

@@ -24,7 +24,7 @@ module tsqr
    ! ~~~~~~~~
    type tsqr_buffers
       integer                          :: request = MPI_REQUEST_NULL
-      real, dimension(:), allocatable  :: R_buffer_send, R_buffer_receive
+      PetscReal, dimension(:), allocatable  :: R_buffer_send, R_buffer_receive
       ! In case this comms request is done on a matrix on a subcomm, we 
       ! need to keep a pointer to it
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
@@ -77,13 +77,13 @@ module tsqr
 
       ! ~~~~~~
       MPI_Comm, intent(in)                                     :: MPI_COMM_MATRIX
-      real, dimension(:, :), intent(inout)                     :: A
+      PetscReal, dimension(:, :), intent(inout)                     :: A
       type(tsqr_buffers), target, intent(inout)                :: buffers
       
-      real, dimension(:), allocatable :: work, T
-      real, dimension(size(A, 2)) :: tau
+      PetscReal, dimension(:), allocatable :: work, T
+      PetscReal, dimension(size(A, 2)) :: tau
       logical, dimension(size(A, 2)) :: scale_row
-      real, dimension(:,:), pointer :: R_pointer
+      PetscReal, dimension(:,:), pointer :: R_pointer
 
       integer :: lwork, column_block_size, row_block_size, no_of_row_blocks
       integer :: m_size, n_size, errorcode, comm_size, row_length, i_loc
@@ -147,7 +147,7 @@ module tsqr
          row_block_size = 64
          if (row_block_size > m_size) row_block_size = m_size
 
-         no_of_row_blocks = ceiling(real(m_size-(n_size))/real(row_block_size-(n_size)))
+         no_of_row_blocks = ceiling(dble(m_size-(n_size))/dble(row_block_size-(n_size)))
 
          allocate(T(column_block_size * (n_size) * no_of_row_blocks))
          call dlatsqr(m_size, n_size, &
@@ -191,7 +191,7 @@ module tsqr
       ! which doesn't matter
       allocate(buffers%R_buffer_receive(n_size * n_size + 1))
       buffers%R_buffer_receive = 0
-      buffers%R_buffer_receive(1) = real(n_size)
+      buffers%R_buffer_receive(1) = dble(n_size)
 
       ! If we are in parallel we need to copy the local QR into R_buffer_send so it can be 
       ! part of the mpi reduction, where R_buffer_receive is filled by the reduction
@@ -199,7 +199,7 @@ module tsqr
       if (comm_size/=1) then
          allocate(buffers%R_buffer_send(n_size * n_size + 1))
          buffers%R_buffer_send = 0      
-         buffers%R_buffer_send(1) = real(n_size)
+         buffers%R_buffer_send(1) = dble(n_size)
          ! Just have a pointer pointing to the R block specifically for ease
          R_pointer(1:n_size, 1:n_size) => buffers%R_buffer_send(2:n_size * n_size + 1)
       else
@@ -214,7 +214,7 @@ module tsqr
       row_length = min(m_size, n_size)     
       do i_loc = 1, row_length
          ! Record if we have to scale this row
-         if (A(i_loc, i_loc) < 0.0) scale_row(i_loc) = .TRUE.
+         if (A(i_loc, i_loc) < 0d0) scale_row(i_loc) = .TRUE.
 
          ! Do the copy
          R_pointer(1:i_loc, i_loc) = A(1:i_loc, i_loc)
@@ -230,7 +230,7 @@ module tsqr
 
       ! Scale the rows, enforce uniqueness
       do i_loc = 1, n_size
-         if (scale_row(i_loc)) R_pointer(i_loc, :) = R_pointer(i_loc, :) * (-1.0)
+         if (scale_row(i_loc)) R_pointer(i_loc, :) = R_pointer(i_loc, :) * (-1d0)
       end do       
 
       ! ~~~~~~~~~~~
@@ -274,11 +274,11 @@ module tsqr
       integer            :: len 
       integer            :: type 
 
-      real, pointer :: invec_r(:), inoutvec_r(:) 
+      PetscReal, pointer :: invec_r(:), inoutvec_r(:) 
       integer :: number_chunks, i_loc, lwork, chunk_size
       integer :: start_chunk, end_chunk, errorcode, j_loc, nb, n_size
-      real, dimension(:, :), allocatable :: R_stacked
-      real, dimension(:), allocatable :: work, tau, T      
+      PetscReal, dimension(:, :), allocatable :: R_stacked
+      PetscReal, dimension(:), allocatable :: work, tau, T      
       ! ~~~~~~~~~
 
       ! ~~~~~~~~~~
@@ -366,7 +366,7 @@ module tsqr
          ! of R by +- 1, and then the columns of Q by +- 1
          ! (but we don't actually need Q so we don't bother scaling them)      
          do j_loc = 1, n_size
-            if (R_stacked(i_loc, i_loc) < 0.0) R_stacked(i_loc, :) = R_stacked(i_loc, :) * (-1.0)
+            if (R_stacked(i_loc, i_loc) < 0d0) R_stacked(i_loc, :) = R_stacked(i_loc, :) * (-1d0)
          end do   
          
          ! Now copy back the result which has been done in place in R_stacked into inoutvec

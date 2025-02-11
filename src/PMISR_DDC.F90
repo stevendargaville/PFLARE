@@ -51,8 +51,8 @@ module pmisr_ddc
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX      
       integer, dimension(:), allocatable :: seed
-      real, dimension(:), allocatable :: measure_local, measure_nonlocal
-      real, dimension(:), allocatable :: cf_markers_local_real
+      PetscReal, dimension(:), allocatable :: measure_local, measure_nonlocal
+      PetscReal, dimension(:), allocatable :: cf_markers_local_real
       logical, dimension(:), allocatable :: mark
       type(c_ptr) :: cf_markers_nonlocal_ptr
       real(c_double), pointer :: cf_markers_nonlocal(:)
@@ -387,7 +387,7 @@ module pmisr_ddc
          ! hence they can be in the IS
          do ifree = 1, local_rows
             if (mark(ifree)) then
-               cf_markers_local_real(ifree) = real(loops_through)
+               cf_markers_local_real(ifree) = dble(loops_through)
             end if
          end do
 
@@ -563,27 +563,28 @@ module pmisr_ddc
       ! ~~~~~~
       type(tMat), target, intent(in)      :: input_mat
       type(tIS), intent(in)               :: is_fine
-      real, intent(in)                    :: fraction_swap
+      PetscReal, intent(in)                    :: fraction_swap
       integer, dimension(:), allocatable, intent(inout) :: cf_markers_local
 
       ! Local
       PetscInt :: local_rows, local_cols, global_rows, global_cols
-      PetscInt :: a_global_row_start, a_global_row_end_plus_one, ifree, ncols, input_row_start, input_row_end_plus_one
+      PetscInt :: a_global_row_start, a_global_row_end_plus_one, ifree, ncols
+      PetscInt :: input_row_start, input_row_end_plus_one
       PetscInt :: max_nnzs, jfree, idx, search_size
       integer :: bin_sum, bin_boundary, bin
       PetscErrorCode :: ierr
       PetscInt, dimension(:), allocatable :: cols
-      real, dimension(:), allocatable :: vals, diag_dom_ratio, diag_dom_ratio_small
+      PetscReal, dimension(:), allocatable :: vals, diag_dom_ratio, diag_dom_ratio_small
       PetscInt, dimension(:), pointer :: is_pointer
       type(tMat) :: Aff
-      real :: diag_val
+      PetscReal :: diag_val
       real(c_double) :: swap_dom_val
       integer, dimension(1000) :: dom_bins
 
       ! ~~~~~~  
 
       ! If we don't need to swap anything, return
-      if (fraction_swap == 0.0) then
+      if (fraction_swap == 0d0) then
          return
       end if
 
@@ -598,7 +599,7 @@ module pmisr_ddc
       ! Or pick alpha_diag based on the worst % of rows
       else
          ! Only need to go through the biggest % of indices
-         search_size = int(real(size(is_pointer)) * fraction_swap)          
+         search_size = int(dble(size(is_pointer)) * fraction_swap)          
       end if
       
       ! ~~~~~~~~~~~~~
@@ -645,7 +646,7 @@ module pmisr_ddc
             end do
 
             ! If we have non-diagonal entries
-            if (diag_dom_ratio(ifree - a_global_row_start + 1) /= 0.0) then
+            if (diag_dom_ratio(ifree - a_global_row_start + 1) /= 0d0) then
                ! Compute the diagonal dominance ratio
                diag_dom_ratio(ifree - a_global_row_start + 1) = diag_dom_ratio(ifree - a_global_row_start + 1) / diag_val
             end if
@@ -683,7 +684,7 @@ module pmisr_ddc
             ! Rather than do any type of sort, just swap everything above that bin boundary
             ! This will give a fraction_swap that is very close to that passed in as long as the 
             ! size of the bins is small
-            swap_dom_val = real(bin_boundary-1)/real(size(dom_bins))
+            swap_dom_val = dble(bin_boundary-1)/dble(size(dom_bins))
 
          end if
 
