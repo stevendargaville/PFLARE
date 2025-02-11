@@ -126,10 +126,17 @@ $(OUT): $(OBJS)
 build_tests: $(OUT)
 	$(MAKE) -C tests
 
-# Build and run the tests
+# Build and run all the tests
 tests: $(OUT)
 	$(MAKE) -C tests
-	$(MAKE) -C tests run_tests
+	$(MAKE) -C tests run_tests_load
+	$(MAKE) -C tests run_tests_no_load
+
+# Build and run only the tests that don't load 
+# the example matrix (which uses 32 bit ints)
+tests_no_load: $(OUT)
+	$(MAKE) -C tests
+	$(MAKE) -C tests run_tests_no_load	
 
 # Build the Python module with Cython
 .PHONY: python

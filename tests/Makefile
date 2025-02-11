@@ -51,7 +51,7 @@ all: $(OBJS)
 %.o: %.c
 	$(CC) $(CFLAGS) $(INCLUDE) $^ $(LDFLAGS) $(LDLIBS) -o $@
 
-run_tests:
+run_tests_load:
 #
 	@echo ""
 	@echo "Test AIRG with GMRES polynomials for hyperbolic streaming problem"
@@ -82,6 +82,41 @@ run_tests:
 	./ex6.o -f data/mat_stream_2364 -pc_type pflareinv -pc_pflareinv_type newton -pc_pflareinv_matrix_free	
 	@echo "Test single level GMRES polynomial preconditioning with the Newton basis matrix-free for hyperbolic streaming problem in C in parallel"
 	$(MPIEXEC) -n 2 ./ex6.o -f data/mat_stream_2364	-pc_type pflareinv -pc_pflareinv_type newton -pc_pflareinv_matrix_free
+#
+	@echo ""	 
+	@echo "Test AIRG as an exact solver, truncating hierarchy and using high order mf GMRES poly in the\
+	 Arnoldi basis as a coarse solver for hyperbolic streaming"
+	./ex12f.o -f data/mat_stream_2364 -pc_air_strong_threshold 0.0 -pc_air_a_drop 0.0 -pc_air_r_drop 0.0 \
+	 -pc_air_inverse_type jacobi -mg_coarse_ksp_type richardson -mg_coarse_ksp_max_it 5 -ksp_type richardson -ksp_norm_type unpreconditioned \
+	 -pc_air_max_levels 30 -pc_air_coarsest_poly_order 18 \
+	 -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_inverse_type arnoldi
+# 
+	@echo ""		 
+	@echo "Test AIRG as an exact solver, heavily truncating hierarchy and using high order mf GMRES poly in the\
+	 Newton basis as a coarse solver for hyperbolic streaming"
+	./ex12f.o -f data/mat_stream_2364 -pc_air_strong_threshold 0.0 -pc_air_a_drop 0.0 -pc_air_r_drop 0.0 \
+	 -pc_air_inverse_type jacobi -ksp_type richardson -ksp_norm_type unpreconditioned \
+	 -pc_air_max_levels 10 -pc_air_coarsest_poly_order 60 \
+	 -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_inverse_type newton -pc_air_max_luby_steps 3
+	@echo "Test AIRG as an exact solver, heavily truncating hierarchy and using high order mf GMRES poly in the\
+	 Newton basis as a coarse solver for hyperbolic streaming in parallel"
+	$(MPIEXEC) -n 2 ./ex6.o -f data/mat_stream_2364 -pc_air_strong_threshold 0.0 -pc_air_a_drop 0.0 -pc_air_r_drop 0.0 \
+	 -pc_air_inverse_type jacobi -ksp_type richardson -ksp_norm_type unpreconditioned \
+	 -pc_air_max_levels 10 -pc_air_coarsest_poly_order 60 \
+	 -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_inverse_type newton -pc_air_max_luby_steps 3	
+#
+	@echo ""
+	@echo "Test AIRG with GMRES polynomials for hyperbolic streaming problem with coefficients calculated on subcomms"
+	$(MPIEXEC) -n 2 ./ex12f.o -f data/mat_stream_2364 -pc_air_subcomm -pc_air_inverse_type arnoldi -pc_air_coarsest_subcomm \
+	 -pc_air_coarsest_inverse_type arnoldi
+# 
+	@echo ""
+	@echo "Test PMISR DDC CF splitting in C"
+	./ex6_cf_splitting.o  -f data/mat_stream_2364
+	@echo "Test PMISR DDC CF splitting in C in parallel"
+	$(MPIEXEC) -n 2 ./ex6_cf_splitting.o  -f data/mat_stream_2364   
+
+run_tests_no_load:
 #
 	@echo ""
 	@echo "Test AIRG with GMRES polynomials for 2D finite difference stencil"
@@ -145,33 +180,6 @@ run_tests:
 	$(MPIEXEC) -n 2 ./adv_diff_2d.o -u 0 -v 0 -alpha 1.0 -da_grid_x 8 -da_grid_y 8 -pc_type air \
 	 -pc_air_strong_threshold 0.0 -pc_air_a_drop 0.0 -pc_air_r_drop 0.0 -pc_air_inverse_type jacobi \
 	 -mg_coarse_ksp_type richardson -mg_coarse_ksp_max_it 10 -ksp_type richardson -ksp_norm_type unpreconditioned
-# 
-	@echo ""	 
-	@echo "Test AIRG as an exact solver, truncating hierarchy and using high order mf GMRES poly in the\
-	 Arnoldi basis as a coarse solver for hyperbolic streaming"
-	./ex12f.o -f data/mat_stream_2364 -pc_air_strong_threshold 0.0 -pc_air_a_drop 0.0 -pc_air_r_drop 0.0 \
-	 -pc_air_inverse_type jacobi -mg_coarse_ksp_type richardson -mg_coarse_ksp_max_it 5 -ksp_type richardson -ksp_norm_type unpreconditioned \
-	 -pc_air_max_levels 30 -pc_air_coarsest_poly_order 18 \
-	 -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_inverse_type arnoldi
-# 
-	@echo ""		 
-	@echo "Test AIRG as an exact solver, heavily truncating hierarchy and using high order mf GMRES poly in the\
-	 Newton basis as a coarse solver for hyperbolic streaming"
-	./ex12f.o -f data/mat_stream_2364 -pc_air_strong_threshold 0.0 -pc_air_a_drop 0.0 -pc_air_r_drop 0.0 \
-	 -pc_air_inverse_type jacobi -ksp_type richardson -ksp_norm_type unpreconditioned \
-	 -pc_air_max_levels 10 -pc_air_coarsest_poly_order 60 \
-	 -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_inverse_type newton -pc_air_max_luby_steps 3
-	@echo "Test AIRG as an exact solver, heavily truncating hierarchy and using high order mf GMRES poly in the\
-	 Newton basis as a coarse solver for hyperbolic streaming in parallel"
-	$(MPIEXEC) -n 2 ./ex6.o -f data/mat_stream_2364 -pc_air_strong_threshold 0.0 -pc_air_a_drop 0.0 -pc_air_r_drop 0.0 \
-	 -pc_air_inverse_type jacobi -ksp_type richardson -ksp_norm_type unpreconditioned \
-	 -pc_air_max_levels 10 -pc_air_coarsest_poly_order 60 \
-	 -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_inverse_type newton -pc_air_max_luby_steps 3	
-#
-	@echo ""
-	@echo "Test AIRG with GMRES polynomials for hyperbolic streaming problem with coefficients calculated on subcomms"
-	$(MPIEXEC) -n 2 ./ex12f.o -f data/mat_stream_2364 -pc_air_subcomm -pc_air_inverse_type arnoldi -pc_air_coarsest_subcomm \
-	 -pc_air_coarsest_inverse_type arnoldi
 # 
 	@echo ""
 	@echo "Test AIRG with GMRES polynomials with PC reused with no sparsity change"
@@ -242,12 +250,6 @@ run_tests:
 	./adv_diff_2d.o -da_grid_x 10 -da_grid_y 10 -ksp_type richardson -pc_type air \
 	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys \
 	 -pc_air_auto_truncate_start_level 1 -pc_air_auto_truncate_tol 1e-2
-# 
-	@echo ""
-	@echo "Test PMISR DDC CF splitting in C"
-	./ex6_cf_splitting.o  -f data/mat_stream_2364
-	@echo "Test PMISR DDC CF splitting in C in parallel"
-	$(MPIEXEC) -n 2 ./ex6_cf_splitting.o  -f data/mat_stream_2364
 
 clean:
 	$(RM) *.o *.mod *.out
