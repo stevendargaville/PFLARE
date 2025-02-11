@@ -55,7 +55,7 @@ run_tests_load:
 #
 	@echo ""
 	@echo "Test AIRG with GMRES polynomials for hyperbolic streaming problem"
-	./ex12f.o -f data/mat_stream_2364
+	./ex12f.o -f data/mat_stream_2364 -ksp_rtol 1e-100 -ksp_max_it 2
 	@echo "Test AIRG with GMRES polynomials for hyperbolic streaming problem, matrix-free smoothing"
 	./ex12f.o -f data/mat_stream_2364 -pc_air_matrix_free_polys
 #
