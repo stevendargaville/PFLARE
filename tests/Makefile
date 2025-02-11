@@ -25,7 +25,6 @@ FFLAGS := ${FFLAGS} -O3 -fPIC
 # Intel
 ifneq ($(filter ifx mpiifx,$(FC)),)
 FORTMOD     := -module
-FFLAGS      := ${FFLAGS} -fpscomp logicals
 endif
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~

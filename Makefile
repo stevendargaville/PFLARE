@@ -44,7 +44,6 @@ FORTMOD     := -J
 # Intel
 ifneq ($(filter ifx mpiifx,$(FC)),)
 FORTMOD     := -module
-FFLAGS      := ${FFLAGS} -fpscomp logicals
 endif
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~
