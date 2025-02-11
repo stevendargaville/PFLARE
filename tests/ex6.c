@@ -127,11 +127,7 @@ int main(int argc,char **args)
   ierr = VecNorm(u,NORM_2,&norm);CHKERRQ(ierr);
   ierr = KSPGetIterationNumber(ksp,&its);CHKERRQ(ierr);
   ierr = KSPGetConvergedReason(ksp,&reason);CHKERRQ(ierr);
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 17)
-      PetscCheck(reason > 0, PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONGSTATE, "Didn't converge");
-#else
-      if (reason < 0) SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONGSTATE, "Didn't converge");
-#endif   
+ 
   ierr = PetscPrintf(PETSC_COMM_WORLD, "Number of iterations = %3" PetscInt_FMT "\n", its);
   ierr = PetscPrintf(PETSC_COMM_WORLD, "Residual norm = %g\n", (double)norm);
 
@@ -142,5 +138,9 @@ int main(int argc,char **args)
   ierr = VecDestroy(&u);CHKERRQ(ierr);
   ierr = MatDestroy(&A);CHKERRQ(ierr);
   ierr = PetscFinalize();
-  return ierr;
+  if (reason < 0)
+  {
+   return 1;
+  }
+  return 0;
 }
