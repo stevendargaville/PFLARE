@@ -36,8 +36,9 @@ module petsc_helper
       logical, intent(in), optional :: relative_max_row_tolerance, lump, allow_drop_diagonal
 
       PetscInt :: col, ncols, ifree, max_nnzs
-      PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
-      PetscInt :: global_col_start, global_col_end_plus_one, diagonal_index, counter, max_nnzs_total
+      PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start
+      PetscInt :: global_row_end_plus_one, max_nnzs_total
+      PetscInt :: global_col_start, global_col_end_plus_one, diagonal_index, counter
       PetscErrorCode :: ierr
       integer :: errorcode, comm_size
       PetscInt, dimension(:), allocatable :: cols
@@ -237,8 +238,9 @@ module petsc_helper
       logical, intent(in), optional :: lump
 
       PetscInt :: col, ncols, ifree, max_nnzs, ncols_mod, index1, index2, counter
-      PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
-      PetscInt :: global_col_start, global_col_end_plus_one, max_nnzs_total, max_nnzs_total_two
+      PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start 
+      PetscInt :: global_row_end_plus_one, max_nnzs_total_two
+      PetscInt :: global_col_start, global_col_end_plus_one, max_nnzs_total
       PetscErrorCode :: ierr
       integer :: errorcode, comm_size
       PetscInt, dimension(:), allocatable :: cols, cols_mod
@@ -390,7 +392,8 @@ module petsc_helper
       type(tMat), intent(inout) :: output_mat
 
       PetscInt :: col, ncols, ifree, max_nnzs, max_nnzs_total
-      PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
+      PetscInt :: local_rows, local_cols, global_rows, global_cols
+      PetscInt :: global_row_start, global_row_end_plus_one
       PetscInt :: counter
       PetscErrorCode :: ierr
       integer :: errorcode, comm_size
@@ -504,7 +507,8 @@ module petsc_helper
       type(tMat), intent(in) :: input_mat
       type(tMat), intent(inout) :: output_mat
       
-      PetscInt :: i_loc, local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
+      PetscInt :: i_loc, local_rows, local_cols, global_rows, global_cols
+      PetscInt :: global_row_start, global_row_end_plus_one
       PetscInt, allocatable, dimension(:) :: indices
       PetscReal, allocatable, dimension(:) :: v
       PetscErrorCode :: ierr
@@ -561,8 +565,10 @@ module petsc_helper
       type(tIS), intent(in)     :: rect_indices
       type(tMat), intent(inout) :: output_mat
       
-      PetscInt :: i_loc, local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
-      PetscInt :: local_rows_rect, local_cols_rect, global_rows_rect, global_cols_rect, global_row_start_rect, global_row_end_plus_one_rect
+      PetscInt :: i_loc, local_rows, local_cols, global_rows, global_cols
+      PetscInt :: global_row_start, global_row_end_plus_one
+      PetscInt :: local_rows_rect, local_cols_rect, global_rows_rect, global_cols_rect
+      PetscInt :: global_row_start_rect, global_row_end_plus_one_rect
       PetscInt :: local_indices_size
       PetscInt, allocatable, dimension(:) :: indices
       PetscReal, allocatable, dimension(:) :: v      
@@ -637,7 +643,8 @@ module petsc_helper
       type(tIS), intent(in)      :: indices
       type(tMat), intent(inout)  :: output_mat
       
-      PetscInt :: i_loc, local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
+      PetscInt :: i_loc, local_rows, local_cols, global_rows, global_cols
+      PetscInt :: global_row_start, global_row_end_plus_one
       PetscInt :: local_indices_size
       PetscReal, allocatable, dimension(:) :: v      
       PetscErrorCode :: ierr
@@ -697,7 +704,8 @@ module petsc_helper
       type(tMat), intent(inout) :: output_mat
       
       PetscInt :: col, row, ncols, ifree, max_nnzs
-      PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
+      PetscInt :: local_rows, local_cols, global_rows, global_cols
+      PetscInt :: global_row_start, global_row_end_plus_one
       PetscInt :: global_col_start, global_col_end_plus_one, counter
       PetscInt, allocatable, dimension(:) :: row_indices, col_indices
       PetscReal, allocatable, dimension(:) :: v
@@ -796,8 +804,10 @@ module petsc_helper
       PetscInt, intent(in)      :: global_row_start
       logical, intent(in) :: identity, reuse
 
-      PetscInt :: global_row_start_W, global_row_end_plus_one_W, global_col_start_W, global_col_end_plus_one_W
-      PetscInt :: local_rows_coarse, local_rows, local_cols, local_cols_coarse, max_nnzs, i_loc, ncols, max_nnzs_total
+      PetscInt :: global_row_start_W, global_row_end_plus_one_W
+      PetscInt :: global_col_start_W, global_col_end_plus_one_W
+      PetscInt :: local_rows_coarse, local_rows, local_cols, local_cols_coarse
+      PetscInt :: max_nnzs, i_loc, ncols, max_nnzs_total
       PetscInt :: global_cols, global_rows, global_rows_coarse, global_cols_coarse
       PetscInt :: col, cols_z, rows_z, local_rows_fine, counter
       integer :: errorcode, comm_size, comm_size_world
@@ -936,10 +946,13 @@ module petsc_helper
       type(tIS), intent(inout)  :: orig_fine_col_indices
       logical, intent(in) :: identity, reuse
 
-      PetscInt :: global_row_start_Z, global_row_end_plus_one_Z, global_col_start_Z, global_col_end_plus_one_Z
-      PetscInt :: local_coarse_size, local_fine_size, local_rows, local_full_cols, i_loc, ncols
-      PetscInt :: global_coarse_size, global_fine_size, global_full_cols, max_nnzs_total, max_nnzs
-      PetscInt :: col, rows_ao, cols_ao, rows_ad, cols_ad, size_cols, global_rows_z, global_cols_z
+      PetscInt :: global_row_start_Z, global_row_end_plus_one_Z
+      PetscInt :: global_col_start_Z, global_col_end_plus_one_Z
+      PetscInt :: local_coarse_size, local_fine_size, local_rows, local_full_cols
+      PetscInt :: i_loc, ncols, max_nnzs_total, max_nnzs
+      PetscInt :: global_coarse_size, global_fine_size, global_full_cols
+      PetscInt :: col, rows_ao, cols_ao, rows_ad, cols_ad, size_cols
+      PetscInt :: global_rows_z, global_cols_z
       PetscInt :: local_rows_z, local_cols_z, counter
       integer :: comm_size, comm_size_world, errorcode, comm_rank
       PetscErrorCode :: ierr

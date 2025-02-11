@@ -568,7 +568,8 @@ module pmisr_ddc
 
       ! Local
       PetscInt :: local_rows, local_cols, global_rows, global_cols
-      PetscInt :: a_global_row_start, a_global_row_end_plus_one, ifree, ncols, input_row_start, input_row_end_plus_one
+      PetscInt :: a_global_row_start, a_global_row_end_plus_one, ifree, ncols
+      PetscInt :: input_row_start, input_row_end_plus_one
       PetscInt :: max_nnzs, jfree, idx, search_size
       integer :: bin_sum, bin_boundary, bin
       PetscErrorCode :: ierr

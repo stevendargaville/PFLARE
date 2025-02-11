@@ -224,7 +224,8 @@ module constrain_z_or_w
       type(tVec), dimension(:), intent(inout)           :: null_vecs_f, null_vecs_c
 
       ! Local variables
-      PetscInt :: local_rows, local_cols, global_row_start, global_row_end_plus_one, global_col_end_plus_one
+      PetscInt :: local_rows, local_cols, global_row_start
+      PetscInt :: global_row_end_plus_one, global_col_end_plus_one
       PetscInt :: global_rows, global_cols, i_loc
       PetscInt :: rows_ao, cols_ao, global_col_start, max_nnzs, ncols
       PetscInt :: cols_ad, rows_ad, ncols_ad, ncols_ao, ncols_temp

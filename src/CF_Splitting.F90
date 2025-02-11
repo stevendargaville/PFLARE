@@ -93,7 +93,8 @@ module cf_splitting
       logical, intent(in), optional :: allow_drop_diagonal
       
       PetscInt :: col, ncols, ifree, max_nnzs
-      PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
+      PetscInt :: local_rows, local_cols, global_rows, global_cols
+      PetscInt :: global_row_start, global_row_end_plus_one
       PetscInt :: global_col_start, global_col_end_plus_one, jfree, diagonal_index
       integer :: counter, errorcode, comm_size
       PetscErrorCode :: ierr

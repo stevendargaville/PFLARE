@@ -179,9 +179,11 @@ module air_mg_stats
             gmres_size_long = int(non_zero_order, kind=8)
 
             if (mat_type==MATSHELL) then
-               nnzs = nnzs + maxits_long * maxits_aff_long * gmres_size_long * air_data%A_ff_nnzs(our_level) + maxits_long * (maxits_aff_long) * air_data%A_ff_nnzs(our_level)
+               nnzs = nnzs + maxits_long * maxits_aff_long * gmres_size_long * air_data%A_ff_nnzs(our_level) + &
+                           maxits_long * (maxits_aff_long) * air_data%A_ff_nnzs(our_level)
             else
-               nnzs = nnzs + maxits_long * maxits_aff_long * air_data%inv_A_ff_nnzs(our_level) + maxits_long * (maxits_aff_long) * air_data%A_ff_nnzs(our_level)
+               nnzs = nnzs + maxits_long * maxits_aff_long * air_data%inv_A_ff_nnzs(our_level) + &
+                           maxits_long * (maxits_aff_long) * air_data%A_ff_nnzs(our_level)
             end if
 
             ! Add in the minus Afc - this is done once before we F-point smooth
@@ -199,9 +201,11 @@ module air_mg_stats
                ! Are we mf?
                call MatGetType(air_data%inv_A_cc(our_level), mat_type, ierr)
                if (mat_type==MATSHELL) then  
-                  nnzs = nnzs + maxits_long * gmres_size_long * air_data%A_cc_nnzs(our_level) + maxits_long * air_data%A_cc_nnzs(our_level)
+                  nnzs = nnzs + maxits_long * gmres_size_long * air_data%A_cc_nnzs(our_level) + &
+                           maxits_long * air_data%A_cc_nnzs(our_level)
                else          
-                  nnzs = nnzs + maxits_long * air_data%inv_A_cc_nnzs(our_level) + maxits_long * air_data%A_cc_nnzs(our_level)
+                  nnzs = nnzs + maxits_long * air_data%inv_A_cc_nnzs(our_level) + &
+                           maxits_long * air_data%A_cc_nnzs(our_level)
                end if
                ! Add in the minus Acf
                nnzs = nnzs + maxits_long * air_data%A_cf_nnzs(our_level)
@@ -221,9 +225,11 @@ module air_mg_stats
 
             ! The two is because we do up and down smoothing
             if (mat_type==MATSHELL) then
-               nnzs = nnzs + 2 * maxits_long * gmres_size_long * air_data%coarse_matrix_nnzs(our_level) + maxits_long  * air_data%coarse_matrix_nnzs(our_level)
+               nnzs = nnzs + 2 * maxits_long * gmres_size_long * air_data%coarse_matrix_nnzs(our_level) + &
+                           maxits_long  * air_data%coarse_matrix_nnzs(our_level)
             else
-               nnzs = nnzs + 2 * maxits_long * air_data%inv_A_ff_nnzs(our_level) + maxits_long * air_data%coarse_matrix_nnzs(our_level)
+               nnzs = nnzs + 2 * maxits_long * air_data%inv_A_ff_nnzs(our_level) + &
+                           maxits_long * air_data%coarse_matrix_nnzs(our_level)
             end if
          end if
 
@@ -249,7 +255,7 @@ module air_mg_stats
       ! ~~~~~~
       type(air_multigrid_data), intent(inout) :: air_data
       type(tPC), intent(in)                   :: pcmg
-      PetscReal, intent(out)                       :: grid_complx, op_complx, cycle_complx, storage_complx, reuse_storage_complx
+      PetscReal, intent(out)  :: grid_complx, op_complx, cycle_complx, storage_complx, reuse_storage_complx
 
       integer :: our_level, i_loc
       PetscInt :: maxits_coarse
@@ -258,6 +264,8 @@ module air_mg_stats
       type(tKSP) :: ksp
       PetscReal :: rtol, atol, dtol
       integer(kind=8) :: nnzs_air_v, mat_storage_nnzs, op_complx_nnzs, mat_reuse_storage_nnzs, mat_nnzs
+      type(tMat) :: temp_mat
+      type(tIS) :: temp_is
 
       ! ~~~~~~    
 
@@ -341,14 +349,16 @@ module air_mg_stats
       do our_level = 1, air_data%no_levels-1
          ! Loop over all the reused matrices
          do i_loc = 1, size(air_data%reuse(our_level)%reuse_mat)
-            if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(i_loc))) then
+            temp_mat = air_data%reuse(our_level)%reuse_mat(i_loc)
+            if (.NOT. PetscMatIsNull(temp_mat)) then
                call get_nnzs_petsc_sparse(air_data%reuse(our_level)%reuse_mat(i_loc), mat_nnzs)
                mat_reuse_storage_nnzs = mat_reuse_storage_nnzs + mat_nnzs
             end if
          end do
          ! Include any IS's
          do i_loc = 1, size(air_data%reuse(our_level)%reuse_is)
-            if (.NOT. PetscISIsNull(air_data%reuse(our_level)%reuse_is(i_loc))) then
+            temp_is = air_data%reuse(our_level)%reuse_is(i_loc)
+            if (.NOT. PetscISIsNull(temp_is)) then
                call ISGetSize(air_data%reuse(our_level)%reuse_is(i_loc), global_rows, ierr)
                mat_reuse_storage_nnzs = mat_reuse_storage_nnzs + global_rows
             end if

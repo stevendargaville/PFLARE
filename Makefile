@@ -48,7 +48,6 @@ FFLAGS      := ${FFLAGS} -fpscomp logicals
 endif
 # GNU
 ifneq ($(filter gfortran mpif90,$(FC)),)
-FFLAGS      := ${FFLAGS} -ffixed-line-length-none -ffree-line-length-none
 endif
 # LLVM 
 ifneq ($(filter flang amdflang,$(FC)),)

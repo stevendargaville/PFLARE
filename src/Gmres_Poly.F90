@@ -152,7 +152,8 @@ module gmres_poly
 
       ! Local variables
       MPI_Comm :: MPI_COMM_MATRIX
-      PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one, row_i
+      PetscInt :: local_rows, local_cols, global_rows, global_cols
+      PetscInt :: global_row_start, global_row_end_plus_one, row_i
       PetscCount :: vec_size
       PetscInt, allocatable, dimension(:) :: indices
       integer :: i_loc, seed_size, comm_size, comm_rank, errorcode
@@ -743,7 +744,8 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       PetscReal, dimension(:), intent(inout)               :: coefficients
       type(tMat), intent(inout)                       :: reuse_mat, cmat
       
-      PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
+      PetscInt :: local_rows, local_cols, global_rows, global_cols
+      PetscInt :: global_row_start, global_row_end_plus_one
       PetscInt :: global_col_start, global_col_end_plus_one, n, ncols, ncols_two, ifree, max_nnzs
       PetscInt :: i_loc, j_loc, row_size, rows_ao, cols_ao, rows_ad, cols_ad, shift = 0, counter
       integer :: errorcode, omp_threads, match_counter, term, order, location

@@ -42,7 +42,8 @@ module sai_z
       PetscInt :: global_rows, global_cols, iterations_taken
       PetscInt :: i_loc, j_loc, max_nnzs, cols_ad, rows_ad
       PetscInt :: rows_ao, cols_ao, ifree, row_size, i_size, j_size
-      PetscInt :: global_col_start, global_col_end_plus_one, global_row_start_aff, global_row_end_plus_one_aff
+      PetscInt :: global_col_start, global_col_end_plus_one
+      PetscInt :: global_row_start_aff, global_row_end_plus_one_aff
       integer :: lwork, intersect_count, location
       integer :: errorcode, comm_size
       PetscErrorCode :: ierr
@@ -379,7 +380,8 @@ module sai_z
             call intersect_pre_sorted_indices_only(i_rows, j_rows, i_indices, j_indices, intersect_count)       
          else
             ! The i_rows are the global column indexes, the j_rows are the local
-            call intersect_pre_sorted_indices_only(i_rows, col_indices_off_proc_array(j_rows+1), i_indices, j_indices, intersect_count)       
+            call intersect_pre_sorted_indices_only(i_rows, col_indices_off_proc_array(j_rows+1), &
+                     i_indices, j_indices, intersect_count)       
          end if
 
          ! Create the sequential IS we want with the cols we want (written as global indices)
@@ -520,11 +522,13 @@ module sai_z
 
                allocate(work(1))
                lwork = -1
-               call dgels('N', size(i_rows), size(j_rows), 1, submat_vals, size(i_rows), e_row, size(i_rows), work, lwork, errorcode)
+               call dgels('N', size(i_rows), size(j_rows), 1, submat_vals, size(i_rows), &
+                           e_row, size(i_rows), work, lwork, errorcode)
                lwork = int(work(1))
                deallocate(work)
                allocate(work(lwork))  
-               call dgels('N', size(i_rows), size(j_rows), 1, submat_vals, size(i_rows), e_row, size(i_rows), work, lwork, errorcode)
+               call dgels('N', size(i_rows), size(j_rows), 1, submat_vals, size(i_rows), &
+                           e_row, size(i_rows), work, lwork, errorcode)
                deallocate(work)
 
             end if
