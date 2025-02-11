@@ -21,7 +21,7 @@ run_tests:
 	@echo "Test AIRG with GMRES polynomials for 2D finite difference stencil with Python"
 	python3 ex2.py
 	@echo "Test AIRG with GMRES polynomials for 2D finite difference stencil with Python in parallel"
-	$(MPIEXEC) -n 2 python3 ex2.py -ksp_rtol 1e-100 -ksp_max_it 2
+	$(MPIEXEC) -n 2 python3 ex2.py
 #
 	@echo ""
 	@echo "Test lAIR with GMRES polynomials for 2D finite difference stencil with Python"
