@@ -12,11 +12,14 @@
 !
 
 module solve_module
+
+#include "petsc/finclude/petsc.h"   
+
    implicit none
   
    type real_coeffs
       ! Must be set to null to start
-      real, dimension(:, :), pointer :: coeffs => null()
+      PetscReal, dimension(:, :), pointer :: coeffs => null()
    end type real_coeffs   
 
 contains 

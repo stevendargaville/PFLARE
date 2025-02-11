@@ -32,7 +32,7 @@ module petsc_helper
       ! Input 
       type(tMat), intent(in) :: input_mat
       type(tMat), intent(inout) :: output_mat
-      real, intent(in) :: tol
+      PetscReal, intent(in) :: tol
       logical, intent(in), optional :: relative_max_row_tolerance, lump, allow_drop_diagonal
 
       PetscInt :: col, ncols, ifree, max_nnzs
@@ -41,12 +41,12 @@ module petsc_helper
       PetscErrorCode :: ierr
       integer :: errorcode, comm_size
       PetscInt, dimension(:), allocatable :: cols
-      real, dimension(:), allocatable :: vals
+      PetscReal, dimension(:), allocatable :: vals
       PetscInt, allocatable, dimension(:) :: row_indices, col_indices
-      real, allocatable, dimension(:) :: v          
+      PetscReal, allocatable, dimension(:) :: v          
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       logical :: rel_row_tol_logical, lump_entries, drop_diag
-      real :: rel_row_tol
+      PetscReal :: rel_row_tol
       MPI_Comm :: MPI_COMM_MATRIX
       MatType:: mat_type
       
@@ -172,7 +172,7 @@ module petsc_helper
       PetscInt :: global_row_start, global_row_end_plus_one
       PetscErrorCode :: ierr
       PetscInt, dimension(:), allocatable :: cols
-      real, dimension(:), allocatable :: vals
+      PetscReal, dimension(:), allocatable :: vals
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       
       ! ~~~~~~~~~~
@@ -242,12 +242,12 @@ module petsc_helper
       PetscErrorCode :: ierr
       integer :: errorcode, comm_size
       PetscInt, dimension(:), allocatable :: cols, cols_mod
-      real, dimension(:), allocatable :: vals, vals_copy
+      PetscReal, dimension(:), allocatable :: vals, vals_copy
       PetscInt, allocatable, dimension(:) :: row_indices, col_indices
-      real, allocatable, dimension(:) :: v        
+      PetscReal, allocatable, dimension(:) :: v        
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       logical :: lump_entries
-      real :: lump_sum
+      PetscReal :: lump_sum
       MPI_Comm :: MPI_COMM_MATRIX
       
       ! ~~~~~~~~~~
@@ -395,9 +395,9 @@ module petsc_helper
       PetscErrorCode :: ierr
       integer :: errorcode, comm_size
       PetscInt, dimension(:), allocatable :: cols
-      real, dimension(:), allocatable :: vals
+      PetscReal, dimension(:), allocatable :: vals
       PetscInt, allocatable, dimension(:) :: row_indices, col_indices
-      real, allocatable, dimension(:) :: v         
+      PetscReal, allocatable, dimension(:) :: v         
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       MPI_Comm :: MPI_COMM_MATRIX
       MatType:: mat_type
@@ -506,7 +506,7 @@ module petsc_helper
       
       PetscInt :: i_loc, local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
       PetscInt, allocatable, dimension(:) :: indices
-      real, allocatable, dimension(:) :: v
+      PetscReal, allocatable, dimension(:) :: v
       PetscErrorCode :: ierr
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       MPI_Comm :: MPI_COMM_MATRIX
@@ -565,7 +565,7 @@ module petsc_helper
       PetscInt :: local_rows_rect, local_cols_rect, global_rows_rect, global_cols_rect, global_row_start_rect, global_row_end_plus_one_rect
       PetscInt :: local_indices_size
       PetscInt, allocatable, dimension(:) :: indices
-      real, allocatable, dimension(:) :: v      
+      PetscReal, allocatable, dimension(:) :: v      
       PetscErrorCode :: ierr
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       MPI_Comm :: MPI_COMM_MATRIX
@@ -639,7 +639,7 @@ module petsc_helper
       
       PetscInt :: i_loc, local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
       PetscInt :: local_indices_size
-      real, allocatable, dimension(:) :: v      
+      PetscReal, allocatable, dimension(:) :: v      
       PetscErrorCode :: ierr
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       MPI_Comm :: MPI_COMM_MATRIX
@@ -700,10 +700,10 @@ module petsc_helper
       PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
       PetscInt :: global_col_start, global_col_end_plus_one, counter
       PetscInt, allocatable, dimension(:) :: row_indices, col_indices
-      real, allocatable, dimension(:) :: v
+      PetscReal, allocatable, dimension(:) :: v
       PetscErrorCode :: ierr
       PetscInt, dimension(:), allocatable :: cols
-      real, dimension(:), allocatable :: vals
+      PetscReal, dimension(:), allocatable :: vals
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       integer :: max_loc(1)
       integer :: comm_size, errorcode
@@ -804,9 +804,9 @@ module petsc_helper
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX
       PetscInt, dimension(:), allocatable :: cols
-      real, dimension(:), allocatable :: vals
+      PetscReal, dimension(:), allocatable :: vals
       PetscInt, allocatable, dimension(:) :: row_indices, col_indices
-      real, allocatable, dimension(:) :: v      
+      PetscReal, allocatable, dimension(:) :: v      
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       PetscInt, dimension(:), pointer :: is_pointer_coarse, is_pointer_fine
       MatType:: mat_type
@@ -945,9 +945,9 @@ module petsc_helper
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX      
       PetscInt, dimension(:), allocatable :: cols
-      real, dimension(:), allocatable :: vals
+      PetscReal, dimension(:), allocatable :: vals
       PetscInt, allocatable, dimension(:) :: row_indices_coo, col_indices_coo
-      real, allocatable, dimension(:) :: v      
+      PetscReal, allocatable, dimension(:) :: v      
       PetscOffset :: iicol
       PetscInt :: icol(1)       
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
@@ -1219,13 +1219,13 @@ module petsc_helper
 
       ! ~~~~~~~~~~~~~~~~
 
-      real, dimension(:, :), intent(in) :: input
-      real, dimension(size(input, 1), size(input, 1)), intent(out) :: U
-      real, dimension(min(size(input, 1), size(input, 2))), intent(out) :: sigma
-      real, dimension(size(input, 2), size(input, 2)), intent(out) :: VT
+      PetscReal, dimension(:, :), intent(in) :: input
+      PetscReal, dimension(size(input, 1), size(input, 1)), intent(out) :: U
+      PetscReal, dimension(min(size(input, 1), size(input, 2))), intent(out) :: sigma
+      PetscReal, dimension(size(input, 2), size(input, 2)), intent(out) :: VT
   
-      real, dimension(size(input, 1), size(input, 2)) :: tmp_input
-      real, dimension(:), allocatable :: WORK
+      PetscReal, dimension(size(input, 1), size(input, 2)) :: tmp_input
+      PetscReal, dimension(:), allocatable :: WORK
       integer :: LWORK, M, N, info, errorcode
 
       ! ~~~~~~~~~~~~~~~~
@@ -1253,12 +1253,12 @@ module petsc_helper
 
       ! ~~~~~~~~~~~~~~~~
 
-      real, dimension(:, :), intent(in) :: input
-      real, dimension(min(size(input, 1), size(input, 2))), intent(out) :: output
+      PetscReal, dimension(:, :), intent(in) :: input
+      PetscReal, dimension(min(size(input, 1), size(input, 2))), intent(out) :: output
 
-      real, dimension(size(input, 1), size(input, 1)) :: U
-      real, dimension(min(size(input, 1), size(input, 2))) :: sigma
-      real, dimension(size(input, 2), size(input, 2)) :: VT
+      PetscReal, dimension(size(input, 1), size(input, 1)) :: U
+      PetscReal, dimension(min(size(input, 1), size(input, 2))) :: sigma
+      PetscReal, dimension(size(input, 2), size(input, 2)) :: VT
 
       integer :: iloc, errorcode
 

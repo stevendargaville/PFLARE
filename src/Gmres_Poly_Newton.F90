@@ -23,14 +23,14 @@ module gmres_poly_newton
       ! with positive imag e'vals first
 
       ! ~~~~~~
-      real, dimension(:), intent(inout)  :: real_roots, imag_roots
+      PetscReal, dimension(:), intent(inout)  :: real_roots, imag_roots
       integer, dimension(:), allocatable, intent(inout) :: indices
 
       ! Local variables
       integer :: i_loc, k_loc, counter
       integer :: max_loc(1)
-      real, dimension(:), allocatable :: magnitude
-      real :: a, b, squares, max_mag
+      PetscReal, dimension(:), allocatable :: magnitude
+      PetscReal :: a, b, squares, max_mag
       logical, dimension(size(real_roots)) :: sorted
 
       ! ~~~~~~    
@@ -157,7 +157,7 @@ module gmres_poly_newton
       type(tMat), intent(in)                            :: matrix
       integer, intent(in)                               :: poly_order
       logical, intent(in)                               :: add_roots
-      real, dimension(:, :), pointer, intent(inout)     :: coefficients
+      PetscReal, dimension(:, :), pointer, intent(inout)     :: coefficients
 
       ! Local variables
       PetscInt :: global_rows, global_cols, local_rows, local_cols
@@ -165,22 +165,22 @@ module gmres_poly_newton
       integer :: total_extra, counter, k_loc, m
       PetscErrorCode :: ierr      
       MPI_Comm :: MPI_COMM_MATRIX
-      real, dimension(poly_order+2,poly_order+1) :: H_n
-      real, dimension(poly_order+1,poly_order+2) :: H_n_T
-      real, dimension(poly_order+1,poly_order+1) :: H_n_square
-      real, dimension(poly_order+1) :: e_d, r, col_scale, solution, gamma, s, pof
+      PetscReal, dimension(poly_order+2,poly_order+1) :: H_n
+      PetscReal, dimension(poly_order+1,poly_order+2) :: H_n_T
+      PetscReal, dimension(poly_order+1,poly_order+1) :: H_n_square
+      PetscReal, dimension(poly_order+1) :: e_d, r, col_scale, solution, gamma, s, pof
       integer, dimension(poly_order+1) :: iwork, pivots, extra_pair_roots, overflow
       integer, dimension(:), allocatable :: iwork_allocated, indices
-      real, dimension(1) :: ferr, berr
-      real, dimension(:), allocatable :: work
-      real, dimension(:,:), allocatable :: VL, VR
-      real :: beta, div_real, div_imag, a, b, c, d, div_mag
-      real, dimension(:, :), allocatable :: coefficients_temp
+      PetscReal, dimension(1) :: ferr, berr
+      PetscReal, dimension(:), allocatable :: work
+      PetscReal, dimension(:,:), allocatable :: VL, VR
+      PetscReal :: beta, div_real, div_imag, a, b, c, d, div_mag
+      PetscReal, dimension(:, :), allocatable :: coefficients_temp
       type(tVec) :: w_j
       type(tVec), dimension(poly_order+2) :: V_n
       character(1) :: equed
       logical :: use_harmonic_ritz = .TRUE.
-      real :: rcond = 1e-12
+      PetscReal :: rcond = 1e-12
 
       ! ~~~~~~    
 
@@ -608,7 +608,7 @@ module gmres_poly_newton
       ! ~~~~~~
       type(tMat), intent(in)                                      :: matrix
       integer, intent(in)                                         :: poly_order
-      real, dimension(:, :), target, contiguous, intent(inout)    :: coefficients
+      PetscReal, dimension(:, :), target, contiguous, intent(inout)    :: coefficients
       type(tMat), intent(inout)                                   :: inv_matrix
 
       ! Local variables

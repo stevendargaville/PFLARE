@@ -267,12 +267,12 @@ module air_mg_setup
       PetscErrorCode :: ierr
       type(tMat) :: minus_mat, sparsity_mat_cf, A_ff_power, inv_dropped_Aff, smoothing_mat, temp_identity
       type(tVec), dimension(:), allocatable   :: left_null_vecs_f, right_null_vecs_f
-      real :: sol_start, sol_end, strong_r_tol
+      PetscReal :: sol_start, sol_end, strong_r_tol
       integer :: comm_size, errorcode, order, i_loc
       MPI_Comm :: MPI_COMM_MATRIX
       integer(c_long_long) :: A_array, B_array, C_array
       PetscInt, dimension(:), allocatable :: nnzs_row, onzs_row, cols
-      real, dimension(:), allocatable :: vals
+      PetscReal, dimension(:), allocatable :: vals
       PetscInt :: global_row_start, global_row_end_plus_one, global_col_start, global_col_end_plus_one
       PetscInt, parameter :: nz_ignore = -1
       logical :: destroy_mat, reuse_one_point_classical, reuse_grid_transfer
@@ -994,7 +994,7 @@ module air_mg_setup
       ! ~~~~~~
       type(tPC) :: pc
       type(tVec) :: b, x, r
-      real :: rtol, abstol, dtol
+      PetscReal :: rtol, abstol, dtol
       PetscInt :: maxits, its
       PetscBool :: guess_zero
       PCRichardsonConvergedReason :: conv_reason

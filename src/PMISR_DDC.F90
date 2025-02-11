@@ -51,8 +51,8 @@ module pmisr_ddc
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX      
       integer, dimension(:), allocatable :: seed
-      real, dimension(:), allocatable :: measure_local, measure_nonlocal
-      real, dimension(:), allocatable :: cf_markers_local_real
+      PetscReal, dimension(:), allocatable :: measure_local, measure_nonlocal
+      PetscReal, dimension(:), allocatable :: cf_markers_local_real
       logical, dimension(:), allocatable :: mark
       type(c_ptr) :: cf_markers_nonlocal_ptr
       real(c_double), pointer :: cf_markers_nonlocal(:)
@@ -563,7 +563,7 @@ module pmisr_ddc
       ! ~~~~~~
       type(tMat), target, intent(in)      :: input_mat
       type(tIS), intent(in)               :: is_fine
-      real, intent(in)                    :: fraction_swap
+      PetscReal, intent(in)                    :: fraction_swap
       integer, dimension(:), allocatable, intent(inout) :: cf_markers_local
 
       ! Local
@@ -573,10 +573,10 @@ module pmisr_ddc
       integer :: bin_sum, bin_boundary, bin
       PetscErrorCode :: ierr
       PetscInt, dimension(:), allocatable :: cols
-      real, dimension(:), allocatable :: vals, diag_dom_ratio, diag_dom_ratio_small
+      PetscReal, dimension(:), allocatable :: vals, diag_dom_ratio, diag_dom_ratio_small
       PetscInt, dimension(:), pointer :: is_pointer
       type(tMat) :: Aff
-      real :: diag_val
+      PetscReal :: diag_val
       real(c_double) :: swap_dom_val
       integer, dimension(1000) :: dom_bins
 

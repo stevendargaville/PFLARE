@@ -121,8 +121,8 @@ module neumann_poly
       type(tMat), intent(inout)           :: reuse_mat, inv_matrix
 
       ! Local variables
-      real, dimension(:), pointer :: coefficients
-      real, dimension(poly_order + 1), target :: coefficients_stack
+      PetscReal, dimension(:), pointer :: coefficients
+      PetscReal, dimension(poly_order + 1), target :: coefficients_stack
       integer :: comm_size, errorcode
       PetscErrorCode :: ierr      
       MPI_Comm :: MPI_COMM_MATRIX

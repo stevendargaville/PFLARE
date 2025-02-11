@@ -233,10 +233,10 @@ module constrain_z_or_w
       MPI_Comm :: MPI_COMM_MATRIX
       type(tMat) :: row_mat, temp_mat_aij
       PetscInt, dimension(:), allocatable :: cols, col_indices_off_proc_array
-      real, dimension(:), allocatable :: vals, row_vals, sols, diff
+      PetscReal, dimension(:), allocatable :: vals, row_vals, sols, diff
       logical :: approx_solve
       type(tMat) :: new_z_or_w
-      real, dimension(:), pointer :: b_f_vals
+      PetscReal, dimension(:), pointer :: b_f_vals
       type(c_ptr) :: colmap_c_ptr, b_c_nonlocal_c_ptr
       integer(c_long_long) :: A_array, vec_long
       PetscInt, pointer :: colmap_c(:)
@@ -244,7 +244,7 @@ module constrain_z_or_w
       PetscOffset :: iicol
       PetscInt :: icol(1)
       real(c_double), pointer :: b_c_nonlocal(:), b_c_local(:)
-      real, dimension(:,:), allocatable :: b_c_nonlocal_alloc, b_c_vals, bctbc, pseudo, temp_mat
+      PetscReal, dimension(:,:), allocatable :: b_c_nonlocal_alloc, b_c_vals, bctbc, pseudo, temp_mat
       PetscInt, parameter :: one = 1, zero = 0
       MatType:: mat_type
 

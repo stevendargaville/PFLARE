@@ -28,7 +28,7 @@ module repartition
       ! ~~~~~~
       type(tMat), target, intent(in)      :: input_mat
       PetscInt, intent(in)                :: no_active_cores
-      real, intent(out)                   :: ratio
+      PetscReal, intent(out)                   :: ratio
 
       ! Local
       PetscInt :: local_rows, local_cols, global_rows, global_cols, i_loc
@@ -37,7 +37,7 @@ module repartition
       integer :: errorcode
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX      
-      real :: ratio_local_nnzs_off_proc, ratio_parallel
+      PetscReal :: ratio_local_nnzs_off_proc, ratio_parallel
       type(tMat) :: Ad, Ao
       PetscOffset :: iicol
       PetscInt :: icol(1)

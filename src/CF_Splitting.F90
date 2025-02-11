@@ -88,7 +88,7 @@ module cf_splitting
       ! Input 
       type(tMat), intent(in)     :: input_mat
       type(tMat), intent(inout)  :: output_mat
-      real, intent(in)           :: strong_threshold
+      PetscReal, intent(in)           :: strong_threshold
       logical, intent(in)        :: symmetrize, square
       logical, intent(in), optional :: allow_drop_diagonal
       
@@ -98,9 +98,9 @@ module cf_splitting
       integer :: counter, errorcode, comm_size
       PetscErrorCode :: ierr
       PetscInt, dimension(:), allocatable :: nnzs_row, onzs_row, cols, cols_mod
-      real, dimension(:), allocatable :: vals, vals_copy
+      PetscReal, dimension(:), allocatable :: vals, vals_copy
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
-      real :: rel_row_tol, abs_biggest_entry
+      PetscReal :: rel_row_tol, abs_biggest_entry
       MPI_Comm :: MPI_COMM_MATRIX
       type(tMat) :: transpose_mat, temp_mat
       type(tIS) :: zero_diags
@@ -352,7 +352,7 @@ module cf_splitting
       ! ~~~~~~
       type(tMat), target, intent(in)      :: input_mat
       logical, intent(in)                 :: symmetric
-      real, intent(in)                    :: strong_threshold
+      PetscReal, intent(in)                    :: strong_threshold
       integer, intent(in)                 :: max_luby_steps, cf_splitting_type
       integer, dimension(:), allocatable, intent(inout) :: cf_markers_local
 
@@ -578,9 +578,9 @@ module cf_splitting
       ! ~~~~~~
       type(tMat), target, intent(in)      :: input_mat
       logical, intent(in)                 :: symmetric
-      real, intent(in)                    :: strong_threshold
+      PetscReal, intent(in)                    :: strong_threshold
       integer, intent(in)                 :: max_luby_steps, cf_splitting_type
-      real, intent(in)                    :: fraction_swap
+      PetscReal, intent(in)                    :: fraction_swap
       type(tIS), intent(inout)            :: is_fine, is_coarse
 
       PetscErrorCode :: ierr

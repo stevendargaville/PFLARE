@@ -38,7 +38,7 @@ module weighted_jacobi
       PetscInt, allocatable, dimension(:) :: indices
       type(tMat) :: temp_mat
       type(tVec) :: rhs_copy, diag_vec
-      real :: norm_inf, weight
+      PetscReal :: norm_inf, weight
       PetscInt, parameter :: one=1, zero=0
       MatType:: mat_type
       logical :: reuse_triggered

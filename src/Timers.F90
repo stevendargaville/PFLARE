@@ -6,6 +6,8 @@ module timers
    use petsc
    use iso_c_binding, only: c_double
 
+#include "petsc/finclude/petsc.h"   
+
    implicit none
 
    ! Timer IDs - Numbers must be between 1 and 1024
@@ -33,7 +35,7 @@ module timers
       ! -------------------------------------------------------------------------------------------------------------------------------  
 
    integer, parameter :: MAX_TIMER_ID = 1024
-   real :: starttimers(MAX_TIMER_ID) = 0.0, totaltimers(MAX_TIMER_ID) = 0.0
+   PetscReal :: starttimers(MAX_TIMER_ID) = 0.0, totaltimers(MAX_TIMER_ID) = 0.0
 
 contains
 
@@ -88,7 +90,7 @@ function wall_time()
   subroutine timer_finish(id)
     integer, intent(in) :: id
 
-    real :: finish_time
+    PetscReal :: finish_time
 
     finish_time = wall_time()
     totaltimers(id) = totaltimers(id) + (finish_time - starttimers(id))

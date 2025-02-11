@@ -95,7 +95,7 @@ module air_mg_stats
       PetscErrorCode :: ierr
       PCType pc_type
       type(tKSP) :: ksp
-      real :: rtol, atol, dtol
+      PetscReal :: rtol, atol, dtol
       integer(kind=8) maxits_long, maxits_aff_long, gmres_size_long, poly_order_long
       MatType:: mat_type
       logical :: zero_root
@@ -249,14 +249,14 @@ module air_mg_stats
       ! ~~~~~~
       type(air_multigrid_data), intent(inout) :: air_data
       type(tPC), intent(in)                   :: pcmg
-      real, intent(out)                       :: grid_complx, op_complx, cycle_complx, storage_complx, reuse_storage_complx
+      PetscReal, intent(out)                       :: grid_complx, op_complx, cycle_complx, storage_complx, reuse_storage_complx
 
       integer :: our_level, i_loc
       PetscInt :: maxits_coarse
       PetscInt :: global_rows, global_cols
       PetscErrorCode :: ierr
       type(tKSP) :: ksp
-      real :: rtol, atol, dtol
+      PetscReal :: rtol, atol, dtol
       integer(kind=8) :: nnzs_air_v, mat_storage_nnzs, op_complx_nnzs, mat_reuse_storage_nnzs, mat_nnzs
 
       ! ~~~~~~    
@@ -373,7 +373,7 @@ module air_mg_stats
       type(air_multigrid_data), intent(inout) :: air_data
       type(tPC), intent(in)                   :: pcmg
 
-      real :: grid_complx, op_complx, cycle_complx, storage_complx, reuse_storage_complx
+      PetscReal :: grid_complx, op_complx, cycle_complx, storage_complx, reuse_storage_complx
       integer :: comm_rank, errorcode
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX

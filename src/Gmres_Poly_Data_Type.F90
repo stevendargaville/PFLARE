@@ -1,6 +1,8 @@
 module gmres_poly_data_type
 
    use tsqr
+
+#include "petsc/finclude/petsc.h"   
    
    implicit none
    
@@ -19,7 +21,7 @@ module gmres_poly_data_type
       ! Coefficients for the gmres polynomial
       ! If using the newton basis this has two columns with the real 
       ! and imaginary roots
-      real, pointer, dimension(:, :), contiguous :: coefficients => null()
+      PetscReal, pointer, dimension(:, :), contiguous :: coefficients => null()
 
       ! Asynchronous buffers for the TSQR
       type(tsqr_buffers) :: buffers

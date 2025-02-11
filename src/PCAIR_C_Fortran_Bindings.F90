@@ -1531,7 +1531,7 @@ module pcair_c_fortran_bindings
       PetscInt                               :: num_levels
       type(tPC)                              :: pc_shell
       type(pc_air_multigrid_data), pointer   :: pc_air_data   
-      real, pointer :: coeffs_c(:,:)   
+      PetscReal, pointer :: coeffs_c(:,:)   
 
       ! ~~~~~~~~
 

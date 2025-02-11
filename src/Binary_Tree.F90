@@ -172,7 +172,7 @@ subroutine iremove_tree ( tree, value )
   type(tree_inode), pointer :: current_node
   type(tree_inode), pointer :: set_to => null()
   
-  real :: temp_rand
+  PetscReal :: temp_rand
  
  !  If the tree is empty
   if ( .not. associated ( tree%headnode ) ) then

@@ -52,10 +52,10 @@ module sai_z
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0, maxits=1000
       PetscInt, dimension(:), allocatable :: cols, j_rows, i_rows, ad_indices
       integer, dimension(:), allocatable :: pivots, j_indices, i_indices
-      real, dimension(:), allocatable :: vals, e_row, j_vals, sols, e_row_plus_constraints
-      real, dimension(:,:), allocatable :: submat_vals, submat_vals_plus_constraints
+      PetscReal, dimension(:), allocatable :: vals, e_row, j_vals, sols, e_row_plus_constraints
+      PetscReal, dimension(:,:), allocatable :: submat_vals, submat_vals_plus_constraints
       type(itree) :: i_rows_tree
-      real, dimension(:), allocatable :: work, tau
+      PetscReal, dimension(:), allocatable :: work, tau
       type(tVec) :: solution, rhs, b_f
       logical :: approx_solve
       ! In fortran this needs to be of size n+1 where n is the number of submatrices we want
@@ -70,8 +70,8 @@ module sai_z
       PetscInt, dimension(:), allocatable :: col_indices_off_proc_array
       integer(c_long_long) :: A_array, B_array, C_array
       logical :: constrain
-      real, dimension(:), pointer :: b_f_vals, b_vals
-      real :: lambda, b_c
+      PetscReal, dimension(:), pointer :: b_f_vals, b_vals
+      PetscReal :: lambda, b_c
       MatType:: mat_type
 
       ! ~~~~~~

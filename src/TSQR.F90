@@ -24,7 +24,7 @@ module tsqr
    ! ~~~~~~~~
    type tsqr_buffers
       integer                          :: request = MPI_REQUEST_NULL
-      real, dimension(:), allocatable  :: R_buffer_send, R_buffer_receive
+      PetscReal, dimension(:), allocatable  :: R_buffer_send, R_buffer_receive
       ! In case this comms request is done on a matrix on a subcomm, we 
       ! need to keep a pointer to it
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
@@ -77,13 +77,13 @@ module tsqr
 
       ! ~~~~~~
       MPI_Comm, intent(in)                                     :: MPI_COMM_MATRIX
-      real, dimension(:, :), intent(inout)                     :: A
+      PetscReal, dimension(:, :), intent(inout)                     :: A
       type(tsqr_buffers), target, intent(inout)                :: buffers
       
-      real, dimension(:), allocatable :: work, T
-      real, dimension(size(A, 2)) :: tau
+      PetscReal, dimension(:), allocatable :: work, T
+      PetscReal, dimension(size(A, 2)) :: tau
       logical, dimension(size(A, 2)) :: scale_row
-      real, dimension(:,:), pointer :: R_pointer
+      PetscReal, dimension(:,:), pointer :: R_pointer
 
       integer :: lwork, column_block_size, row_block_size, no_of_row_blocks
       integer :: m_size, n_size, errorcode, comm_size, row_length, i_loc
@@ -274,11 +274,11 @@ module tsqr
       integer            :: len 
       integer            :: type 
 
-      real, pointer :: invec_r(:), inoutvec_r(:) 
+      PetscReal, pointer :: invec_r(:), inoutvec_r(:) 
       integer :: number_chunks, i_loc, lwork, chunk_size
       integer :: start_chunk, end_chunk, errorcode, j_loc, nb, n_size
-      real, dimension(:, :), allocatable :: R_stacked
-      real, dimension(:), allocatable :: work, tau, T      
+      PetscReal, dimension(:, :), allocatable :: R_stacked
+      PetscReal, dimension(:), allocatable :: work, tau, T      
       ! ~~~~~~~~~
 
       ! ~~~~~~~~~~

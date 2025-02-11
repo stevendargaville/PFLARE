@@ -21,12 +21,12 @@ module gmres_poly
 #include "petsc_legacy.h"
 
    ! Just define pi
-   real, parameter, private :: pi = 3.141592653589793
+   PetscReal, parameter, private :: pi = 3.141592653589793
    type int_vec
       integer, dimension(:), pointer :: ptr
    end type int_vec
    type real_vec
-      real, dimension(:), pointer :: ptr
+      PetscReal, dimension(:), pointer :: ptr
    end type real_vec   
 
    public
@@ -97,7 +97,7 @@ module gmres_poly
 
       ! ~~~~~~
       integer, intent(in)                               :: inverse_type
-      real, dimension(:, :), intent(in)                 :: coefficients
+      PetscReal, dimension(:, :), intent(in)                 :: coefficients
       integer, intent(out)                              :: matvecs
 
       integer :: i_loc
@@ -158,7 +158,7 @@ module gmres_poly
       integer :: i_loc, seed_size, comm_size, comm_rank, errorcode
       PetscErrorCode :: ierr      
       integer, dimension(:), allocatable :: seed
-      real, dimension(:, :), allocatable, target   :: random_data
+      PetscReal, dimension(:, :), allocatable, target   :: random_data
       PetscInt, parameter :: one=1, zero=0
       ! ~~~~~~    
 
@@ -243,16 +243,16 @@ module gmres_poly
       ! Do the least-squares solve used in an arnoldi
 
       ! ~~~~~~
-      real, intent(in)                     :: beta
+      PetscReal, intent(in)                     :: beta
       integer, intent(in)                  :: m
-      real, dimension(:,:), intent(in)     :: H_n
-      real, dimension(:), intent(inout)    :: y
+      PetscReal, dimension(:,:), intent(in)     :: H_n
+      PetscReal, dimension(:), intent(inout)    :: y
 
       ! Local variables
       integer :: errorcode, lwork
-      real, dimension(size(H_n,1), size(H_n,2)) :: H_n_copy
-      real, dimension(m+1) :: g0
-      real, dimension(:), allocatable :: work
+      PetscReal, dimension(size(H_n,1), size(H_n,2)) :: H_n_copy
+      PetscReal, dimension(m+1) :: g0
+      PetscReal, dimension(:), allocatable :: work
 
       ! ~~~~~~   
             
@@ -298,24 +298,24 @@ module gmres_poly
       ! ~~~~~~
       type(tMat), intent(in)                            :: matrix
       integer, intent(in)                               :: poly_order
-      real, intent(in)                                  :: lucky_tol
+      PetscReal, intent(in)                                  :: lucky_tol
       type(tVec), dimension(:), intent(in)              :: V_n
       type(tVec), intent(in)                            :: w_j
-      real, intent(out)                                 :: beta
-      real, dimension(:,:), intent(inout)               :: H_n
-      real, dimension(:,:), optional, intent(inout)     :: C_n
-      real, optional, intent(inout)                     :: user_rel_tol
-      real, dimension(:), optional, intent(inout)       :: y
+      PetscReal, intent(out)                                 :: beta
+      PetscReal, dimension(:,:), intent(inout)               :: H_n
+      PetscReal, dimension(:,:), optional, intent(inout)     :: C_n
+      PetscReal, optional, intent(inout)                     :: user_rel_tol
+      PetscReal, dimension(:), optional, intent(inout)       :: y
       integer, intent(out)                              :: m
 
       ! Local variables
       integer :: i_loc, subspace_size, errorcode, lwork
       PetscErrorCode :: ierr      
-      real, dimension(poly_order+2) :: c_j, g0
-      real, dimension(size(H_n,1), size(H_n,2)) :: H_n_copy
+      PetscReal, dimension(poly_order+2) :: c_j, g0
+      PetscReal, dimension(size(H_n,1), size(H_n,2)) :: H_n_copy
       logical :: compute_cn
-      real, dimension(:), allocatable :: work
-      real :: rel_tol
+      PetscReal, dimension(:), allocatable :: work
+      PetscReal :: rel_tol
 
       ! ~~~~~~   
             
@@ -442,8 +442,8 @@ module gmres_poly
       ! ~~~~~~
       type(tMat), intent(in)                            :: matrix
       integer, intent(in)                               :: poly_order
-      real, dimension(:), intent(out)                   :: coefficients
-      real, optional, intent(inout)                     :: user_rel_tol
+      PetscReal, dimension(:), intent(out)                   :: coefficients
+      PetscReal, optional, intent(inout)                     :: user_rel_tol
 
       ! Local variables
       PetscInt :: global_rows, global_cols, local_rows, local_cols
@@ -452,16 +452,16 @@ module gmres_poly
       integer :: errorcode
       PetscErrorCode :: ierr      
       MPI_Comm :: MPI_COMM_MATRIX
-      real, dimension(poly_order+2,poly_order+1) :: H_n
-      real, dimension(poly_order+2,poly_order+2) :: C_n
-      real, dimension(poly_order+2) :: g0, c_j, s
-      real, dimension(poly_order+1) :: y
-      real, dimension(:), allocatable :: work
-      real :: beta
+      PetscReal, dimension(poly_order+2,poly_order+1) :: H_n
+      PetscReal, dimension(poly_order+2,poly_order+2) :: C_n
+      PetscReal, dimension(poly_order+2) :: g0, c_j, s
+      PetscReal, dimension(poly_order+1) :: y
+      PetscReal, dimension(:), allocatable :: work
+      PetscReal :: beta
       type(tVec) :: w_j
       type(tVec), dimension(poly_order+2) :: V_n
       integer, dimension(:), allocatable :: iwork
-      real :: rcond = -1.0, rel_tol
+      PetscReal :: rcond = -1.0, rel_tol
 
       ! ~~~~~~    
 
@@ -534,7 +534,7 @@ module gmres_poly
       type(tMat), intent(in)                            :: matrix
       integer, intent(in)                               :: poly_order
       type(tsqr_buffers), intent(inout)                 :: buffers
-      real, dimension(:), intent(inout)                 :: coefficients
+      PetscReal, dimension(:), intent(inout)                 :: coefficients
 
       ! Local variables
       PetscInt :: global_rows, global_cols, local_rows, local_cols
@@ -544,7 +544,7 @@ module gmres_poly
       integer :: errorcode
       PetscErrorCode :: ierr      
       MPI_Comm :: MPI_COMM_MATRIX
-      real, dimension(:, :), allocatable, target :: K_m_plus_1_data
+      PetscReal, dimension(:, :), allocatable, target :: K_m_plus_1_data
       type(tVec), dimension(poly_order+2) :: V_n
       ! ~~~~~~    
 
@@ -655,15 +655,15 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       ! ~~~~~~
       integer, intent(in)                                      :: poly_order
       type(tsqr_buffers), target, intent(inout)                :: buffers
-      real, dimension(:), intent(inout)                        :: coefficients
+      PetscReal, dimension(:), intent(inout)                        :: coefficients
  
       integer :: lwork, subspace_size, n_size, rank, iwork_size
       integer :: errorcode
       integer, dimension(:), allocatable :: iwork
-      real, dimension(poly_order+2) :: g0, s
-      real, dimension(:), allocatable :: work
-      real, dimension(:,:), pointer :: R_pointer
-      real :: rcond = -1.0
+      PetscReal, dimension(poly_order+2) :: g0, s
+      PetscReal, dimension(:), allocatable :: work
+      PetscReal, dimension(:,:), pointer :: R_pointer
+      PetscReal :: rcond = -1.0
 
       ! ~~~~~
 
@@ -740,7 +740,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       type(tMat), target, intent(in)                  :: matrix
       integer, intent(in)                             :: poly_order, poly_sparsity_order
       type(tsqr_buffers), intent(inout)               :: buffers
-      real, dimension(:), intent(inout)               :: coefficients
+      PetscReal, dimension(:), intent(inout)               :: coefficients
       type(tMat), intent(inout)                       :: reuse_mat, cmat
       
       PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
@@ -749,8 +749,8 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       integer :: errorcode, omp_threads, match_counter, term, order, location
       integer :: comm_size, comm_size_world, status, length
       PetscErrorCode :: ierr      
-      real, dimension(:), allocatable :: vals_two, vals_power_temp, vals_previous_power_temp
-      real, dimension(:), allocatable, target :: vals
+      PetscReal, dimension(:), allocatable :: vals_two, vals_power_temp, vals_previous_power_temp
+      PetscReal, dimension(:), allocatable, target :: vals
       integer, dimension(:), allocatable :: cols_index_one, cols_index_two
       PetscInt, dimension(:), allocatable :: cols, cols_two, cols_local
       PetscInt, dimension(:), allocatable :: col_indices_off_proc_array
@@ -769,9 +769,9 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       type(real_vec), dimension(:), allocatable :: symbolic_vals
       integer(c_long_long) A_array
       MPI_Comm :: MPI_COMM_MATRIX, MPI_COMM_MATRIX_SUBCOMM
-      real, dimension(:), allocatable :: vals_temp, vals_prev_temp
+      PetscReal, dimension(:), allocatable :: vals_temp, vals_prev_temp
       PetscInt, dimension(:), pointer :: submatrices_ia, submatrices_ja, cols_two_ptr, cols_ptr
-      real, dimension(:), pointer :: vals_two_ptr, vals_ptr
+      PetscReal, dimension(:), pointer :: vals_two_ptr, vals_ptr
       real(c_double), pointer :: submatrices_vals(:)
       logical :: symmetric = .false., inodecompressed=.false., done, reuse_triggered
       type(tVec) :: rhs_copy, diag_vec, power_vec
@@ -780,7 +780,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       integer :: omp_threads_env
       MatType:: mat_type    
       PetscInt, allocatable, dimension(:) :: indices
-      real, allocatable, dimension(:) :: v 
+      PetscReal, allocatable, dimension(:) :: v 
       
       ! ~~~~~~~~~~  
 
@@ -1377,7 +1377,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
 
       ! Input
       type(tMat), intent(in)    :: mat
-      real, dimension(:)        :: coefficients
+      PetscReal, dimension(:)        :: coefficients
       type(tVec)                :: x, temp_vec
       type(tVec)                :: y
 
@@ -1485,7 +1485,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       type(tMat), intent(in)                            :: matrix
       integer, intent(in)                               :: poly_order
       type(tsqr_buffers), intent(inout)                 :: buffers
-      real, dimension(:), target, intent(inout)         :: coefficients
+      PetscReal, dimension(:), target, intent(inout)         :: coefficients
       integer, intent(in)                               :: poly_sparsity_order
       logical, intent(in)                               :: matrix_free
       type(tMat), intent(inout)                         :: reuse_mat, inv_matrix
@@ -1502,7 +1502,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       logical :: reuse_triggered
       MatType:: mat_type
       PetscInt, allocatable, dimension(:) :: indices
-      real, allocatable, dimension(:) :: v       
+      PetscReal, allocatable, dimension(:) :: v       
 
       ! ~~~~~~       
 

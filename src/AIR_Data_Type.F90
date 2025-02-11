@@ -44,7 +44,7 @@ module air_data_type
       integer :: auto_truncate_start_level = -1
       ! What relative tolerance to use to determine if a coarse grid solver is good enough
       ! -pc_air_auto_truncate_tol
-      real :: auto_truncate_tol = 1e-14
+      PetscReal :: auto_truncate_tol = 1e-14
 
       ! Perform processor agglomeration throughout the hierarchy
       ! This reduces the number of active MPI ranks as we coarsen
@@ -58,7 +58,7 @@ module air_data_type
       ! The local to nonlocal ratio of nnzs that is used to 
       ! trigger processor agglomeration on all level
       ! -pc_air_processor_agglom_ratio
-      real :: processor_agglom_ratio = 2
+      PetscReal :: processor_agglom_ratio = 2
       ! What factor to reduce the number of active MPI ranks by
       ! each time when doing processor agglomeration
       ! -pc_air_processor_agglom_ratio
@@ -77,11 +77,11 @@ module air_data_type
 
       ! This is used in the CF splitting to define strong dependencies/influences
       ! -pc_air_strong_threshold
-      real :: strong_threshold = 0.5
+      PetscReal :: strong_threshold = 0.5
       ! Second pass in the PMISR DDC CF splitting converts 
       ! this fraction of local F points to C based on diagonal dominance
       ! -pc_air_ddc_fraction
-      real :: ddc_fraction = 0.1
+      PetscReal :: ddc_fraction = 0.1
       ! What CF splitting algorithm to use
       ! 0 - PMISR DDC
       ! 1 - PMIS distance 1
@@ -127,7 +127,7 @@ module air_data_type
       ! to Aff^-1, it applies this dropping, then computes Z, then rebuilds 
       ! an Aff^-1 approximation without the dropping for smoothing
       ! -pc_air_strong_r_threshold
-      real :: strong_r_threshold = 0.0
+      PetscReal :: strong_r_threshold = 0.0
 
       ! What type of approximation do we use for Z?
       ! 0 - Aff^-1 approximation determined by inverse type (below) and then Z computed with matmatmult
@@ -194,9 +194,9 @@ module air_data_type
 
       ! These are the relative drop tolerances (inf norm) on R and A after they are built
       ! -pc_air_r_drop
-      real :: r_drop = 0.01
+      PetscReal :: r_drop = 0.01
       ! -pc_air_a_drop
-      real :: a_drop = 0.001
+      PetscReal :: a_drop = 0.001
       ! Whether to lump in A or drop
       ! -pc_air_a_lump
       logical :: a_lump = .FALSE.
