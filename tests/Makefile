@@ -5,7 +5,9 @@
 
 # Have to include the modules in ../include
 INCLUDEDIR  := ../include
-INCLUDE		:= -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
+# We only include the top level directory here as the intel compiler ignores the -J flag and instead
+# wants -module - but we don't want any compiler specific flags here for simplicity
+INCLUDE		:= -I$(CURDIR)/../ -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
 
 # These are the same in the top level makefile, but we redefine them here rather than use an export
 # in the top level makefile
@@ -18,15 +20,7 @@ CFLAGS := ${CFLAGS} -O3 -fPIC
 FFLAGS := ${FFLAGS} -O3 -fPIC
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
-# Compiler specific flags
-# If on a Cray machine, just add whichever flags are necessary to FFLAGS before compiling
-# There is no easy way to work out what compiler is used given the ftn wrapper
-# ~~~~~~~~~~~~~~~~~~~~~~~~
-# Intel
-ifneq ($(filter ifx mpiifx,$(FC)),)
-FORTMOD     := -module
-endif
-# ~~~~~~~~~~~~~~~~~~~~~~~~
+# We currently don't require any compiler specific flags
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Get any library flags we have on input

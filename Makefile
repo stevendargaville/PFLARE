@@ -37,15 +37,7 @@ SHARED_FLAG := -shared
 FORTMOD     := -J
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
-# Compiler specific flags
-# If on a Cray machine, just add whichever flags are necessary to FFLAGS before compiling
-# There is no easy way to work out what compiler is used given the ftn wrapper
-# ~~~~~~~~~~~~~~~~~~~~~~~~
-# Intel
-ifneq ($(filter ifx mpiifx,$(FC)),)
-FORTMOD     := -module
-endif
-# ~~~~~~~~~~~~~~~~~~~~~~~~
+# We currently don't require any compiler specific flags
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 
 INCLUDEDIR  := include
@@ -55,7 +47,9 @@ OBJDIR      := obj
 export LIBDIR	:= $(CURDIR)/lib
 
 # Include directories
-INCLUDE		:= -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
+# We only include the currrent directory here as the intel compiler ignores the -J flag and instead
+# wants -module - but we don't want any compiler specific flags here for simplicity
+INCLUDE		:= -I$(CURDIR) -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
 
 # Output the library
 OUT = $(LIBDIR)/libpflare.so
@@ -153,6 +147,7 @@ clean:
 	$(RM) -r $(LIBDIR)
 	$(RM) $(INCLUDEDIR)/*.mod
 	$(RM) $(SRCDIR)/*.mod
+	$(RM) $(CURDIR)/*.mod
 	$(MAKE) -C tests clean
 	$(MAKE) -C python clean
 
