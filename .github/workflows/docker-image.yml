@@ -1,4 +1,3 @@
-...
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -49,4 +48,3 @@ jobs:
           tags: ${{ env.REPO }}_64_bit:latest
           build-args: |
             BRANCH=${{ env.BRANCH }}
-...
