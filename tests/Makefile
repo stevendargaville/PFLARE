@@ -27,18 +27,10 @@ FFLAGS      := ${FFLAGS} -real-size 64 -fpscomp logicals
 endif
 # GNU
 ifneq ($(filter gfortran mpif90,$(FC)),)
-FORTMOD     := -J
 FFLAGS      := ${FFLAGS} -fdefault-real-8 -fdefault-double-8 -ffixed-line-length-none -ffree-line-length-none
 endif
 # LLVM 
 ifneq ($(filter flang amdflang,$(FC)),)
-FORTMOD     := -J
-endif	
-# Cray
-ifneq ($(filter ftn,$(FC)),)
-FORTMOD     := -J
-FFLAGS      := ${FFLAGS} -s real64
-SHARED_FLAG := ${SHARED_FLAG} -Wl,--allow-multiple-definition
 endif	
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~
