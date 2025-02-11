@@ -14,8 +14,34 @@ INCLUDE		:= -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/
 # include -lgomp in the LDFLAGS
 # That way we don't link to threaded libraries on cray machines (as that happens automatically
 # if the flags include -fopenmp)
-CFLAGS      := ${CFLAGS} -O3 -fPIC
-FFLAGS      := ${FFLAGS} -O3 -fPIC -fdefault-real-8 -fdefault-double-8 -ffixed-line-length-none -ffree-line-length-none
+CFLAGS := ${CFLAGS} -O3 -fPIC
+FFLAGS := ${FFLAGS} -O3 -fPIC
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~
+# Compiler specific flags
+# ~~~~~~~~~~~~~~~~~~~~~~~~
+# Intel
+ifneq ($(filter ifx mpiifx,$(FC)),)
+FORTMOD     := -module
+FFLAGS      := ${FFLAGS} -real-size 64 -fpscomp logicals
+endif
+# GNU
+ifneq ($(filter gfortran mpif90,$(FC)),)
+FORTMOD     := -J
+FFLAGS      := ${FFLAGS} -fdefault-real-8 -fdefault-double-8 -ffixed-line-length-none -ffree-line-length-none
+endif
+# LLVM 
+ifneq ($(filter flang amdflang,$(FC)),)
+FORTMOD     := -J
+endif	
+# Cray
+ifneq ($(filter ftn,$(FC)),)
+FORTMOD     := -J
+FFLAGS      := ${FFLAGS} -s real64
+SHARED_FLAG := ${SHARED_FLAG} -Wl,--allow-multiple-definition
+endif	
+# ~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Get any library flags we have on input
 LDFLAGS_INPUT := $(LDFLAGS)
@@ -23,11 +49,15 @@ LDFLAGS_INPUT := $(LDFLAGS)
 LDFLAGS 		:= -L$(LIBDIR) -lpflare -Wl,-rpath,$(LIBDIR)
 # Include petsc
 LDFLAGS     := $(LDFLAGS) -L$(PETSC_DIR)/$(PETSC_ARCH)/lib -lpetsc -Wl,-rpath,$(PETSC_DIR)/$(PETSC_ARCH)/lib
-# Have to link to blas, lapack - on cray machines often have to remove the explicit links to blas
-# and lapack as the compiler wrappers do that
+# Have to link to blas, lapack
+# Don't have to do this on cray machines as the compiler wrappers include links
+ifeq ($(filter ftn,$(FC)),)
 LDFLAGS     := $(LDFLAGS) -lblas -llapack -lm
-# Given we have C files in our library need to add gfortran
+endif
+# Given we have C files in our library need to add gfortran if GNU compiler
+ifneq ($(filter gfortran mpif90,$(FC)),)
 LDFLAGS     := $(LDFLAGS) -lgfortran
+endif
 # Have to link to mpi
 LDFLAGS     := $(LDFLAGS) -lmpi
 # Include any input flags we had - these go last as order is important
