@@ -14,7 +14,8 @@ ENV CHECKOUT_BRANCH=$BRANCH
 WORKDIR /build
 
 # Clone PFLARE and run all the tests
-RUN echo "Cloning branch: ${CHECKOUT_BRANCH}" && \
+RUN set -e; \
+    echo "Cloning branch: ${CHECKOUT_BRANCH}" && \
     git clone --branch ${CHECKOUT_BRANCH} https://github.com/stevendargaville/PFLARE.git && \
     cd PFLARE && \
     make && make tests && \

@@ -100,4 +100,6 @@
       call MatDestroy(A,ierr)
 
       call PetscFinalize(ierr)
+
+      return 1;
       end
