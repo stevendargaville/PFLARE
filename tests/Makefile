@@ -19,6 +19,8 @@ FFLAGS := ${FFLAGS} -O3 -fPIC
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # Compiler specific flags
+# If on a Cray machine, just add whichever flags are necessary to FFLAGS before compiling
+# There is no easy way to work out what compiler is used given the ftn wrapper
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # Intel
 ifneq ($(filter ifx mpiifx,$(FC)),)
