@@ -170,7 +170,7 @@ module aggregation
 
       ! Swap the negative ones back to positive
       do ifree = 1, size(indices)
-         if (aggregates(ifree) < 0) aggregates(ifree) = aggregates(ifree) * (-1.0)
+         if (aggregates(ifree) < 0) aggregates(ifree) = aggregates(ifree) * (-1d0)
       end do
 
       ! Step 3 - any remnants

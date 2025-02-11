@@ -58,7 +58,7 @@ module air_mg_setup
       ! Now to apply a strong R tolerance as lAIR in hypre does, we have to drop entries 
       ! from A_cf and A_ff according to the strong R tolerance on A 
       ! ~~~~~~~~~~~~~
-      if (air_data%options%strong_r_threshold == 0.0) then
+      if (air_data%options%strong_r_threshold == 0d0) then
 
          ! Copy the original pointer
          air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP) = air_data%A_ff(our_level)
@@ -129,7 +129,7 @@ module air_mg_setup
       ! then we need an A_ff^-1 that we use to build the grid-transfer operators
       ! but if the strong R threshold is zero we just use the one computed above
       if (air_data%options%z_type == AIR_Z_PRODUCT .AND. &
-               (air_data%options%strong_r_threshold /= 0.0 .OR. air_data%options%full_smoothing_up_and_down)) then
+               (air_data%options%strong_r_threshold /= 0d0 .OR. air_data%options%full_smoothing_up_and_down)) then
 
          if (.NOT. (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP)) .AND. air_data%options%reuse_poly_coeffs)) then
             call start_approximate_inverse(air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP), &
@@ -194,7 +194,7 @@ module air_mg_setup
       ! ~~~~~~~~~~~~~~
       ! Apply the strong R threshold to A_cf
       ! ~~~~~~~~~~~~~~
-      if (air_data%options%strong_r_threshold == 0.0) then
+      if (air_data%options%strong_r_threshold == 0d0) then
 
          ! Copy the original pointer
          air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP) = air_data%A_cf(our_level)
@@ -358,7 +358,7 @@ module air_mg_setup
 
          ! If we have applied a strong R tolerance or we are not doing fc smoothing
          ! then we have also started an inverse for dropped A_ff, let's finish it
-         if (air_data%options%strong_r_threshold /= 0.0 .OR. air_data%options%full_smoothing_up_and_down) then
+         if (air_data%options%strong_r_threshold /= 0d0 .OR. air_data%options%full_smoothing_up_and_down) then
 
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
             inv_dropped_Aff = PETSC_NULL_MAT
@@ -415,7 +415,7 @@ module air_mg_setup
 
          ! Copy inv_A_ff and multiply by -1
          call MatConvert(inv_dropped_Aff, MATSAME, MAT_INITIAL_MATRIX, minus_mat, ierr)
-         call MatScale(minus_mat, -1.0, ierr)
+         call MatScale(minus_mat, -1d0, ierr)
 
          if (destroy_mat) then
             call MatDestroy(inv_dropped_Aff, ierr)
@@ -493,10 +493,10 @@ module air_mg_setup
             ! Do the multiplication
             if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_W))) then
                call MatMatMult(minus_mat, air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP), &
-                        MAT_REUSE_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_W), ierr)
+                        MAT_REUSE_MATRIX, 1.58d0, air_data%reuse(our_level)%reuse_mat(MAT_W), ierr)
             else
                call MatMatMult(minus_mat, air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP), &
-                        MAT_INITIAL_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_W), ierr)  
+                        MAT_INITIAL_MATRIX, 1.58d0, air_data%reuse(our_level)%reuse_mat(MAT_W), ierr)  
             end if
 
             call timer_start(TIMER_ID_AIR_DROP)  
@@ -685,15 +685,15 @@ module air_mg_setup
       else         
          if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_Z))) then
             call MatMatMult(air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP), minus_mat, &
-                  MAT_REUSE_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_Z), ierr)            
+                  MAT_REUSE_MATRIX, 1.58d0, air_data%reuse(our_level)%reuse_mat(MAT_Z), ierr)            
          else
             call MatMatMult(air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP), minus_mat, &
-                  MAT_INITIAL_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_Z), ierr) 
+                  MAT_INITIAL_MATRIX, 1.58d0, air_data%reuse(our_level)%reuse_mat(MAT_Z), ierr) 
          end if
       end if
 
       ! Destroy the copies, this only decrements the reference counter
-      if (air_data%options%strong_r_threshold == 0.0) then
+      if (air_data%options%strong_r_threshold == 0d0) then
          call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_AFF_DROP), ierr)      
          call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP), ierr)
          call MatDestroy(air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP), ierr)         
@@ -903,13 +903,13 @@ module air_mg_setup
          if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_RAP))) then
 
             call MatPtap(A, air_data%prolongators(our_level), &
-                     MAT_REUSE_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_RAP), ierr)             
+                     MAT_REUSE_MATRIX, 1.58d0, air_data%reuse(our_level)%reuse_mat(MAT_RAP), ierr)             
 
          ! First time
          else
 
             call MatPtap(A, air_data%prolongators(our_level), &
-                     MAT_INITIAL_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_RAP), ierr)          
+                     MAT_INITIAL_MATRIX, 1.58d0, air_data%reuse(our_level)%reuse_mat(MAT_RAP), ierr)          
          end if
 
       ! ~~~~~~~~~~~
@@ -921,19 +921,19 @@ module air_mg_setup
          if (.NOT. PetscMatIsNull(air_data%reuse(our_level)%reuse_mat(MAT_AP))) then
 
             call MatMatMult(A, air_data%prolongators(our_level), &
-                     MAT_REUSE_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_AP), ierr)     
+                     MAT_REUSE_MATRIX, 1.58d0, air_data%reuse(our_level)%reuse_mat(MAT_AP), ierr)     
                      
             call MatMatMult(air_data%restrictors(our_level), air_data%reuse(our_level)%reuse_mat(MAT_AP), &
-                     MAT_REUSE_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_RAP), ierr)             
+                     MAT_REUSE_MATRIX, 1.58d0, air_data%reuse(our_level)%reuse_mat(MAT_RAP), ierr)             
          
          ! First time
          else
 
             call MatMatMult(A, air_data%prolongators(our_level), &
-                     MAT_INITIAL_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_AP), ierr)     
+                     MAT_INITIAL_MATRIX, 1.58d0, air_data%reuse(our_level)%reuse_mat(MAT_AP), ierr)     
                      
             call MatMatMult(air_data%restrictors(our_level), air_data%reuse(our_level)%reuse_mat(MAT_AP), &
-                     MAT_INITIAL_MATRIX, 1.58, air_data%reuse(our_level)%reuse_mat(MAT_RAP), ierr) 
+                     MAT_INITIAL_MATRIX, 1.58d0, air_data%reuse(our_level)%reuse_mat(MAT_RAP), ierr) 
          end if
          
          ! Delete temporary if not reusing
@@ -1051,13 +1051,13 @@ module air_mg_setup
                   air_data%temp_vecs_fine(2)%array(our_level), ierr)               
          
          ! This is b_f - A_fc * x_c^0 - this never changes
-         call VecAXPY(air_data%temp_vecs_fine(4)%array(our_level), -1.0, air_data%temp_vecs_fine(2)%array(our_level), ierr)                      
+         call VecAXPY(air_data%temp_vecs_fine(4)%array(our_level), -1d0, air_data%temp_vecs_fine(2)%array(our_level), ierr)                      
 
       else
          ! x_f^0 and x_c^0 are zero
          ! So don't have to do the multiply by Afc x_c^0 or the first Aff x_f^0
          ! temp_vecs_fine(4)%array just has b_f in it
-         call VecSet(air_data%temp_vecs_fine(3)%array(our_level), 0.0, ierr)
+         call VecSet(air_data%temp_vecs_fine(3)%array(our_level), 0.0d0, ierr)
        
       end if     
 
@@ -1073,14 +1073,14 @@ module air_mg_setup
          end if
 
          ! This is b_f - A_fc * x_c - A_ff * x_f^n
-         call VecAYPX(air_data%temp_vecs_fine(3)%array(our_level), -1.0, air_data%temp_vecs_fine(4)%array(our_level), ierr)           
+         call VecAYPX(air_data%temp_vecs_fine(3)%array(our_level), -1d0, air_data%temp_vecs_fine(4)%array(our_level), ierr)           
 
          ! ! Compute A_ff^{-1} ( b_f - A_fc * x_c - A_ff * x_f^n)
          call MatMult(air_data%inv_A_ff(our_level), air_data%temp_vecs_fine(3)%array(our_level), &
                      air_data%temp_vecs_fine(2)%array(our_level), ierr)    
 
          ! Compute x_f^n + A_ff^{-1} ( b_f - A_fc * x_c - A_ff * x_f^n)
-         call VecAXPY(air_data%temp_vecs_fine(1)%array(our_level), 1.0, air_data%temp_vecs_fine(2)%array(our_level), ierr)                      
+         call VecAXPY(air_data%temp_vecs_fine(1)%array(our_level), 1d0, air_data%temp_vecs_fine(2)%array(our_level), ierr)                      
 
       end do
 
@@ -1096,7 +1096,7 @@ module air_mg_setup
       ! If we're just doing F point smoothing, don't change the coarse points 
       ! Not sure why we need the vecset, but on the gpu x is twice the size it should be if we don't
       ! x should be overwritten by the MatMultTransposeAdd
-      call VecSet(x, 0.0, ierr)
+      call VecSet(x, 0d0, ierr)
       call MatMultTransposeAdd(air_data%i_fine_full(our_level), &
             air_data%temp_vecs_fine(1)%array(our_level), &
             air_data%temp_vecs(1)%array(our_level), &
@@ -1115,21 +1115,21 @@ module air_mg_setup
          call MatMult(air_data%A_cf(our_level), air_data%temp_vecs_fine(1)%array(our_level), &
                      air_data%temp_vecs_coarse(2)%array(our_level), ierr)
          ! This is b_c - A_cf * x_f^0 - this never changes
-         call VecAXPY(air_data%temp_vecs_coarse(4)%array(our_level), -1.0, air_data%temp_vecs_coarse(2)%array(our_level), ierr)  
+         call VecAXPY(air_data%temp_vecs_coarse(4)%array(our_level), -1d0, air_data%temp_vecs_coarse(2)%array(our_level), ierr)  
 
          ! Then A_cc * x_c^n - this changes at each richardson iteration
          call MatMult(air_data%A_cc(our_level), air_data%temp_vecs_coarse(1)%array(our_level), &
                      air_data%temp_vecs_coarse(3)%array(our_level), ierr)       
 
          ! This is b_c - A_cf * x_f^0 - A_cc * x_c^n
-         call VecAYPX(air_data%temp_vecs_coarse(3)%array(our_level), -1.0, air_data%temp_vecs_coarse(4)%array(our_level), ierr)          
+         call VecAYPX(air_data%temp_vecs_coarse(3)%array(our_level), -1d0, air_data%temp_vecs_coarse(4)%array(our_level), ierr)          
 
          ! ! Compute A_cc^{-1} (b_c - A_cf * x_f^0 - A_cc * x_c^n)
          call MatMult(air_data%inv_A_cc(our_level), air_data%temp_vecs_coarse(3)%array(our_level), &
                      air_data%temp_vecs_coarse(2)%array(our_level), ierr)    
 
          ! Compute x_c^n + A_cc^{-1} (b_c - A_cf * x_f^0 - A_cc * x_c^n)
-         call VecAXPY(air_data%temp_vecs_coarse(1)%array(our_level), 1.0, air_data%temp_vecs_coarse(2)%array(our_level), ierr)         
+         call VecAXPY(air_data%temp_vecs_coarse(1)%array(our_level), 1d0, air_data%temp_vecs_coarse(2)%array(our_level), ierr)         
 
          ! ~~~~~~~~
          ! Reverse put coarse x_c back into x
@@ -1142,7 +1142,7 @@ module air_mg_setup
 
          ! Not sure why we need the vecset, but on the gpu x is twice the size it should be if we don't
          ! x should be overwritten by the MatMultTransposeAdd
-         call VecSet(x, 0.0, ierr)
+         call VecSet(x, 0d0, ierr)
          call MatMultTransposeAdd(air_data%i_coarse_full(our_level), &
                air_data%temp_vecs_coarse(1)%array(our_level), &
                air_data%temp_vecs(1)%array(our_level), &
@@ -1182,7 +1182,7 @@ module air_mg_setup
       integer             :: no_levels, our_level, our_level_coarse, errorcode, comm_rank, comm_size
       PetscErrorCode      :: ierr
       MPI_Comm            :: MPI_COMM_MATRIX
-      real                :: ratio_local_nnzs_off_proc, achieved_rel_tol, norm_b
+      PetscReal           :: ratio_local_nnzs_off_proc, achieved_rel_tol, norm_b
       logical             :: continue_coarsening, trigger_proc_agglom, proc_agglom_exists, reusing_temp_mg_vecs
       type(tMat)          :: coarse_matrix_temp
       type(tKSP)          :: ksp_smoother_up, ksp_smoother_down, ksp_coarse_solver
@@ -1228,7 +1228,7 @@ module air_mg_setup
       ! ~~~~~~~~~~~~~~~~~~~~~
 
       ! If we have an exact IS, we know Aff is diagonal and our inverse is exact
-      if (air_data%options%strong_threshold == 0.0) then   
+      if (air_data%options%strong_threshold == 0d0) then   
          ! Only have to do one "smooth" to apply the exact inverse
          air_data%options%maxits_a_ff = 1        
       end if                 
@@ -1309,7 +1309,7 @@ module air_mg_setup
             ! A * sol_vec
             call MatMult(air_data%coarse_matrix(our_level), sol_vec, temp_vec, ierr)
             ! Now A * sol_vec - rand_vec
-            call VecAXPY(temp_vec, -1.0, rand_vec, ierr)
+            call VecAXPY(temp_vec, -1d0, rand_vec, ierr)
             call VecNorm(temp_vec, NORM_2, achieved_rel_tol, ierr)    
             call VecNorm(rand_vec, NORM_2, norm_b, ierr)    
 
@@ -1577,8 +1577,8 @@ module air_mg_setup
 
                ! Number of cores we have dofs on
                ! Stolen from calculate_repartition, make sure they match!
-               no_active_cores = floor(real(comm_size)/real(proc_stride))
-               ratio_local_nnzs_off_proc = 0.0
+               no_active_cores = floor(dble(comm_size)/dble(proc_stride))
+               ratio_local_nnzs_off_proc = 0d0
 
                ! If we have already setup our hierarchy, then we know what levels need to be repartitioned
                ! If not, then we have to compute the ratio on each level to check if they need to be 
@@ -1595,7 +1595,7 @@ module air_mg_setup
                trigger_proc_agglom = .NOT. PetscISIsNull(air_data%reuse(our_level)%reuse_is(IS_REPARTITION)) .OR. &
                            (global_rows_repart/no_active_cores < air_data%options%process_eq_limit .AND. no_active_cores /= 1) .OR. &
                            (ratio_local_nnzs_off_proc .le. air_data%options%processor_agglom_ratio &
-                           .AND. ratio_local_nnzs_off_proc /= 0.0)
+                           .AND. ratio_local_nnzs_off_proc /= 0d0)
                                  
                ! Start the process agglomeration 
                if (trigger_proc_agglom) then
@@ -1614,7 +1614,7 @@ module air_mg_setup
                   do while (global_rows_repart < air_data%options%process_eq_limit * no_active_cores)
                      proc_stride = proc_stride * air_data%options%processor_agglom_factor
                      ! Stolen from calculate_repartition, make sure they match!
-                     no_active_cores = floor(real(comm_size)/real(proc_stride))                     
+                     no_active_cores = floor(dble(comm_size)/dble(proc_stride))                     
                   end do                  
 
                   ! If we agglomerate down to one processor
@@ -2037,20 +2037,20 @@ module air_mg_setup
             ! Zero up smooths for kaskade
             if (.NOT. air_data%options%full_smoothing_up_and_down) then
                ! This is never called anyway with kaskade
-               call KSPSetTolerances(ksp_smoother_up, 1e-10, &
-                     & 1e-10, &
+               call KSPSetTolerances(ksp_smoother_up, 1d-10, &
+                     & 1d-10, &
                      & PETSC_DEFAULT_REAL, &
                      & zero, ierr)                 
             else
-               call KSPSetTolerances(ksp_smoother_up, 1e-10, &
-                     & 1e-10, &
+               call KSPSetTolerances(ksp_smoother_up, 1d-10, &
+                     & 1d-10, &
                      & PETSC_DEFAULT_REAL, &
                      & one, ierr)  
             end if
 
             ! One up smooth (but we have to set it as the down given kaskade)
-            call KSPSetTolerances(ksp_smoother_down, 1e-10, &
-                  & 1e-10, &
+            call KSPSetTolerances(ksp_smoother_down, 1d-10, &
+                  & 1d-10, &
                   & PETSC_DEFAULT_REAL, &
                   & one, ierr)   
                   
@@ -2072,7 +2072,7 @@ module air_mg_setup
          ! a richardson (can do via command line -mg_coarse_ksp_type richardson)
          call KSPSetType(ksp_coarse_solver, KSPPREONLY, ierr)
          ! Apply one iteration of the coarse solver by default
-         call KSPSetTolerances(ksp_coarse_solver, 1.0e-3, 1.0e-13, PETSC_DEFAULT_REAL, one, ierr)
+         call KSPSetTolerances(ksp_coarse_solver, 1d-3, 1d-13, PETSC_DEFAULT_REAL, one, ierr)
 
          ! Set no norm
          call KSPSetNormType(ksp_coarse_solver, KSP_NORM_NONE, ierr)
@@ -2209,7 +2209,7 @@ module air_mg_setup
                   call MatDestroy(air_data%A_cf(our_level), ierr)
                   ! If the strong threshold is zero we just copy the pointers for 
                   ! aff, afc and acf so we wouldn't want to destroy them below
-                  if (air_data%options%strong_r_threshold == 0.0) then
+                  if (air_data%options%strong_r_threshold == 0d0) then
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<22)      
                      air_data%reuse(our_level)%reuse_mat(MAT_ACF_DROP) = PETSC_NULL_MAT
                      air_data%reuse(our_level)%reuse_mat(MAT_AFC_DROP) = PETSC_NULL_MAT
@@ -2376,7 +2376,7 @@ module air_mg_setup
       air_data%options%constrain_w = .FALSE.
       air_data%options%constrain_z = .FALSE.       
 
-      air_data%options%strong_r_threshold = 0.0
+      air_data%options%strong_r_threshold = 0d0
 
       air_data%options%inverse_type = PFLAREINV_POWER
 

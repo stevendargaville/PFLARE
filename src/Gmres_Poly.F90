@@ -111,7 +111,7 @@ module gmres_poly
       if (inverse_type == PFLAREINV_NEWTON) then
          do i_loc = 1, size(coefficients,1)
             zero_root = .FALSE.
-            if (coefficients(i_loc,2) == 0.0) then
+            if (coefficients(i_loc,2) == 0d0) then
                ! The size of the zero check here has to match that in 
                ! petsc_matvec_gmres_newton_mf 
                if (abs(coefficients(i_loc,1)) < 1e-12) zero_root = .TRUE.
@@ -127,10 +127,10 @@ module gmres_poly
 
       ! For power or Arnoldi   
       else
-         ! The size of the zero check is exactly 0.0, normally can only happen
+         ! The size of the zero check is exactly 0d0, normally can only happen
          ! in an Arnoldi that terminates early
          do i_loc = 1, size(coefficients,1)
-            if (abs(coefficients(i_loc,1)) == 0.0) then
+            if (abs(coefficients(i_loc,1)) == 0d0) then
                matvecs = matvecs - 1
             end if
          end do         
@@ -201,7 +201,7 @@ module gmres_poly
 
       ! Remove the u = 0 (ie epsilon) case
       ! to change from [0,1) to (0,1], which we need for the log */
-      random_data(:, 1) = 1.0 - random_data(:, 1)
+      random_data(:, 1) = 1d0 - random_data(:, 1)
 
       ! We want our random rhs to be a normal distribution with zero mean as that preserves
       ! white noise in the eigenspace (ie it is rotation invariant to unitary transforms)
@@ -257,7 +257,7 @@ module gmres_poly
       ! ~~~~~~   
             
       ! This is the vector we will use as rhs in the least square solve
-      g0 = 0.0
+      g0 = 0d0
       g0(1) = beta 
 
       ! Let's solve our least squares system
@@ -329,9 +329,9 @@ module gmres_poly
       subspace_size = poly_order + 1       
 
       ! This is the hessenberg matrix
-      H_n = 0.0
+      H_n = 0d0
       ! This stores part of the polynomial coefficients             
-      if (compute_cn) C_n = 0.0
+      if (compute_cn) C_n = 0d0
 
       ! ~~~~~~~~~
       ! Now time for a GMRES
@@ -345,7 +345,7 @@ module gmres_poly
       ! The first entry in C_n - As V_n = K_n C_n
       ! the first orthogonalised vector in V_n is just r0/beta, 
       ! and we know r0 is the first vector in our krylov subspace
-      if (compute_cn) C_n(1,1) = 1.0/beta
+      if (compute_cn) C_n(1,1) = 1d0/beta
 
       ! Now loop through and do the iterations up to the max order of the polynomial
       ! we want to build
@@ -358,7 +358,7 @@ module gmres_poly
 
          ! Now compute the updated relationship between K_n and V_n
          if (compute_cn) then
-            c_j = 0.0      
+            c_j = 0d0
             ! This is [0 c1..cn] for column m
             c_j(2:m + 1) = C_n(1:m, m)  
          end if
@@ -389,8 +389,8 @@ module gmres_poly
 
          ! v_j+1 = w_j / h_j+1,j
          call VecAXPBY(V_n(m + 1), &
-                  1.0/H_n(m+1, m), &
-                  0.0, &
+                  1d0/H_n(m+1, m), &
+                  0d0, &
                   w_j, ierr)           
 
          ! Now we've taken out the H_n(m+1, m) factor from above
@@ -408,9 +408,9 @@ module gmres_poly
             
             ! Compute H_n y
             call dgemv("N", m+1, m, &
-                  1.0, H_n, size(H_n,1), &
+                  1d0, H_n, size(H_n,1), &
                   y, 1, &
-                  0.0, g0(1), 1) 
+                  0d0, g0(1), 1) 
 
             ! Minus away e1 beta
             g0(1) = g0(1) - beta
@@ -461,7 +461,7 @@ module gmres_poly
       type(tVec) :: w_j
       type(tVec), dimension(poly_order+2) :: V_n
       integer, dimension(:), allocatable :: iwork
-      PetscReal :: rcond = -1.0, rel_tol
+      PetscReal :: rcond = -1d0, rel_tol
 
       ! ~~~~~~    
 
@@ -497,7 +497,7 @@ module gmres_poly
       ! or we hit the given poly_order
       rel_tol = 1e-14
       if (present(user_rel_tol)) rel_tol = user_rel_tol
-      call arnoldi(matrix, poly_order, 1e-30, V_n, w_j, beta, H_n, m, C_n, y, rel_tol)
+      call arnoldi(matrix, poly_order, 1d-30, V_n, w_j, beta, H_n, m, C_n, y, rel_tol)
       if (present(user_rel_tol)) user_rel_tol = rel_tol
 
       ! ~~~~~~~~~~~~~
@@ -506,9 +506,9 @@ module gmres_poly
       ! Set to zero is necessary as m may be less than the subspace_size
       coefficients = 0
       call dgemv("N", m, m, &
-               1.0, C_n, size(C_n,1), &
+               1d0, C_n, size(C_n,1), &
                y, 1, &
-               0.0, coefficients(1), 1) 
+               0d0, coefficients(1), 1) 
 
       do i_loc = 1, subspace_size+1
          call VecDestroy(V_n(i_loc), ierr)
@@ -663,7 +663,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       PetscReal, dimension(poly_order+2) :: g0, s
       PetscReal, dimension(:), allocatable :: work
       PetscReal, dimension(:,:), pointer :: R_pointer
-      PetscReal :: rcond = -1.0
+      PetscReal :: rcond = -1d0
 
       ! ~~~~~
 
@@ -850,7 +850,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          call MatSetOption(cmat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)          
 
          !allocate(v(local_rows))
-         !v = 1.0         
+         !v = 1d0         
    
          if (.NOT. reuse_triggered) then
             allocate(indices(local_rows))
@@ -900,7 +900,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          ! as the highest (unconstrained) power and do the mataxpy with a subset of entries
          ! Takes more memory to do this but is faster
          call MatMatMult(matrix, matrix_powers(order-1), &
-               MAT_INITIAL_MATRIX, 1.5, matrix_powers(order), ierr)        
+               MAT_INITIAL_MATRIX, 1.5d0, matrix_powers(order), ierr)        
       end do  
       
       ! mat_sparsity_match now contains the sparsity of the power of A we want to match
@@ -1269,7 +1269,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          do term = poly_sparsity_order+2, size(coefficients)
 
             ! Skip this term if the coefficient is zero
-            if (coefficients(term) == 0.0) cycle
+            if (coefficients(term) == 0d0) cycle
 
             ! We need to sum up the product of vals_previous_power_temp(j_loc) * matching columns
             vals_temp = 0
@@ -1408,7 +1408,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       ! Let's do the first y = alpha_n-1 r_0 (ie the highest order term first)
       call VecAXPBY(y, &
                coefficients(size(coefficients)), &
-               0.0, &
+               0d0, &
                x, ierr)
 
       ! If we are doing a first order polynomial or above, we have to do an extra matvec per order
@@ -1418,7 +1418,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          do order = size(coefficients, 1)-1, 1, -1
 
             ! Skip this coefficient if zero
-            if (coefficients(order) == 0.0) cycle
+            if (coefficients(order) == 0d0) cycle
 
             ! Copy y into temp_vec
             call VecCopy(y, temp_vec, ierr)             
@@ -1429,7 +1429,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
             ! Compute y = A * temp_vec + alpha_n-i-1 r_0
             call VecAXPBY(y, &
                      coefficients(order), &
-                     1.0, &
+                     1d0, &
                      x, ierr)
          end do
       end if
@@ -1683,15 +1683,15 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       do order = 2, poly_order
 
          ! Skip this term if the coefficient is zero
-         if (coefficients(order+1) == 0.0) cycle
+         if (coefficients(order+1) == 0d0) cycle
 
          ! TODO - these can be reused
          if (order == 2) then
             call MatMatMult(matrix, matrix, &
-                  MAT_INITIAL_MATRIX, 1.5, temp_mat, ierr)     
+                  MAT_INITIAL_MATRIX, 1.5d0, temp_mat, ierr)     
          else
             call MatMatMult(matrix, mat_power, &
-                  MAT_INITIAL_MATRIX, 1.5, temp_mat, ierr)      
+                  MAT_INITIAL_MATRIX, 1.5d0, temp_mat, ierr)      
             call MatDestroy(mat_power, ierr)
          end if       
 

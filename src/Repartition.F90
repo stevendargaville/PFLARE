@@ -114,14 +114,14 @@ module repartition
       if (off_proc_nnzs == 0) then
          ratio = 0
       else
-         ratio = real(local_nnzs)/real(off_proc_nnzs)
+         ratio = dble(local_nnzs)/dble(off_proc_nnzs)
       end if
 
       call MPI_Allreduce(ratio, ratio_parallel, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_MATRIX, errorcode)
 
       ratio = ratio_parallel  
       ! Only divide by the number of processors that are active
-      ratio = ratio / real(no_active_cores)
+      ratio = ratio / dble(no_active_cores)
 
    end subroutine      
    
@@ -171,12 +171,12 @@ module repartition
       else
 
          ! Number of cores we want dofs on
-         no_active_cores = floor(real(comm_size)/real(proc_stride))
+         no_active_cores = floor(dble(comm_size)/dble(proc_stride))
 
          ! Have to symmetrize the input matrix or it won't work in parmetis
          ! as it expects a symmetric graph
          call MatTranspose(input_mat, MAT_INITIAL_MATRIX, input_transpose, ierr)
-         call MatAXPY(input_transpose, 1.0, input_mat, DIFFERENT_NONZERO_PATTERN, ierr) 
+         call MatAXPY(input_transpose, 1d0, input_mat, DIFFERENT_NONZERO_PATTERN, ierr) 
 
          ! Compute the adjancency graph of the symmetrized input matrix
          call MatConvert(input_transpose, MATMPIADJ, MAT_INITIAL_MATRIX, adj, ierr)

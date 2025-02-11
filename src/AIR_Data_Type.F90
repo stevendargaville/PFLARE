@@ -127,7 +127,7 @@ module air_data_type
       ! to Aff^-1, it applies this dropping, then computes Z, then rebuilds 
       ! an Aff^-1 approximation without the dropping for smoothing
       ! -pc_air_strong_r_threshold
-      PetscReal :: strong_r_threshold = 0.0
+      PetscReal :: strong_r_threshold = 0d0
 
       ! What type of approximation do we use for Z?
       ! 0 - Aff^-1 approximation determined by inverse type (below) and then Z computed with matmatmult

@@ -84,7 +84,7 @@ module weighted_jacobi
       ! Unweighted
       else
 
-         weight = 1.0
+         weight = 1d0
 
       end if
 

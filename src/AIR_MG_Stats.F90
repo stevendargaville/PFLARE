@@ -274,16 +274,16 @@ module air_mg_stats
       grid_complx = 0
       do our_level = 1, air_data%no_levels-1
          call MatGetSize(air_data%coarse_matrix(our_level), global_rows, global_cols, ierr)
-         grid_complx = grid_complx + real(global_rows)
+         grid_complx = grid_complx + dble(global_rows)
       end do
       ! Don't forget the bottom grid
       if (air_data%no_levels /= 1) then
          call MatGetSize(air_data%coarse_matrix(air_data%no_levels), global_rows, global_cols, ierr)
-         grid_complx = grid_complx + real(global_rows)
+         grid_complx = grid_complx + dble(global_rows)
       end if
 
       call MatGetSize(air_data%coarse_matrix(1), global_rows, global_cols, ierr)
-      grid_complx = grid_complx/real(global_rows)      
+      grid_complx = grid_complx/dble(global_rows)      
       
       
       ! ~~~~~~~~~
@@ -356,10 +356,10 @@ module air_mg_stats
       end do
 
       ! Now compute the other complexities
-      op_complx = real(op_complx_nnzs)/real(air_data%coarse_matrix_nnzs(1))
-      cycle_complx = real(nnzs_air_v)/real(air_data%coarse_matrix_nnzs(1))
-      storage_complx = real(mat_storage_nnzs)/real(air_data%coarse_matrix_nnzs(1))  
-      reuse_storage_complx = real(mat_reuse_storage_nnzs)/real(air_data%coarse_matrix_nnzs(1))  
+      op_complx = dble(op_complx_nnzs)/dble(air_data%coarse_matrix_nnzs(1))
+      cycle_complx = dble(nnzs_air_v)/dble(air_data%coarse_matrix_nnzs(1))
+      storage_complx = dble(mat_storage_nnzs)/dble(air_data%coarse_matrix_nnzs(1))  
+      reuse_storage_complx = dble(mat_reuse_storage_nnzs)/dble(air_data%coarse_matrix_nnzs(1))  
 
    end subroutine compute_stats
 

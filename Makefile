@@ -44,11 +44,11 @@ FORTMOD     := -J
 # Intel
 ifneq ($(filter ifx mpiifx,$(FC)),)
 FORTMOD     := -module
-FFLAGS      := ${FFLAGS} -real-size 64 -fpscomp logicals
+FFLAGS      := ${FFLAGS} -fpscomp logicals
 endif
 # GNU
 ifneq ($(filter gfortran mpif90,$(FC)),)
-FFLAGS      := ${FFLAGS} -fdefault-real-8 -fdefault-double-8 -ffixed-line-length-none -ffree-line-length-none
+FFLAGS      := ${FFLAGS} -ffixed-line-length-none -ffree-line-length-none
 endif
 # LLVM 
 ifneq ($(filter flang amdflang,$(FC)),)

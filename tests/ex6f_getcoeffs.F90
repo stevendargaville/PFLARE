@@ -52,7 +52,7 @@ contains
       ! Use common block to retain stuff between successive subroutine calls
       PetscMPIInt      rank
       PetscBool        pflag
-      real norm_first_solve, norm_third_solve
+      PetscReal norm_first_solve, norm_third_solve
       common /my_data/ pflag,rank,norm_first_solve
 
       one = 1
@@ -112,7 +112,7 @@ contains
       ! ~~~~~~~~~~~~~~~~~~
 
       ! Set the exact solution; compute the right-hand-side vector
-      val = 1.0
+      val = 1d0
       call VecSet(u,val,ierr)
       call MatMult(A,u,b,ierr)
 
@@ -134,7 +134,7 @@ contains
       !
       ! Here we are only storing the inv Aff coefficients (COEFFS_INV_AFF)
       ! and the coarse grid solver coefficients (COEFFS_INV_COARSE)
-      ! If strong R threshold /= 0.0, you will also want to store the 
+      ! If strong R threshold /= 0d0, you will also want to store the 
       ! inv Aff dropped coefficients (COEFFS_INV_AFF_DROPPED)
       ! If one_c_smooth is true, you will also want to store inv Acc coefficients (COEFFS_INV_COARSE)
 
@@ -304,7 +304,7 @@ contains
 !   - Always specify global rows and columns of matrix entries.
 
       do 10, II=Istart,Iend-1
-        v = -1.0
+        v = -1d0
         i = II/n
         j = II - i*n
         if (i.gt.0) then

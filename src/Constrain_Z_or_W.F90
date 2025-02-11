@@ -99,13 +99,13 @@ module constrain_z_or_w
          if (left) then
             call MatCreateVecs(input_mat, left_null_vecs(no_nullspace_vecs), PETSC_NULL_VEC, ierr)
             ! Set to the constant     
-            call VecSet(left_null_vecs(no_nullspace_vecs), 1.0, ierr)
+            call VecSet(left_null_vecs(no_nullspace_vecs), 1d0, ierr)
          end if
 
          if (right) then
             call MatCreateVecs(input_mat, right_null_vecs(no_nullspace_vecs), PETSC_NULL_VEC, ierr)
             ! Set to the constant
-            call VecSet(right_null_vecs(no_nullspace_vecs), 1.0, ierr)
+            call VecSet(right_null_vecs(no_nullspace_vecs), 1d0, ierr)
          end if         
       end if      
       
@@ -151,7 +151,7 @@ module constrain_z_or_w
       ! ~~~~~~~~~~~~
 
       ! We want the nullspace so solve homog problem
-      call VecSet(vec_rhs, 0.0, ierr)     
+      call VecSet(vec_rhs, 0d0, ierr)     
 
       call KSPCreate(MPI_COMM_MATRIX, ksp, ierr)
       !call KSPSetType(ksp, KSPGMRES, ierr)
@@ -165,8 +165,8 @@ module constrain_z_or_w
       !call PCJacobiSetType(pc, 1, ierr)   
 
       ! Do 15 iterations
-      call KSPSetTolerances(ksp, 1e-14, &
-               & 1e-50, &
+      call KSPSetTolerances(ksp, 1d-14, &
+               & 1d-50, &
                & PETSC_DEFAULT_REAL, &
                & maxits, ierr) 
 
@@ -460,9 +460,9 @@ module constrain_z_or_w
          ! ~~~~~~~~~
          ! W B_c^R can be done as (B_c^R)^T W
          call dgemv("T", size(b_c_vals, 1), size(b_c_vals,2), &
-                  1.0, b_c_vals, size(b_c_vals,1), &
+                  1d0, b_c_vals, size(b_c_vals,1), &
                   row_vals, 1, &
-                  0.0, diff, 1)    
+                  0d0, diff, 1)    
 
          ! Compute W * B_c^R - B_f^R
          ! Loop over near-nullspace vecs
@@ -476,25 +476,25 @@ module constrain_z_or_w
                
          ! Compute (B_c^R)^T * B_c^R
          call dgemm("T", "N", size(b_c_vals, 2), size(b_c_vals,2), size(b_c_vals, 1), &
-                  1.0, b_c_vals, size(b_c_vals,1), &
+                  1d0, b_c_vals, size(b_c_vals,1), &
                   b_c_vals, size(b_c_vals,1), &
-                  0.0, bctbc, size(bctbc,1)) 
+                  0d0, bctbc, size(bctbc,1)) 
                   
          ! Compute the pseudo inverse of (B_c^R)^T * B_c^R
          call pseudo_inv(bctbc, pseudo)
 
          ! Compute inv((B_c^R)^T * B_c^R) * (B_c^R)^T
          call dgemm("N", "T", size(pseudo, 1), size(b_c_vals,1), size(pseudo, 2), &
-                  1.0, pseudo, size(pseudo,1), &
+                  1d0, pseudo, size(pseudo,1), &
                   b_c_vals, size(b_c_vals,1), &
-                  0.0, temp_mat, size(temp_mat,1))          
+                  0d0, temp_mat, size(temp_mat,1))          
 
          ! Now compute -(W * B_c^R - B_f^R ) * inv((B_c^R)^T * B_c^R) * (B_c^R)^T
          ! Again we're doing the left vec mat mult with a transpose
          call dgemv("T", size(temp_mat, 1), size(temp_mat,2), &
-                  -1.0, temp_mat, size(temp_mat,1), &
+                  -1d0, temp_mat, size(temp_mat,1), &
                   diff, 1, &
-                  0.0, b_c_vals, 1) 
+                  0d0, b_c_vals, 1) 
 
          ! ~~~~~~~~~~~~~
          ! Set all the row values, same sparsity pattern

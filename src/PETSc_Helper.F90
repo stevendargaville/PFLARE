@@ -66,7 +66,7 @@ module petsc_helper
       if (present(relative_max_row_tolerance)) then
          if (relative_max_row_tolerance) then
             rel_row_tol_logical = .TRUE.
-            rel_row_tol = 1.0
+            rel_row_tol = 1d0
          end if
       end if
 
@@ -473,7 +473,7 @@ module petsc_helper
       do ifree = global_row_start, global_row_end_plus_one-1 
          row_indices(counter) = ifree
          col_indices(counter) = ifree
-         v(counter) = 0.0
+         v(counter) = 0d0
          counter = counter + 1
       end do
 
@@ -539,7 +539,7 @@ module petsc_helper
       do i_loc = 1, local_rows
          indices(i_loc) = global_row_start + i_loc-1
       end do
-      v = 1.0
+      v = 1d0
       ! Set the diagonal
       call MatSetPreallocationCOO(output_mat, local_rows, indices, indices, ierr)
       deallocate(indices)
@@ -611,7 +611,7 @@ module petsc_helper
       do i_loc = 1, local_indices_size
          indices(i_loc) = global_row_start_rect + i_loc-1
       end do
-      v = 1.0
+      v = 1d0
       ! Set the diagonal
       call MatSetPreallocationCOO(output_mat, local_indices_size, indices, is_pointer, ierr)
       deallocate(indices)
@@ -674,7 +674,7 @@ module petsc_helper
       call ISGetIndicesF90(indices, is_pointer, ierr)
 
       allocate(v(local_indices_size))
-      v = 1.0
+      v = 1d0
       ! Set the diagonal
       call MatSetPreallocationCOO(output_mat, local_indices_size, is_pointer, is_pointer, ierr)
       call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
@@ -753,7 +753,7 @@ module petsc_helper
       allocate(row_indices(local_rows))
       allocate(col_indices(local_rows))
       allocate(v(local_rows))
-      v = 1.0
+      v = 1d0
       
       ! Now go and fill the new matrix
       ! Loop over global row indices
@@ -898,7 +898,7 @@ module petsc_helper
 
             row_indices(counter) = is_pointer_coarse(i_loc)
             col_indices(counter) = i_loc - 1 + global_col_start_W
-            v(counter) = 1.0
+            v(counter) = 1d0
             counter = counter + 1
 
          end do     
@@ -1144,7 +1144,7 @@ module petsc_helper
 
             row_indices_coo(counter) = i_loc - 1 + global_row_start_Z
             col_indices_coo(counter) = is_pointer_coarse(i_loc)
-            v(counter) = 1.0
+            v(counter) = 1d0
             counter = counter + 1
 
          end do  
@@ -1272,17 +1272,17 @@ module petsc_helper
       ! So scale each column of U (given the transpose)
       do iloc = 1, size(input,1)
          if (abs(sigma(iloc)) > 1e-13) then
-            U(:, iloc) = U(:, iloc) * 1.0/sigma(iloc)
+            U(:, iloc) = U(:, iloc) * 1d0/sigma(iloc)
          else
-            U(:, iloc) = 0.0
+            U(:, iloc) = 0d0
          end if
       end do
 
       ! Do the matmatmult, making sure to transpose both
       call dgemm("T", "T", size(input,1), size(input,1), size(input,1), &
-               1.0, VT, size(input,1), &
+               1d0, VT, size(input,1), &
                U, size(input,1), &
-               0.0, output, size(input,1))          
+               0d0, output, size(input,1))          
 
       ! nan check
       if (any(output /= output)) then

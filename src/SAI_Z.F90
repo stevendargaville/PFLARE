@@ -251,8 +251,8 @@ module sai_z
          call KSPCreate(PETSC_COMM_SELF, ksp, ierr)
          call KSPSetType(ksp, KSPGMRES, ierr)
          ! Solve to relative 1e-3
-         call KSPSetTolerances(ksp, 1e-3, &
-                  & 1e-50, &
+         call KSPSetTolerances(ksp, 1d-3, &
+                  & 1d-50, &
                   & PETSC_DEFAULT_REAL, &
                   & maxits, ierr) 
          call KSPGetPC(ksp,pc,ierr)
@@ -267,8 +267,8 @@ module sai_z
          call KSPSetType(ksp, KSPLSQR, ierr)
 
          ! Solve to relative 1e-3
-         call KSPSetTolerances(ksp, 1e-3, &
-                  & 1e-50, &
+         call KSPSetTolerances(ksp, 1d-3, &
+                  & 1d-50, &
                   & PETSC_DEFAULT_REAL, &
                   & maxits, ierr)      
                   
@@ -589,7 +589,7 @@ module sai_z
       ! ~~~~~~~~~~~
 
       call generate_identity(matrix, minus_I)
-      call MatScale(minus_I, -1.0, ierr)
+      call MatScale(minus_I, -1d0, ierr)
       
       ! Calculate our approximate inverse
       ! Now given we are using the same code as SAI Z
