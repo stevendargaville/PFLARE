@@ -1,0 +1,27 @@
+ARG BASE_IMAGE=stevendargaville/petsc_intel
+
+FROM ${BASE_IMAGE}
+# Checkout the main branch by default
+ARG BRANCH=main
+ARG ARCH=arch-linux-intel
+
+LABEL maintainer="Steven Dargaville"
+LABEL description="PFLARE"
+
+# If you want to debug inside the container
+# RUN apt-get update && apt-get install -y valgrind 
+
+ENV CHECKOUT_BRANCH=$BRANCH
+ENV PETSC_ARCH=$ARCH
+
+WORKDIR /build
+
+# Clone PFLARE and run all the tests
+RUN source /opt/intel/oneapi/setvars.sh && \
+    set -e; \
+    echo "Cloning branch: ${CHECKOUT_BRANCH}" && \
+    git clone --branch ${CHECKOUT_BRANCH} https://github.com/stevendargaville/PFLARE.git && \
+    cd PFLARE && \
+    make CC=mpiicx FC=mpiifx && make CC=mpiicx FC=mpiifx tests
+
+WORKDIR /build/PFLARE
