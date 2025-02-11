@@ -6,7 +6,7 @@ ARG BRANCH=main
 ARG ARCH=arch-linux-intel
 
 LABEL maintainer="Steven Dargaville"
-LABEL description="PFLARE"
+LABEL description="PFLARE_intel"
 
 # If you want to debug inside the container
 # RUN apt-get update && apt-get install -y valgrind 
