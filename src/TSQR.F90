@@ -366,7 +366,7 @@ module tsqr
          ! of R by +- 1, and then the columns of Q by +- 1
          ! (but we don't actually need Q so we don't bother scaling them)      
          do j_loc = 1, n_size
-            if (R_stacked(i_loc, i_loc) < 0d0) R_stacked(i_loc, :) = R_stacked(i_loc, :) * (-1d0)
+            if (R_stacked(j_loc, j_loc) < 0d0) R_stacked(j_loc, :) = R_stacked(j_loc, :) * (-1d0)
          end do   
          
          ! Now copy back the result which has been done in place in R_stacked into inoutvec
