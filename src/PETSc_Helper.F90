@@ -36,10 +36,10 @@ module petsc_helper
       logical, intent(in), optional :: relative_max_row_tolerance, lump, allow_drop_diagonal
 
       PetscInt :: col, ncols, ifree, max_nnzs
-      PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
+      PetscInt :: local_cols, global_rows, global_cols, global_row_start, global_row_end_plus_one
       PetscInt :: global_col_start, global_col_end_plus_one, diagonal_index, counter, max_nnzs_total
       PetscErrorCode :: ierr
-      integer :: errorcode, comm_size
+      integer :: errorcode, comm_size, local_rows
       PetscInt, dimension(:), allocatable :: cols
       real, dimension(:), allocatable :: vals
       PetscInt, allocatable, dimension(:) :: row_indices, col_indices
