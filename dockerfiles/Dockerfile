@@ -1,7 +1,10 @@
 ARG BASE_IMAGE=stevendargaville/petsc
 
 FROM ${BASE_IMAGE}
+# Checkout the main branch by default
 ARG BRANCH=main
+# Use the optimised petsc build by default
+ARG ARCH=arch-linux-c-opt
 
 LABEL maintainer="Steven Dargaville"
 LABEL description="PFLARE"
@@ -10,11 +13,13 @@ LABEL description="PFLARE"
 # RUN apt-get update && apt-get install -y valgrind 
 
 ENV CHECKOUT_BRANCH=$BRANCH
+ENV PETSC_ARCH=$ARCH
 
 WORKDIR /build
 
 # Clone PFLARE and run all the tests
-RUN echo "Cloning branch: ${CHECKOUT_BRANCH}" && \
+RUN set -e; \
+    echo "Cloning branch: ${CHECKOUT_BRANCH}" && \
     git clone --branch ${CHECKOUT_BRANCH} https://github.com/stevendargaville/PFLARE.git && \
     cd PFLARE && \
     make && make tests && \

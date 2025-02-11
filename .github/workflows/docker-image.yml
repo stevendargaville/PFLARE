@@ -37,6 +37,17 @@ jobs:
         run: |
           echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV} 
 
+      - name: Build Docker image with debug PETSc
+        uses: docker/build-push-action@v2
+        with:
+          platforms: linux/amd64
+          push: false
+          file: ./dockerfiles/Dockerfile
+          tags: ${{ env.REPO }}:debug
+          build-args: |
+            BRANCH=${{ env.BRANCH }}    
+            ARCH=arch-linux-c-debug      
+
       - name: Build and push Docker image for push events
         if: ${{ github.event_name != 'pull_request' }}
         uses: docker/build-push-action@v2
@@ -47,6 +58,7 @@ jobs:
           tags: ${{ env.REPO }}:latest
           build-args: |
             BRANCH=${{ env.BRANCH }}
+            ARCH=arch-linux-c-opt
 
       - name: Build Docker image for pull requests
         if: ${{ github.event_name == 'pull_request' }}
@@ -58,6 +70,7 @@ jobs:
           tags: ${{ env.REPO }}:pr-build
           build-args: |
             BRANCH=${{ env.BRANCH }}
+            ARCH=arch-linux-c-opt
 
       - name: Build and push 64-bit Docker image for push events
         if: ${{ github.event_name != 'pull_request' }}
@@ -69,6 +82,7 @@ jobs:
           tags: ${{ env.REPO }}_64_bit:latest
           build-args: |
             BRANCH=${{ env.BRANCH }}
+            ARCH=arch-linux-c-opt
 
       - name: Build 64-bit Docker image for pull requests
         if: ${{ github.event_name == 'pull_request' }}
@@ -80,3 +94,4 @@ jobs:
           tags: ${{ env.REPO }}_64_bit:pr-build
           build-args: |
             BRANCH=${{ env.BRANCH }}
+            ARCH=arch-linux-c-opt

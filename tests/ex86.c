@@ -170,11 +170,7 @@ int main(int argc, char **args)
 
   KSPGetIterationNumber(ksp,&its);
   KSPGetConvergedReason(ksp,&reason);
-#if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR >= 17)
-      PetscCheck(reason > 0, PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONGSTATE, "Didn't converge");
-#else
-      if (reason < 0) SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONGSTATE, "Didn't converge");
-#endif   
+
   PetscPrintf(PETSC_COMM_WORLD, "iterations %3" PetscInt_FMT "\n", its);
 
   /*
@@ -193,5 +189,9 @@ int main(int argc, char **args)
          options are chosen (e.g., -log_view).
   */
   PetscFinalize();
+  if (reason < 0)
+  {
+   return 1;
+  }
   return 0;
 }

@@ -180,3 +180,4 @@ if n_fine + n_coarse==local_rows:
    PETSc.Sys.Print("- OK",comm=comm)
 else:
    PETSc.Sys.Print("- NOT OK",comm=comm)
+   sys.exit(1)

@@ -219,6 +219,7 @@ contains
          if (rank .eq. 0) write(6,101) count,its
       else
          if (rank .eq. 0) print *, "Solve FAILED"
+         error stop 1
       end if
    101  format('Solve number ',i5,' iterations ',i5)
 
@@ -230,6 +231,7 @@ contains
                print *, "Residuals OK"
             else
                print *, "Residuals WRONG"
+               error stop 1
             end if
          end if
       end if

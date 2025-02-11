@@ -100,4 +100,8 @@
       call MatDestroy(A,ierr)
 
       call PetscFinalize(ierr)
+
+      if (reason < 0) then
+         error stop 1
+      end if
       end
