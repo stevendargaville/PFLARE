@@ -27,12 +27,6 @@ ifneq ($(filter ifx mpiifx,$(FC)),)
 FORTMOD     := -module
 FFLAGS      := ${FFLAGS} -fpscomp logicals
 endif
-# GNU
-ifneq ($(filter gfortran mpif90,$(FC)),)
-endif
-# LLVM 
-ifneq ($(filter flang amdflang,$(FC)),)
-endif	
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -44,13 +38,9 @@ LDFLAGS 		:= -L$(LIBDIR) -lpflare -Wl,-rpath,$(LIBDIR)
 LDFLAGS     := $(LDFLAGS) -L$(PETSC_DIR)/$(PETSC_ARCH)/lib -lpetsc -Wl,-rpath,$(PETSC_DIR)/$(PETSC_ARCH)/lib
 LDFLAGS     := $(LDFLAGS) -lm
 # Have to link to blas, lapack
-# Don't have to do this on cray machines as the compiler wrappers include links
+# Detect the cray wrappers, as they include blas and lapack by default
 ifeq ($(filter ftn,$(FC)),)
 LDFLAGS     := $(LDFLAGS) -lblas -llapack
-endif
-# Given we have C files in our library need to add gfortran if GNU compiler
-ifneq ($(filter gfortran mpif90,$(FC)),)
-LDFLAGS     := $(LDFLAGS) -lgfortran
 endif
 # Have to link to mpi
 LDFLAGS     := $(LDFLAGS) -lmpi

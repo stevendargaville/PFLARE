@@ -46,12 +46,6 @@ ifneq ($(filter ifx mpiifx,$(FC)),)
 FORTMOD     := -module
 FFLAGS      := ${FFLAGS} -fpscomp logicals
 endif
-# GNU
-ifneq ($(filter gfortran mpif90,$(FC)),)
-endif
-# LLVM 
-ifneq ($(filter flang amdflang,$(FC)),)
-endif	
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 
