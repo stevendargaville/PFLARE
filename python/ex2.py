@@ -211,17 +211,8 @@ ksp.solve(b,x)
 x = x - u # x.axpy(-1.0,u)
 norm = x.norm(PETSc.NormType.NORM_2)
 its = ksp.getIterationNumber()
-print("its", its)
-
-'''
-    Print convergence information.  PetscPrintf() produces a single
-    print statement from all processes that share a communicator.
-    An alternative is PetscFPrintf(), which prints to a file.
-'''
-if norm > rtol*10:
-    PETSc.Sys.Print("Norm of error {}, Iterations {}".format(norm,its),comm=comm)
-else:
-    if size==1:
-        PETSc.Sys.Print("- Serial OK",comm=comm)
-    else:
-        PETSc.Sys.Print("- Parallel OK",comm=comm)
+if size == 1: 
+   print("its", its)
+reason = ksp.getConvergedReason()
+if (reason < 0):
+    sys.exit(1)
