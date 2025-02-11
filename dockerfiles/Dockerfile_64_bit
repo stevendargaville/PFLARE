@@ -3,6 +3,8 @@ ARG BASE_IMAGE=stevendargaville/petsc_64_bit
 FROM ${BASE_IMAGE}
 # Checkout the main branch by default
 ARG BRANCH=main
+# Use the optimised petsc build by default
+ARG ARCH=arch-linux-c-opt
 
 LABEL maintainer="Steven Dargaville"
 LABEL description="PFLARE_64_bit"
@@ -11,6 +13,7 @@ LABEL description="PFLARE_64_bit"
 # RUN apt-get update && apt-get install -y valgrind 
 
 ENV CHECKOUT_BRANCH=$BRANCH
+ENV PETSC_ARCH=$ARCH
 
 WORKDIR /build
 
