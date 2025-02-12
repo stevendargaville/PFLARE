@@ -1292,7 +1292,7 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
    PC *pc_air_shell = (PC *)pc->data;
 
    PetscInt input_int, input_int_two, input_int_three;
-   PetscErrorCode ierr;
+   PetscErrorCode ierr = 0;
    PetscBool flg, flg_two;
    PetscReal input_real, input_real_two;
    PCPFLAREINVType input_type;
