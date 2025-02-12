@@ -56,15 +56,24 @@ PFLARE can scalably solve:
 This library depends on MPI, BLAS, LAPACK (>= 3.4) and PETSc (3.15 to 3.22) configured with a graph partitioner (e.g., ParMETIS). Please compile PETSc directly from the source code, as PFLARE requires access to some of the PETSc types only available in the source. PFLARE has been tested with GNU, Intel, LLVM, NVIDIA and Cray compilers.
 
 1) Set `PETSC_DIR` and `PETSC_ARCH` environmental variables.
-2) Call ``make`` in the top level directory (you may need to modify the Makefile).
-3) Call ``make python`` in the top level directory to build the Python module.
+2) Call ``make`` in the top level directory to build the PFLARE library.
 
 Then if desired:
 
-4) Call ``make tests`` in the top level directory to check the build worked with some simple Fortran and C tests.
+3) Call ``make tests`` in the top level directory to check the build worked with some simple Fortran and C tests (or ``run_tests_no_load`` if PETSc has been configured with 64-bit integers).
+
+for the Python interface:
+
+4) Call ``make python`` in the top level directory to build the Python module.
 5) Call ``make tests_python`` in the top level directory to check the Python build worked with some simple Python tests.
 
-PFLARE is compatible with 64-bit integers if PETSc has been configured with 64-bit integers. Note however that some of the tests use the PETSc Mat ``/data/mat_stream_2364``, which was output in PETSc format with 32-bit integers. Hence tests that load this Mat will crash if PETSc has been configured with 64-bit integers.
+Specific compilers (``CC`` and ``FC``) and optimisation flags (``OPT``) can be input on the command line if desired, e.g.,
+
+     make CC=cc FC=ftn OPT="-O2"
+
+along with specific link flags (``BLAS_LIB``, ``LAPACK_LIB``, ``MPI_LIB``, ``MATH_LIB``, ``METIS_LIB`` and ``PARMETIS_LIB``) for the tests
+
+     make tests CC=cc FC=ftn OPT="-O2" BLAS_LIB="-lfblas" LAPACK_LIB="-lflapack"     
 
 A Dockerfile is also provided which builds all the dependencies, compiles the library and runs all the tests. To run this Docker image, from the top level directory use:
 
@@ -402,23 +411,23 @@ Running a test with OpenMP then requires setting the ``OMP_NUM_THREADS`` variabl
 
 ## GPU support           
 
-If PETSc has been configured with GPU support (e.g., CUDA, HIP, Kokkos) then PCPFLAREINV and PCAIR support GPUs. This relies on the matrix and vector types being set correctly by the user, which is typically done through command line options. By default the setup/solve occurs on the CPU. For example, if we solve the 1D advection problem ``tests/ex86`` using a 30th order GMRES polynomial applied matrix-free with the command line options:
+If PETSc has been configured with GPU support (e.g., CUDA, HIP, Kokkos) then PCPFLAREINV and PCAIR support GPUs. This relies on the matrix and vector types being set correctly by the user, which is typically done through command line options. By default the setup/solve occurs on the CPU. For example, if we solve the 1D advection problem ``tests/adv_1d`` using a 30th order GMRES polynomial applied matrix-free with the command line options:
 
-``./ex86.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30``
+``./adv_1d.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30``
 
-the setup/solve will occur on the CPU. If we want to run on GPUs, we must ensure the matrix/vector types match the appropriate GPU types. In both ``tests/ex86`` and ``tests/adv_diff_2d``, these types can be set through command line arguments. The types are specified with either ``-mat_type`` and ``-vec_type``, or if set by a DM directly (like in ``tests/adv_diff_2d``), use ``-dm_mat_type`` and ``-dm_vec_type``. 
+the setup/solve will occur on the CPU. If we want to run on GPUs, we must ensure the matrix/vector types match the appropriate GPU types. In both ``tests/adv_1d`` and ``tests/adv_diff_2d``, these types can be set through command line arguments. The types are specified with either ``-mat_type`` and ``-vec_type``, or if set by a DM directly (like in ``tests/adv_diff_2d``), use ``-dm_mat_type`` and ``-dm_vec_type``. 
 
 If using CUDA directly:
 
-``./ex86.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijcusparse -vec_type cuda``
+``./adv_1d.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijcusparse -vec_type cuda``
 
 If using HIP directly:
 
-``./ex86.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijhipsparse -vec_type hip``
+``./adv_1d.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijhipsparse -vec_type hip``
 
 If using KOKKOS (with either the CUDA or HIP back-end):
 
-``./ex86.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijkokkos -vec_type kokkos``
+``./adv_1d.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijkokkos -vec_type kokkos``
 
 For both PCPFLAREINV and PCAIR, the entirity of the solve happens on GPUs without any copies between the CPU/GPU if using either CUDA directly, or using KOKKOS with the CUDA or HIP back-end. Using HIP directly incurs copies during the solve so we would not recommend this currently. 
 

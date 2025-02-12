@@ -10,7 +10,7 @@
 # with appropriate mpi wrappings
 
 # If you want to override these just pass in the values when you call this make
-# e.g., make CC=cc, FC=ftn
+# e.g., make CC=cc FC=ftn
 export FC := mpif90
 # This needs to be exported into the sub-makefile for Cython to see the MPI headers
 export CC := mpicc
@@ -30,10 +30,11 @@ export MPIEXEC := mpiexec
 #    to have the cray runtime correctly run in oversubscribed mode 
 #    but that would then trigger the threaded blas/lapack
 #    The only omp we want is internal to PFLARE
-CFLAGS := ${CFLAGS} -O3 -fPIC
-FFLAGS := ${FFLAGS} -O3 -fPIC
 
-SHARED_FLAG := -shared
+# By default compile with optimisations on
+export OPT := -O3
+CFLAGS := ${CFLAGS} $(OPT) -fPIC
+FFLAGS := ${FFLAGS} $(OPT) -fPIC
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # We currently don't require any compiler specific flags
@@ -43,10 +44,10 @@ INCLUDEDIR  := include
 SRCDIR      := src
 OBJDIR      := obj
 # This needs to be exported into the sub-makefile for Cython
-export LIBDIR	:= $(CURDIR)/lib
+export LIBDIR := $(CURDIR)/lib
 
-# Include directories
-INCLUDE		:= -I$(CURDIR) -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
+# Include directories - include top level directory in case compilers output modules there
+INCLUDE := -I$(CURDIR) -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
 
 # Output the library
 OUT = $(LIBDIR)/libpflare.so
@@ -101,6 +102,8 @@ $(OBJDIR):
 
 # Fortran
 # Place the .o files in the $(OBJDIR) directory
+# Module files either go in $(OBJDIR) or the top level 
+# directory depending on compiler
 $(OBJDIR)/%.o: $(SRCDIR)/%.F90
 	$(FC) $(FFLAGS) -c $(INCLUDE) $^ -o $@
 
@@ -111,7 +114,7 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.c
 
 # Make our shared library
 $(OUT): $(OBJS) 
-	$(FC) $(SHARED_FLAG) -fPIC $^ -o $(OUT)
+	$(FC) -shared -fPIC $^ -o $(OUT)
 
 # Build the tests
 build_tests: $(OUT)

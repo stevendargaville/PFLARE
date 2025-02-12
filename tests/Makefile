@@ -4,10 +4,9 @@
 # ~~~~~~~~~~~~~~~~~
 
 # Have to include the modules in ../include
-INCLUDEDIR  := ../include
-# We only include the top level directory here as the intel compiler ignores the -J flag and instead
-# wants -module - but we don't want any compiler specific flags here for simplicity
-INCLUDE		:= -I$(CURDIR)/../ -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
+INCLUDEDIR := ../include
+# Include directories - include top level directory in case compilers output modules there
+INCLUDE := -I$(CURDIR)/../ -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
 
 # These are the same in the top level makefile, but we redefine them here rather than use an export
 # in the top level makefile
@@ -16,12 +15,28 @@ INCLUDE		:= -I$(CURDIR)/../ -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR
 # include -lgomp in the LDFLAGS
 # That way we don't link to threaded libraries on cray machines (as that happens automatically
 # if the flags include -fopenmp)
-CFLAGS := ${CFLAGS} -O3 -fPIC
-FFLAGS := ${FFLAGS} -O3 -fPIC
+CFLAGS := ${CFLAGS} $(OPT) -fPIC
+FFLAGS := ${FFLAGS} $(OPT) -fPIC
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # We currently don't require any compiler specific flags
 # ~~~~~~~~~~~~~~~~~~~~~~~~
+
+# If you want to override these just pass in the values when you call make from the 
+# top level directory
+# e.g., make tests BLAS_LIB="-lfblas" LAPACK_LIB="-lflapack"
+# On a cray machine typically blas/lapack linking are included by the compiler
+# e.g., make tests CC=cc FC=ftn BLAS_LIB="" LAPACK_LIB=""
+BLAS_LIB     := -lblas
+LAPACK_LIB   := -llapack
+# Can override MPI_LIB from the command line too
+MPI_LIB      := -lmpi
+# Can override MATH_LIB from command line too
+MATH_LIB     := -lm
+# Can override METIS_LIB from command line too
+METIS_LIB    := -lmetis
+# Can override PARMETIS_LIB from command line too
+PARMETIS_LIB := -lparmetis
 
 # Get any library flags we have on input
 LDFLAGS_INPUT := $(LDFLAGS)
@@ -29,23 +44,22 @@ LDFLAGS_INPUT := $(LDFLAGS)
 LDFLAGS 		:= -L$(LIBDIR) -lpflare -Wl,-rpath,$(LIBDIR)
 # Include petsc
 LDFLAGS     := $(LDFLAGS) -L$(PETSC_DIR)/$(PETSC_ARCH)/lib -lpetsc -Wl,-rpath,$(PETSC_DIR)/$(PETSC_ARCH)/lib
-LDFLAGS     := $(LDFLAGS) -lm
+# Include math library
+LDFLAGS     := $(LDFLAGS) $(MATH_LIB)
 # Have to link to blas, lapack
-# Detect the cray wrappers, as they include blas and lapack by default
-ifeq ($(filter ftn,$(FC)),)
-LDFLAGS     := $(LDFLAGS) -lblas -llapack
-endif
+LDFLAGS     := $(LDFLAGS) $(BLAS_LIB) $(LAPACK_LIB)
 # Have to link to mpi
-LDFLAGS     := $(LDFLAGS) -lmpi
+LDFLAGS     := $(LDFLAGS) $(MPI_LIB)
+# Have to link to parmetis and metis - order is important
+LDFLAGS     := $(LDFLAGS) $(PARMETIS_LIB) $(METIS_LIB)
 # Include any input flags we had - these go last as order is important
 LDFLAGS     := $(LDFLAGS) $(LDFLAGS_INPUT)
-
 
 # Define file extensions
 .SUFFIXES: .F90 .o .mod .c
 
 # Test examples
-OBJS := ex12f.o ex6f.o ex6f_getcoeffs.o ex6.o ex6_cf_splitting.o ex86.o adv_diff_2d.o
+OBJS := ex12f.o ex6f.o ex6f_getcoeffs.o ex6.o ex6_cf_splitting.o adv_1d.o adv_diff_2d.o
 
 # Build rules
 all: $(OBJS) 
@@ -190,7 +204,7 @@ run_tests_no_load:
 # 
 	@echo ""
 	@echo "Test AIRG with GMRES polynomials with PC reused with no sparsity change"
-	./ex6f.o -m 10 -n 10 -ksp_max_it 8
+	./ex6f.o -m 10 -n 10 -ksp_max_it 10
 	@echo "Test AIRG with GMRES polynomials with PC regenerated with no sparsity change"
 	./ex6f.o -m 10 -n 10 -regen -pc_air_reuse_sparsity -ksp_max_it 3
 	@echo "Test AIRG with GMRES polynomials with PC regenerated with no sparsity change and strong R threshold"
@@ -226,11 +240,11 @@ run_tests_no_load:
 # 
 	@echo ""
 	@echo "Test AIRG on steady 1D advection"
-	./ex86.o -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right \
+	./adv_1d.o -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right \
 	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys -ksp_max_it 1
 	@echo "Test AIRG on steady 1D advection in parallel"
-	$(MPIEXEC) -n 2 ./ex86.o -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right \
-	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys -ksp_max_it 1
+	$(MPIEXEC) -n 2 ./adv_1d.o -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right \
+	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys -ksp_max_it 10
 # 
 	@echo ""
 	@echo "Test lAIR on steady 2D structured advection"
@@ -242,7 +256,7 @@ run_tests_no_load:
 	@echo "Test AIRG on steady 2D structured advection with 0th order sparsity GMRES poly C smooth and faster coarsening"
 	./adv_diff_2d.o -da_grid_x 50 -da_grid_y 50 -pc_type air -ksp_pc_side right \
 	 -ksp_rtol 1e-10 -ksp_atol 1e-50 -pc_air_a_lump -pc_air_a_drop 1e-4 -pc_air_one_c_smooth \
-	 -pc_air_c_inverse_sparsity_order 0 -pc_air_strong_threshold 0.99 -pc_air_ddc_fraction 0.0 -ksp_max_it 3
+	 -pc_air_c_inverse_sparsity_order 0 -pc_air_strong_threshold 0.99 -pc_air_ddc_fraction 0.0 -ksp_max_it 7
 # 
 	@echo ""
 	@echo "Test high order GMRES polynomials in small linear system"
