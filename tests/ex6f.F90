@@ -167,7 +167,7 @@
       PetscInt II,Istart,Iend
       PetscInt count,nsteps,one
       PetscErrorCode ierr
-      PetscInt its
+      PetscInt its, start, start_plus_one
       PetscBool regen
       Mat     A
       KSP     ksp
@@ -184,7 +184,9 @@
       one = 1
 ! First time thorough: Create new matrix to define the linear system
       if (count .eq. 1) then
-        call MPI_Comm_rank(PETSC_COMM_WORLD,rank,ierr)
+
+        call MatGetOwnershipRange(A, start, start_plus_one, ierr)
+        if (start == 0) rank = 0
         pflag = .false.
         call PetscOptionsHasName(PETSC_NULL_OPTIONS,PETSC_NULL_CHARACTER,'-mat_view',pflag,ierr)
         if (pflag) then

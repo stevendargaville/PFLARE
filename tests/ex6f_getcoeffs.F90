@@ -41,7 +41,7 @@ contains
 
       PetscScalar  v,val
       PetscInt II,Istart,Iend
-      PetscInt count,nsteps,one
+      PetscInt count,nsteps,one,start, start_plus_one
       PetscErrorCode ierr
       PetscInt its, num_levels, petsc_level
       Mat     A
@@ -59,7 +59,8 @@ contains
 
       one = 1
       call KSPSetInitialGuessNonzero(ksp,PETSC_FALSE,ierr)
-      call MPI_Comm_rank(PETSC_COMM_WORLD,rank,ierr)
+      call MatGetOwnershipRange(A, start, start_plus_one, ierr)
+      if (start == 0) rank = 0      
       ! Explicitly tell it not to reuse the preconditioner
       ! This forces it to regenerate it every time with SAME_NON_ZERO
       call KSPSetReusePreconditioner(ksp,PETSC_FALSE,ierr)
