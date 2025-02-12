@@ -4,10 +4,9 @@
 # ~~~~~~~~~~~~~~~~~
 
 # Have to include the modules in ../include
-INCLUDEDIR  := ../include
-# We only include the top level directory here as the intel compiler ignores the -J flag and instead
-# wants -module - but we don't want any compiler specific flags here for simplicity
-INCLUDE		:= -I$(CURDIR)/../ -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
+INCLUDEDIR := ../include
+# Include directories - include top level directory in case compilers output modules there
+INCLUDE := -I$(CURDIR)/../ -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
 
 # These are the same in the top level makefile, but we redefine them here rather than use an export
 # in the top level makefile
@@ -16,12 +15,28 @@ INCLUDE		:= -I$(CURDIR)/../ -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR
 # include -lgomp in the LDFLAGS
 # That way we don't link to threaded libraries on cray machines (as that happens automatically
 # if the flags include -fopenmp)
-CFLAGS := ${CFLAGS} -O3 -fPIC
-FFLAGS := ${FFLAGS} -O3 -fPIC
+CFLAGS := ${CFLAGS} $(OPT) -fPIC
+FFLAGS := ${FFLAGS} $(OPT) -fPIC
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # We currently don't require any compiler specific flags
 # ~~~~~~~~~~~~~~~~~~~~~~~~
+
+# If you want to override these just pass in the values when you call make from the 
+# top level directory
+# e.g., make tests BLAS_LIB="-lfblas" LAPACK_LIB="-lflapack"
+# On a cray machine typically blas/lapack linking are included by the compiler
+# e.g., make tests CC=cc FC=ftn BLAS_LIB="" LAPACK_LIB=""
+BLAS_LIB     := -lblas
+LAPACK_LIB   := -llapack
+# Can override MPI_LIB from the command line too
+MPI_LIB      := -lmpi
+# Can override MATH_LIB from command line too
+MATH_LIB     := -lm
+# Can override METIS_LIB from command line too
+METIS_LIB    := -lmetis
+# Can override PARMETIS_LIB from command line too
+PARMETIS_LIB := -lparmetis
 
 # Get any library flags we have on input
 LDFLAGS_INPUT := $(LDFLAGS)
@@ -29,17 +44,16 @@ LDFLAGS_INPUT := $(LDFLAGS)
 LDFLAGS 		:= -L$(LIBDIR) -lpflare -Wl,-rpath,$(LIBDIR)
 # Include petsc
 LDFLAGS     := $(LDFLAGS) -L$(PETSC_DIR)/$(PETSC_ARCH)/lib -lpetsc -Wl,-rpath,$(PETSC_DIR)/$(PETSC_ARCH)/lib
-LDFLAGS     := $(LDFLAGS) -lm
+# Include math library
+LDFLAGS     := $(LDFLAGS) $(MATH_LIB)
 # Have to link to blas, lapack
-# Detect the cray wrappers, as they include blas and lapack by default
-ifeq ($(filter ftn,$(FC)),)
-LDFLAGS     := $(LDFLAGS) -lblas -llapack
-endif
+LDFLAGS     := $(LDFLAGS) $(BLAS_LIB) $(LAPACK_LIB)
 # Have to link to mpi
-LDFLAGS     := $(LDFLAGS) -lmpi
+LDFLAGS     := $(LDFLAGS) $(MPI_LIB)
+# Have to link to parmetis and metis - order is important
+LDFLAGS     := $(LDFLAGS) $(PARMETIS_LIB) $(METIS_LIB)
 # Include any input flags we had - these go last as order is important
 LDFLAGS     := $(LDFLAGS) $(LDFLAGS_INPUT)
-
 
 # Define file extensions
 .SUFFIXES: .F90 .o .mod .c
