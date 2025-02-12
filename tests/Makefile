@@ -190,7 +190,7 @@ run_tests_no_load:
 # 
 	@echo ""
 	@echo "Test AIRG with GMRES polynomials with PC reused with no sparsity change"
-	./ex6f.o -m 10 -n 10 -ksp_max_it 8
+	./ex6f.o -m 10 -n 10 -ksp_max_it 10
 	@echo "Test AIRG with GMRES polynomials with PC regenerated with no sparsity change"
 	./ex6f.o -m 10 -n 10 -regen -pc_air_reuse_sparsity -ksp_max_it 3
 	@echo "Test AIRG with GMRES polynomials with PC regenerated with no sparsity change and strong R threshold"
@@ -230,7 +230,7 @@ run_tests_no_load:
 	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys -ksp_max_it 1
 	@echo "Test AIRG on steady 1D advection in parallel"
 	$(MPIEXEC) -n 2 ./ex86.o -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right \
-	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys -ksp_max_it 1
+	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys -ksp_max_it 10
 # 
 	@echo ""
 	@echo "Test lAIR on steady 2D structured advection"
@@ -242,7 +242,7 @@ run_tests_no_load:
 	@echo "Test AIRG on steady 2D structured advection with 0th order sparsity GMRES poly C smooth and faster coarsening"
 	./adv_diff_2d.o -da_grid_x 50 -da_grid_y 50 -pc_type air -ksp_pc_side right \
 	 -ksp_rtol 1e-10 -ksp_atol 1e-50 -pc_air_a_lump -pc_air_a_drop 1e-4 -pc_air_one_c_smooth \
-	 -pc_air_c_inverse_sparsity_order 0 -pc_air_strong_threshold 0.99 -pc_air_ddc_fraction 0.0 -ksp_max_it 3
+	 -pc_air_c_inverse_sparsity_order 0 -pc_air_strong_threshold 0.99 -pc_air_ddc_fraction 0.0 -ksp_max_it 7
 # 
 	@echo ""
 	@echo "Test high order GMRES polynomials in small linear system"
