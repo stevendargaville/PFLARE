@@ -190,21 +190,21 @@ run_tests_no_load:
 # 
 	@echo ""
 	@echo "Test AIRG with GMRES polynomials with PC reused with no sparsity change"
-	./ex6f.o -m 10 -n 10 -ksp_max_it 4
+	./ex6f.o -m 10 -n 10 -ksp_max_it 8
 	@echo "Test AIRG with GMRES polynomials with PC regenerated with no sparsity change"
-	./ex6f.o -m 10 -n 10 -regen -pc_air_reuse_sparsity -ksp_max_it 4
+	./ex6f.o -m 10 -n 10 -regen -pc_air_reuse_sparsity -ksp_max_it 3
 	@echo "Test AIRG with GMRES polynomials with PC regenerated with no sparsity change and strong R threshold"
-	./ex6f.o -m 10 -n 10 -regen -pc_air_reuse_sparsity -pc_air_strong_r_threshold 0.01 -ksp_max_it 4
+	./ex6f.o -m 10 -n 10 -regen -pc_air_reuse_sparsity -pc_air_strong_r_threshold 0.01 -ksp_max_it 3
 	@echo "Test lAIR with GMRES polynomials with PC regenerated with no sparsity change"
-	./ex6f.o -m 10 -n 10 -regen -pc_air_z_type lair -pc_air_reuse_sparsity -ksp_max_it 4
+	./ex6f.o -m 10 -n 10 -regen -pc_air_z_type lair -pc_air_reuse_sparsity -ksp_max_it 3
 	@echo "Test lAIR SAI with GMRES polynomials with PC regenerated with no sparsity change"
-	./ex6f.o -m 10 -n 10 -regen -pc_air_z_type lair_sai -pc_air_reuse_sparsity	-ksp_max_it 4
+	./ex6f.o -m 10 -n 10 -regen -pc_air_z_type lair_sai -pc_air_reuse_sparsity	-ksp_max_it 3
 # 
 	@echo ""
 	@echo "Test AIRG with GMRES polynomials with PC regenerated with no sparsity change and polynomial coeffs stored"
-	./ex6f_getcoeffs.o -m 10 -n 10 -ksp_max_it 4
+	./ex6f_getcoeffs.o -m 10 -n 10 -ksp_max_it 8
 	@echo "Test AIRG with GMRES polynomials with PC regenerated with no sparsity change and polynomial coeffs stored and lumping"
-	./ex6f_getcoeffs.o -m 10 -n 10 -pc_air_a_lump -ksp_max_it 4
+	./ex6f_getcoeffs.o -m 10 -n 10 -pc_air_a_lump -ksp_max_it 8
 # 
 	@echo ""
 	@echo "Test single level GMRES polynomials with PC reused with no sparsity change"
