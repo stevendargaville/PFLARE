@@ -27,12 +27,16 @@ FFLAGS := ${FFLAGS} -O3 -fPIC
 # e.g., make tests BLAS_LIB="-lfblas" LAPACK_LIB="-lflapack"
 # On a cray machine typically blas/lapack linking are included by the compiler
 # e.g., make tests CC=cc FC=ftn BLAS_LIB="" LAPACK_LIB=""
-BLAS_LIB   := -lblas
-LAPACK_LIB := -llapack
+BLAS_LIB     := -lblas
+LAPACK_LIB   := -llapack
 # Can override MPI_LIB from the command line too
-MPI_LIB    := -lmpi
+MPI_LIB      := -lmpi
 # Can override MATH_LIB from command line too
-MATH_LIB   := -lm
+MATH_LIB     := -lm
+# Can override METIS_LIB from command line too
+METIS_LIB    := -lmetis
+# Can override PARMETIS_LIB from command line too
+PARMETIS_LIB := -lparmetis
 
 # Get any library flags we have on input
 LDFLAGS_INPUT := $(LDFLAGS)
@@ -46,6 +50,8 @@ LDFLAGS     := $(LDFLAGS) $(MATH_LIB)
 LDFLAGS     := $(LDFLAGS) $(BLAS_LIB) $(LAPACK_LIB)
 # Have to link to mpi
 LDFLAGS     := $(LDFLAGS) $(MPI_LIB)
+# Have to link to parmetis and metis - order is important
+LDFLAGS     := $(LDFLAGS) $(PARMETIS_LIB) $(METIS_LIB)
 # Include any input flags we had - these go last as order is important
 LDFLAGS     := $(LDFLAGS) $(LDFLAGS_INPUT)
 
