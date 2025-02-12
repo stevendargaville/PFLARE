@@ -56,15 +56,21 @@ PFLARE can scalably solve:
 This library depends on MPI, BLAS, LAPACK (>= 3.4) and PETSc (3.15 to 3.22) configured with a graph partitioner (e.g., ParMETIS). Please compile PETSc directly from the source code, as PFLARE requires access to some of the PETSc types only available in the source. PFLARE has been tested with GNU, Intel, LLVM, NVIDIA and Cray compilers.
 
 1) Set `PETSC_DIR` and `PETSC_ARCH` environmental variables.
-2) Call ``make`` in the top level directory (you may need to modify the Makefile).
+2) Call ``make`` in the top level directory.
 3) Call ``make python`` in the top level directory to build the Python module.
 
 Then if desired:
 
-4) Call ``make tests`` in the top level directory to check the build worked with some simple Fortran and C tests.
+4) Call ``make tests`` in the top level directory to check the build worked with some simple Fortran and C tests (or ``run_tests_no_load`` if PETSc has been configured with 64-bit integers).
 5) Call ``make tests_python`` in the top level directory to check the Python build worked with some simple Python tests.
 
-PFLARE is compatible with 64-bit integers if PETSc has been configured with 64-bit integers. Note however that some of the tests use the PETSc Mat ``/data/mat_stream_2364``, which was output in PETSc format with 32-bit integers. Hence tests that load this Mat will crash if PETSc has been configured with 64-bit integers.
+Specific compilers (``CC`` and ``FC``) can be specified on the command line, e.g.,
+
+     make CC=cc FC=ftn
+
+along with specific link flags (``BLAS_LIB``, ``LAPACK_LIB``, ``MPI_LIB``, ``MATH_LIB``) for the tests
+
+     make tests CC=cc FC=ftn BLAS_LIB="-lfblas" LAPACK_LIB="-lflapack"     
 
 A Dockerfile is also provided which builds all the dependencies, compiles the library and runs all the tests. To run this Docker image, from the top level directory use:
 
