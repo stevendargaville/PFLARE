@@ -1,6 +1,7 @@
 static char help[] = "Solves a one-dimensional steady upwind advection system with KSP.\n\n";
 
 /*
+  This is a modified version of ex86 in PETSc
   Include "petscksp.h" so that we can use KSP solvers.  Note that this file
   automatically includes:
      petscsys.h    - base PETSc routines   petscvec.h - vectors

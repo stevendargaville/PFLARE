@@ -59,7 +59,7 @@ LDFLAGS     := $(LDFLAGS) $(LDFLAGS_INPUT)
 .SUFFIXES: .F90 .o .mod .c
 
 # Test examples
-OBJS := ex12f.o ex6f.o ex6f_getcoeffs.o ex6.o ex6_cf_splitting.o ex86.o adv_diff_2d.o
+OBJS := ex12f.o ex6f.o ex6f_getcoeffs.o ex6.o ex6_cf_splitting.o adv_1d.o adv_diff_2d.o
 
 # Build rules
 all: $(OBJS) 
@@ -240,10 +240,10 @@ run_tests_no_load:
 # 
 	@echo ""
 	@echo "Test AIRG on steady 1D advection"
-	./ex86.o -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right \
+	./adv_1d.o -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right \
 	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys -ksp_max_it 1
 	@echo "Test AIRG on steady 1D advection in parallel"
-	$(MPIEXEC) -n 2 ./ex86.o -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right \
+	$(MPIEXEC) -n 2 ./adv_1d.o -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right \
 	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys -ksp_max_it 10
 # 
 	@echo ""
