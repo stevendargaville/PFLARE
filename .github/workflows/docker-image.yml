@@ -51,8 +51,7 @@ jobs:
       - name: free disk space
         run: |
           df -h 
-          docker rmi ${{ env.REPO }}:debug
-          df -h          
+          docker system df      
 
       - name: Build Docker image with PETSc and NVIDIA compilers
         uses: docker/build-push-action@v2
@@ -63,13 +62,7 @@ jobs:
           tags: ${{ env.REPO }}:nvidia
           build-args: |
             BRANCH=${{ env.BRANCH }}   
-            ARCH=arch-linux-nvidia  
-
-      - name: free disk space
-        run: |
-          df -h 
-          docker rmi ${{ env.REPO }}:nvidia
-          df -h                           
+            ARCH=arch-linux-nvidia                          
 
       - name: Build and push Docker image for push events
         if: ${{ github.event_name != 'pull_request' }}
