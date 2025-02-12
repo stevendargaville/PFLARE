@@ -32,7 +32,7 @@ export MPIEXEC := mpiexec
 #    The only omp we want is internal to PFLARE
 
 # By default compile with optimisations on
-export OPT    := -O3
+export OPT := -O3
 CFLAGS := ${CFLAGS} $(OPT) -fPIC
 FFLAGS := ${FFLAGS} $(OPT) -fPIC
 
