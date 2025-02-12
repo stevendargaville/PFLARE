@@ -5,10 +5,13 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-    
+
 jobs:
   setup:
     runs-on: ubuntu-22.04
+    outputs:
+      branch: ${{ steps.determine_branch.outputs.branch }}
+      repo: ${{ steps.downcase_repo.outputs.repo }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -22,27 +25,30 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Determine branch to build
-        id: branch
+      - name: Determine branch
+        id: determine_branch
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "BRANCH=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
+            echo "branch=${{ github.event.pull_request.head.ref }}" >> $GITHUB_OUTPUT
           else
-            echo "BRANCH=${{ github.ref_name }}" >> $GITHUB_ENV
+            echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           fi
 
       - name: downcase REPO
+        id: downcase_repo
         run: |
-          echo "REPO=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV 
+          echo "repo=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
 
       - name: free disk space
         run: |
           docker system prune --volumes -af            
 
-
   build_debug:
     runs-on: ubuntu-22.04
     needs: setup
+    env:
+      BRANCH: ${{ needs.setup.outputs.branch }}
+      REPO: ${{ needs.setup.outputs.branch }}
     steps:
       - name: Build Docker image with debug PETSc
         uses: docker/build-push-action@v2
@@ -57,6 +63,9 @@ jobs:
   build_nvidia:
     runs-on: ubuntu-22.04
     needs: setup
+    env:
+      BRANCH: ${{ needs.setup.outputs.branch }}
+      REPO: ${{ needs.setup.outputs.branch }}
     steps:
       - name: Build Docker image with PETSc and NVIDIA compilers
         uses: docker/build-push-action@v2
@@ -71,6 +80,9 @@ jobs:
   build_push:
     runs-on: ubuntu-22.04
     needs: setup
+    env:
+      BRANCH: ${{ needs.setup.outputs.branch }}
+      REPO: ${{ needs.setup.outputs.branch }}    
     steps:
       - name: Build and push Docker image for push events
         if: ${{ github.event_name != 'pull_request' }}
@@ -79,7 +91,7 @@ jobs:
           platforms: linux/amd64
           push: true
           file: ./dockerfiles/Dockerfile
-          tags: ${{ env.REPO }}:latest
+          tags: ${{ needs.setup.outputs.branch }}:latest
           build-args: |
             BRANCH=${{ env.BRANCH }}
             ARCH=arch-linux-c-opt
@@ -87,6 +99,9 @@ jobs:
   build_pr:
     runs-on: ubuntu-22.04
     needs: setup
+    env:
+      BRANCH: ${{ needs.setup.outputs.branch }}
+      REPO: ${{ needs.setup.outputs.branch }}    
     steps:
       - name: Build Docker image for pull requests
         if: ${{ github.event_name == 'pull_request' }}
@@ -95,7 +110,7 @@ jobs:
           platforms: linux/amd64
           push: false
           file: ./dockerfiles/Dockerfile
-          tags: ${{ env.REPO }}:pr-build
+          tags: ${{ needs.setup.outputs.branch }}:pr-build
           build-args: |
             BRANCH=${{ env.BRANCH }}
             ARCH=arch-linux-c-opt
@@ -103,6 +118,9 @@ jobs:
   build_push_64_bit:
     runs-on: ubuntu-22.04
     needs: setup
+    env:
+      BRANCH: ${{ needs.setup.outputs.branch }}
+      REPO: ${{ needs.setup.outputs.branch }}    
     steps:
       - name: Build and push Docker image for push events with 64-bit PETSc
         if: ${{ github.event_name != 'pull_request' }}
@@ -111,7 +129,7 @@ jobs:
           platforms: linux/amd64
           push: true
           file: ./dockerfiles/Dockerfile_64_bit
-          tags: ${{ env.REPO }}_64_bit:latest
+          tags: ${{ needs.setup.outputs.branch }}_64_bit:latest
           build-args: |
             BRANCH=${{ env.BRANCH }}
             ARCH=arch-linux-c-opt
@@ -119,6 +137,9 @@ jobs:
   build_pr_64_bit:
     runs-on: ubuntu-22.04
     needs: setup
+    env:
+      BRANCH: ${{ needs.setup.outputs.branch }}
+      REPO: ${{ needs.setup.outputs.branch }}    
     steps:
       - name: Build Docker image for pull requests with 64-bit PETSc
         if: ${{ github.event_name == 'pull_request' }}
@@ -127,7 +148,7 @@ jobs:
           platforms: linux/amd64
           push: false
           file: ./dockerfiles/Dockerfile_64_bit
-          tags: ${{ env.REPO }}_64_bit:pr-build
+          tags: ${{ needs.setup.outputs.branch }}_64_bit:pr-build
           build-args: |
             BRANCH=${{ env.BRANCH }}
             ARCH=arch-linux-c-opt
