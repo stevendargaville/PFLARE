@@ -22,10 +22,11 @@ FFLAGS := ${FFLAGS} -O3 -fPIC
 # We currently don't require any compiler specific flags
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 
-# If you want to override these just pass in the values when you call make
-# e.g., make BLAS_LIB="-lfblas" LAPACK_LIB="-lflapack"
+# If you want to override these just pass in the values when you call make from the 
+# top level directory
+# e.g., make tests BLAS_LIB="-lfblas" LAPACK_LIB="-lflapack"
 # On a cray machine typically blas/lapack linking are included by the compiler
-# e.g., make CC=cc FC=ftn BLAS_LIB="" LAPACK_LIB=""
+# e.g., make tests CC=cc FC=ftn BLAS_LIB="" LAPACK_LIB=""
 BLAS_LIB   := -lblas
 LAPACK_LIB := -llapack
 # Can override MPI_LIB from the command line too
