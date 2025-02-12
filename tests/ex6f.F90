@@ -13,8 +13,10 @@
 
       program main
 #include <petsc/finclude/petscksp.h>
+      use petsc
       use petscksp
 #include "finclude/pflare.h"
+#include "petsc/finclude/petsc.h"
       implicit none
 
 !  Variables:

@@ -29,7 +29,9 @@ contains
    subroutine solve1(ksp,A,x,b,u,count,nsteps,coeffs_levels,ierr)
 #include <petsc/finclude/petscksp.h>
       use petscksp
-#include "finclude/pflare.h"      
+#include "finclude/pflare.h"
+#include "petsc/finclude/petsc.h"
+      use petsc      
       use pflare
       
    !
@@ -246,6 +248,8 @@ contains
       program main
       use solve_module
 #include <petsc/finclude/petscksp.h>
+      use petsc
+#include "petsc/finclude/petsc.h"      
       use petscksp
 #include "finclude/pflare.h"
       use pflare
