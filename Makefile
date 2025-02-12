@@ -30,8 +30,11 @@ export MPIEXEC := mpiexec
 #    to have the cray runtime correctly run in oversubscribed mode 
 #    but that would then trigger the threaded blas/lapack
 #    The only omp we want is internal to PFLARE
-CFLAGS := ${CFLAGS} -O3 -fPIC
-FFLAGS := ${FFLAGS} -O3 -fPIC
+
+# By default compile with optimisations on
+export OPT    := -O3
+CFLAGS := ${CFLAGS} $(OPT) -fPIC
+FFLAGS := ${FFLAGS} $(OPT) -fPIC
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # We currently don't require any compiler specific flags

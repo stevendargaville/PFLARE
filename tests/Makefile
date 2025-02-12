@@ -15,8 +15,8 @@ INCLUDE := -I$(CURDIR)/../ -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR)
 # include -lgomp in the LDFLAGS
 # That way we don't link to threaded libraries on cray machines (as that happens automatically
 # if the flags include -fopenmp)
-CFLAGS := ${CFLAGS} -O3 -fPIC
-FFLAGS := ${FFLAGS} -O3 -fPIC
+CFLAGS := ${CFLAGS} $(OPT) -fPIC
+FFLAGS := ${FFLAGS} $(OPT) -fPIC
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # We currently don't require any compiler specific flags
