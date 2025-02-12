@@ -50,9 +50,7 @@ jobs:
       - name: free disk space
         run: |
           df -h 
-          docker system df
-          docker image prune -f  
-          docker system df    
+          docker system prune --volumes -af  
           df -h 
 
       - name: Build Docker image with PETSc and NVIDIA compilers
@@ -68,9 +66,7 @@ jobs:
       - name: free disk space
         run: |
           df -h 
-          docker system df
-          docker image prune -f  
-          docker system df    
+          docker system prune --volumes -af   
           df -h                                       
 
       - name: Build and push Docker image for push events
