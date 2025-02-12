@@ -56,21 +56,24 @@ PFLARE can scalably solve:
 This library depends on MPI, BLAS, LAPACK (>= 3.4) and PETSc (3.15 to 3.22) configured with a graph partitioner (e.g., ParMETIS). Please compile PETSc directly from the source code, as PFLARE requires access to some of the PETSc types only available in the source. PFLARE has been tested with GNU, Intel, LLVM, NVIDIA and Cray compilers.
 
 1) Set `PETSC_DIR` and `PETSC_ARCH` environmental variables.
-2) Call ``make`` in the top level directory.
-3) Call ``make python`` in the top level directory to build the Python module.
+2) Call ``make`` in the top level directory to build the PFLARE library.
 
 Then if desired:
 
-4) Call ``make tests`` in the top level directory to check the build worked with some simple Fortran and C tests (or ``run_tests_no_load`` if PETSc has been configured with 64-bit integers).
+3) Call ``make tests`` in the top level directory to check the build worked with some simple Fortran and C tests (or ``run_tests_no_load`` if PETSc has been configured with 64-bit integers).
+
+for the Python interface:
+
+4) Call ``make python`` in the top level directory to build the Python module.
 5) Call ``make tests_python`` in the top level directory to check the Python build worked with some simple Python tests.
 
-Specific compilers (``CC`` and ``FC``) can be input on the command line, e.g.,
+Specific compilers (``CC`` and ``FC``) and optimisation flags (``OPT``) can be input on the command line if desired, e.g.,
 
-     make CC=cc FC=ftn
+     make CC=cc FC=ftn OPT="-O2"
 
-along with specific link flags (``BLAS_LIB``, ``LAPACK_LIB``, ``MPI_LIB``, ``MATH_LIB``) for the tests
+along with specific link flags (``BLAS_LIB``, ``LAPACK_LIB``, ``MPI_LIB``, ``MATH_LIB``, ``METIS_LIB`` and ``PARMETIS_LIB``) for the tests
 
-     make tests CC=cc FC=ftn BLAS_LIB="-lfblas" LAPACK_LIB="-lflapack"     
+     make tests CC=cc FC=ftn OPT="-O2" BLAS_LIB="-lfblas" LAPACK_LIB="-lflapack"     
 
 A Dockerfile is also provided which builds all the dependencies, compiles the library and runs all the tests. To run this Docker image, from the top level directory use:
 
