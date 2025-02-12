@@ -4,9 +4,9 @@
 # ~~~~~~~~~~~~~~~~~
 
 # Have to include the modules in ../include
-INCLUDEDIR  := ../include
+INCLUDEDIR := ../include
 # Include directories - include top level directory in case compilers output modules there
-INCLUDE		:= -I$(CURDIR)/../ -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
+INCLUDE := -I$(CURDIR)/../ -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
 
 # These are the same in the top level makefile, but we redefine them here rather than use an export
 # in the top level makefile
@@ -30,9 +30,9 @@ FFLAGS := ${FFLAGS} -O3 -fPIC
 BLAS_LIB   := -lblas
 LAPACK_LIB := -llapack
 # Can override MPI_LIB from the command line too
-MPI_LIB := -lmpi
+MPI_LIB    := -lmpi
 # Can override MATH_LIB from command line too
-MATH_LIB := -lm
+MATH_LIB   := -lm
 
 # Get any library flags we have on input
 LDFLAGS_INPUT := $(LDFLAGS)
