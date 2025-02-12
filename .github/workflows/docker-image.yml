@@ -49,12 +49,12 @@ jobs:
             ARCH=arch-linux-c-debug
 
       - name: free disk space
-         run: |
-         sudo swapoff -a
-         sudo rm -f /swapfile
-         sudo apt clean
-         docker rmi $(docker image ls -aq)
-         df -h            
+        run: |
+          sudo swapoff -a
+          sudo rm -f /swapfile
+          sudo apt clean
+          docker rmi $(docker image ls -aq)
+          df -h          
 
       - name: Build Docker image with PETSc and NVIDIA compilers
         uses: docker/build-push-action@v2
