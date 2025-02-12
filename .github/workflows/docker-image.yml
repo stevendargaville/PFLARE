@@ -68,12 +68,12 @@ jobs:
             ARCH=arch-linux-nvidia  
 
       - name: free disk space
-         run: |
-         sudo swapoff -a
-         sudo rm -f /swapfile
-         sudo apt clean
-         docker rmi $(docker image ls -aq)
-         df -h                           
+        run: |
+          sudo swapoff -a
+          sudo rm -f /swapfile
+          sudo apt clean
+          docker rmi $(docker image ls -aq)
+          df -h                           
 
       - name: Build and push Docker image for push events
         if: ${{ github.event_name != 'pull_request' }}
