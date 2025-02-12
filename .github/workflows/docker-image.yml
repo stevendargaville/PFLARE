@@ -50,10 +50,8 @@ jobs:
 
       - name: free disk space
         run: |
-          sudo swapoff -a
-          sudo rm -f /swapfile
-          sudo apt clean
-          docker rmi $(docker image ls -aq)
+          df -h 
+          docker rmi ${{ env.REPO }}:debug
           df -h          
 
       - name: Build Docker image with PETSc and NVIDIA compilers
@@ -69,10 +67,8 @@ jobs:
 
       - name: free disk space
         run: |
-          sudo swapoff -a
-          sudo rm -f /swapfile
-          sudo apt clean
-          docker rmi $(docker image ls -aq)
+          df -h 
+          docker rmi ${{ env.REPO }}:nvidia
           df -h                           
 
       - name: Build and push Docker image for push events
