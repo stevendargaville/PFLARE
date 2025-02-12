@@ -56,7 +56,8 @@ jobs:
           file: ./dockerfiles/Dockerfile_nvidia
           tags: ${{ env.REPO }}:nvidia
           build-args: |
-            BRANCH=${{ env.BRANCH }}                   
+            BRANCH=${{ env.BRANCH }}   
+            ARCH=arch-linux-nvidia                
 
       - name: Build and push Docker image for push events
         if: ${{ github.event_name != 'pull_request' }}
