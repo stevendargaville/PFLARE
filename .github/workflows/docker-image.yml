@@ -7,7 +7,7 @@ on:
     branches: [ "main" ]
     
 jobs:
-  build:
+  setup:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
@@ -25,22 +25,25 @@ jobs:
       - name: Determine branch to build
         id: branch
         run: |
-          # For pull requests, use the head ref (the branch that triggered the PR)
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "BRANCH=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
           else
-            # For push events, use the ref name
             echo "BRANCH=${{ github.ref_name }}" >> $GITHUB_ENV
           fi
 
       - name: downcase REPO
         run: |
-          echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV} 
+          echo "REPO=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV 
 
       - name: free disk space
         run: |
           docker system prune --volumes -af            
 
+
+  build_debug:
+    runs-on: ubuntu-22.04
+    needs: setup
+    steps:
       - name: Build Docker image with debug PETSc
         uses: docker/build-push-action@v2
         with:
@@ -48,9 +51,13 @@ jobs:
           push: false
           file: ./dockerfiles/Dockerfile
           build-args: |
-            BRANCH=${{ env.BRANCH }}    
+            BRANCH=${{ env.BRANCH }}
             ARCH=arch-linux-c-debug
 
+  build_nvidia:
+    runs-on: ubuntu-22.04
+    needs: setup
+    steps:
       - name: Build Docker image with PETSc and NVIDIA compilers
         uses: docker/build-push-action@v2
         with:
@@ -58,9 +65,13 @@ jobs:
           push: false
           file: ./dockerfiles/Dockerfile_nvidia
           build-args: |
-            BRANCH=${{ env.BRANCH }}   
-            ARCH=arch-linux-nvidia 
+            BRANCH=${{ env.BRANCH }}
+            ARCH=arch-linux-nvidia
 
+  build_push:
+    runs-on: ubuntu-22.04
+    needs: setup
+    steps:
       - name: Build and push Docker image for push events
         if: ${{ github.event_name != 'pull_request' }}
         uses: docker/build-push-action@v2
@@ -73,6 +84,10 @@ jobs:
             BRANCH=${{ env.BRANCH }}
             ARCH=arch-linux-c-opt
 
+  build_pr:
+    runs-on: ubuntu-22.04
+    needs: setup
+    steps:
       - name: Build Docker image for pull requests
         if: ${{ github.event_name == 'pull_request' }}
         uses: docker/build-push-action@v2
@@ -85,7 +100,11 @@ jobs:
             BRANCH=${{ env.BRANCH }}
             ARCH=arch-linux-c-opt
 
-      - name: Build and push 64-bit Docker image for push events
+  build_push_64_bit:
+    runs-on: ubuntu-22.04
+    needs: setup
+    steps:
+      - name: Build and push Docker image for push events with 64-bit PETSc
         if: ${{ github.event_name != 'pull_request' }}
         uses: docker/build-push-action@v2
         with:
@@ -97,7 +116,11 @@ jobs:
             BRANCH=${{ env.BRANCH }}
             ARCH=arch-linux-c-opt
 
-      - name: Build 64-bit Docker image for pull requests
+  build_pr_64_bit:
+    runs-on: ubuntu-22.04
+    needs: setup
+    steps:
+      - name: Build Docker image for pull requests with 64-bit PETSc
         if: ${{ github.event_name == 'pull_request' }}
         uses: docker/build-push-action@v2
         with:
