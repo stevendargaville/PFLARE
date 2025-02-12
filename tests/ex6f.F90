@@ -150,6 +150,7 @@
 !
       subroutine solve1(ksp,A,x,b,u,count,nsteps,regen,A2,ierr)
       use petsc
+#include "petsc/finclude/petsc.h"        
       use petscksp
       use pflare
       implicit none
