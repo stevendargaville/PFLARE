@@ -40,7 +40,7 @@ int main(int argc,char **argv)
   DM             da;
   PetscErrorCode ierr;
   PetscInt its, M, N;
-  PetscScalar Hx, Hy, theta, alpha, u, v, u_test, v_test;
+  PetscScalar theta, alpha, u, v, u_test, v_test;
   PetscBool option_found_u, option_found_v, adv_nondim, check_nondim, diag_scale;
   Vec x, b, diag_vec;
   Mat A;
@@ -118,19 +118,19 @@ int main(int argc,char **argv)
   // If we just have advection, rather than scaling by Hx * Hy, we can just have 
   // a dimensionless advection problem - this is enabled by default
   // If we have any diffusion this is turned off by default
-  adv_nondim = 1;
+  adv_nondim = PETSC_TRUE;
   if (alpha != 0.0)
   {
-   adv_nondim = 0;
+   adv_nondim = PETSC_FALSE;
   }  
   PetscOptionsGetBool(NULL, NULL, "-adv_nondim", &adv_nondim, NULL);
   // We can only nondimensionalise the advection if we don't have any diffusion
-  check_nondim = 1;
+  check_nondim = PETSC_TRUE;
   if (alpha != 0.0)
   {
    if (adv_nondim)
    {
-      check_nondim = 0.0;
+      check_nondim = PETSC_FALSE;
    }
   }
 
@@ -142,7 +142,7 @@ int main(int argc,char **argv)
 
   // Do we diagonally scale our matrix before solving
   // Defaults to false
-  diag_scale = 0;
+  diag_scale = PETSC_FALSE;
   PetscOptionsGetBool(NULL, NULL, "-diag_scale", &diag_scale, NULL);
 
   // ~~~~~~~~~~~~~~
@@ -156,9 +156,7 @@ int main(int argc,char **argv)
   ierr = KSPSetFromOptions(ksp);CHKERRQ(ierr);
   ierr = KSPSetInitialGuessNonzero(ksp, PETSC_TRUE);
 
-  ierr  = DMDAGetInfo(da,0,&M,&N,0,0,0,0,0,0,0,0,0,0);CHKERRQ(ierr);
-  Hx    = 1.0 / (PetscReal)(M);
-  Hy    = 1.0 / (PetscReal)(N);  
+  ierr  = DMDAGetInfo(da,0,&M,&N,0,0,0,0,0,0,0,0,0,0);CHKERRQ(ierr); 
 
   // Diagonally scale our matrix 
   if (diag_scale) {
@@ -220,10 +218,9 @@ int main(int argc,char **argv)
 PetscErrorCode ComputeMat(DM da, Mat A, PetscScalar u, PetscScalar v, PetscScalar alpha, PetscBool adv_nondim)
 {
   PetscErrorCode ierr;
-  PetscInt       i, j, M, N, xm, ym, xs, ys, num, numi, numj;
+  PetscInt       i, j, M, N, xm, ym, xs, ys;
   PetscScalar    val[5], Hx, Hy, HydHx, HxdHy, adv_x_scale, adv_y_scale;
   MatStencil     row, col[5];
-  MatNullSpace   nullspace;
 
   ierr  = DMDAGetInfo(da,0,&M,&N,0,0,0,0,0,0,0,0,0,0);CHKERRQ(ierr);
   Hx    = 1.0 / (PetscReal)(M);

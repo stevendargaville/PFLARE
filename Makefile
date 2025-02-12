@@ -34,7 +34,6 @@ CFLAGS := ${CFLAGS} -O3 -fPIC
 FFLAGS := ${FFLAGS} -O3 -fPIC
 
 SHARED_FLAG := -shared
-FORTMOD     := -J
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # We currently don't require any compiler specific flags
@@ -47,8 +46,6 @@ OBJDIR      := obj
 export LIBDIR	:= $(CURDIR)/lib
 
 # Include directories
-# We only include the currrent directory here as the intel compiler ignores the -J flag and instead
-# wants -module - but we don't want any compiler specific flags here for simplicity
 INCLUDE		:= -I$(CURDIR) -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
 
 # Output the library
@@ -103,9 +100,9 @@ $(OBJDIR):
 	mkdir -p $(INCLUDEDIR)
 
 # Fortran
-# Place the .o and .mod files in the $(OBJDIR) directory
+# Place the .o files in the $(OBJDIR) directory
 $(OBJDIR)/%.o: $(SRCDIR)/%.F90
-	$(FC) $(FFLAGS) -c $(INCLUDE) $^ -o $@ $(FORTMOD) $(INCLUDEDIR)
+	$(FC) $(FFLAGS) -c $(INCLUDE) $^ -o $@
 
 # C files
 # Place the .o files in the $(OBJDIR) directory

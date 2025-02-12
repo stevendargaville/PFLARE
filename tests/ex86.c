@@ -13,13 +13,12 @@ static char help[] = "Solves a one-dimensional steady upwind advection system wi
 
 int main(int argc, char **args)
 {
-  Vec         x, b, x_temp; /* approx solution, RHS, work vector */
+  Vec         x, b; /* approx solution, RHS */
   Mat         A;              /* linear system matrix */
   KSP         ksp;            /* linear solver context */
   PC          pc;             /* preconditioner context */
-  PetscInt    i, j, n = 10, col[2], its, global_row_start, global_row_end_plus_one, local_size;
+  PetscInt    i, n = 10, its, global_row_start, global_row_end_plus_one, local_size;
   PetscInt    start_assign, counter;
-  PetscScalar work_scalar, value[2];
   KSPConvergedReason reason;
   PetscLogStage setup, gpu_copy;
 

@@ -119,7 +119,7 @@ static PetscErrorCode PCPFLAREINVGetType_PFLAREINV(PC pc, PCPFLAREINVType *type)
 
    PetscFunctionBegin;
    inv_data = (PC_PFLAREINV *)pc->data;    
-   *type = inv_data->inverse_type;
+   *type = (PCPFLAREINVType)inv_data->inverse_type;
    PetscFunctionReturn(0);
 }
 

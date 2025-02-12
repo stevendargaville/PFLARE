@@ -9,18 +9,14 @@ Input arguments are:\n\
 int main(int argc,char **args)
 {
   PetscErrorCode ierr;
-  PetscInt       its;
 #if defined(PETSC_USE_LOG)
-  PetscLogStage  stage1,stage2;
+  PetscLogStage  stage1;
 #endif
-  PetscReal      norm;
   Vec            x,b,u;
   Mat            A;
   char           file[PETSC_MAX_PATH_LEN];
   PetscViewer    fd;
   PetscBool      flg,b_in_f = PETSC_TRUE;
-  KSP            ksp;
-  PC             pc;
   IS is_fine, is_coarse;
 
   ierr = PetscInitialize(&argc,&args,(char*)0,help);if (ierr) return ierr;
