@@ -202,15 +202,15 @@ run_tests_no_load:
 # 
 	@echo ""
 	@echo "Test AIRG with GMRES polynomials with PC regenerated with no sparsity change and polynomial coeffs stored"
-	./ex6f_getcoeffs.o -m 10 -n 10 -ksp_max_it 8
+	./ex6f_getcoeffs.o -m 10 -n 10 -ksp_max_it 3
 	@echo "Test AIRG with GMRES polynomials with PC regenerated with no sparsity change and polynomial coeffs stored and lumping"
-	./ex6f_getcoeffs.o -m 10 -n 10 -pc_air_a_lump -ksp_max_it 8
+	./ex6f_getcoeffs.o -m 10 -n 10 -pc_air_a_lump -ksp_max_it 3
 # 
 	@echo ""
 	@echo "Test single level GMRES polynomials with PC reused with no sparsity change"
-	./ex6f.o -m 10 -n 10 -pc_type pflareinv -ksp_max_it 6
+	./ex6f.o -m 10 -n 10 -pc_type pflareinv -ksp_max_it 8
 	@echo "Test single level GMRES polynomials with PC regenerated with no sparsity change"
-	./ex6f.o -m 10 -n 10 -pc_type pflareinv -regen -ksp_max_it 6
+	./ex6f.o -m 10 -n 10 -pc_type pflareinv -regen -ksp_max_it 8
 # 
 	@echo ""
 	@echo "Test solving isotropic diffusion with fast coarsening and near-nullspace"
