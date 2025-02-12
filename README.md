@@ -53,7 +53,7 @@ PFLARE can scalably solve:
 
 ## Building PFLARE
 
-This library depends on MPI, BLAS, LAPACK (>= 3.4) and PETSc (3.15 to 3.22) configured with a graph partitioner (e.g., ParMETIS). Please compile PETSc directly from the source code, as PFLARE requires access to some of the PETSc types only available in the source. PFLARE has been tested with GNU, Intel, LLVM and Cray compilers.
+This library depends on MPI, BLAS, LAPACK (>= 3.4) and PETSc (3.15 to 3.22) configured with a graph partitioner (e.g., ParMETIS). Please compile PETSc directly from the source code, as PFLARE requires access to some of the PETSc types only available in the source. PFLARE has been tested with GNU, Intel, LLVM, NVIDIA and Cray compilers.
 
 1) Set `PETSC_DIR` and `PETSC_ARCH` environmental variables.
 2) Call ``make`` in the top level directory (you may need to modify the Makefile).
