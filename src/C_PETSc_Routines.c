@@ -94,7 +94,6 @@ PETSC_INTERN void MatPartitioning_c(Mat *adj, PetscInt new_size, PetscInt *proc_
    MPI_Comm comm;
    MatPartitioning mpart;
    IS proc_is, proc_is_eq_num;
-   PetscInt *test;
    PetscInt comm_size_petsc;
    int size, rank, errorcode;
    // If you want to use the improve, then new_size needs to equal the current size
@@ -114,6 +113,7 @@ PETSC_INTERN void MatPartitioning_c(Mat *adj, PetscInt new_size, PetscInt *proc_
    ratio = ((double)size)/((PetscReal)*proc_stride);
    if (new_size > ratio) 
    {
+      errorcode = 1;
       MPI_Abort(comm, errorcode);
    }
 
@@ -135,12 +135,13 @@ PETSC_INTERN void MatPartitioning_c(Mat *adj, PetscInt new_size, PetscInt *proc_
    }
 
    // Now we want to interleave the processors as it reduces the amount of out of node comms
-   PetscInt rfactor=1, expand_factor=1, jj, kk, fact;   
+   PetscInt expand_factor=1, kk;   
 
    // If you're doing the improve you can't reduce the number of active ranks
    if (!improve)
    {
       // GAMG
+      // PetscInt rfactor=1, jj, fact;
       // /* find factor */
       // // This is the closest match 
       // // I've modified this to have rfactor 1

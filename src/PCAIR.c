@@ -1656,7 +1656,7 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
       // Call the underlying pcshell view
       PCView(*pc_air_shell, viewer);
    }
-   PetscFunctionReturn(0);
+   PetscFunctionReturn(ierr);
 }
 
 // ~~~~~~~~~~~~~~~~
