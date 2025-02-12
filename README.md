@@ -64,7 +64,7 @@ Then if desired:
 4) Call ``make tests`` in the top level directory to check the build worked with some simple Fortran and C tests (or ``run_tests_no_load`` if PETSc has been configured with 64-bit integers).
 5) Call ``make tests_python`` in the top level directory to check the Python build worked with some simple Python tests.
 
-Specific compilers (``CC`` and ``FC``) can be specified on the command line, e.g.,
+Specific compilers (``CC`` and ``FC``) can be input on the command line, e.g.,
 
      make CC=cc FC=ftn
 
