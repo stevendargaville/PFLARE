@@ -1292,7 +1292,7 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
    PC *pc_air_shell = (PC *)pc->data;
 
    PetscInt input_int, input_int_two, input_int_three;
-   PetscErrorCode ierr = 0;
+   PetscErrorCode ierr;
    PetscBool flg, flg_two;
    PetscReal input_real, input_real_two;
    PCPFLAREINVType input_type;
@@ -1656,7 +1656,7 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
       // Call the underlying pcshell view
       PCView(*pc_air_shell, viewer);
    }
-   PetscFunctionReturn(0);
+   PetscFunctionReturn(ierr);
 }
 
 // ~~~~~~~~~~~~~~~~
