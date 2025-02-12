@@ -147,6 +147,7 @@
 ! -----------------------------------------------------------------------
 !
       subroutine solve1(ksp,A,x,b,u,count,nsteps,regen,A2,ierr)
+      use petsc
       use petscksp
       use pflare
       implicit none
