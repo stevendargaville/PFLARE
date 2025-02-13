@@ -4,6 +4,8 @@ FROM ${BASE_IMAGE}
 # Checkout the main branch by default
 ARG BRANCH=main
 ARG ARCH=arch-linux-intel
+# Compile PFLARE with optimisation by default
+ARG OPT=-O3
 
 LABEL maintainer="Steven Dargaville"
 LABEL description="PFLARE_intel"
@@ -13,6 +15,7 @@ LABEL description="PFLARE_intel"
 
 ENV CHECKOUT_BRANCH=$BRANCH
 ENV PETSC_ARCH=$ARCH
+ENV OPT_FLAG=$OPT
 
 WORKDIR /build
 
@@ -22,6 +25,6 @@ RUN source /opt/intel/oneapi/setvars.sh && \
     echo "Cloning branch: ${CHECKOUT_BRANCH}" && \
     git clone --branch ${CHECKOUT_BRANCH} https://github.com/stevendargaville/PFLARE.git && \
     cd PFLARE && \
-    make CC=mpiicx FC=mpiifx && make CC=mpiicx FC=mpiifx tests
+    make CC=mpiicx FC=mpiifx "OPT=${OPT_FLAG}" && make CC=mpiicx FC=mpiifx "OPT=${OPT_FLAG}" tests
 
 WORKDIR /build/PFLARE
