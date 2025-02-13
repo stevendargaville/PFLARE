@@ -6,7 +6,7 @@ ARG BRANCH=main
 # Use the optimised petsc build by default
 ARG ARCH=arch-linux-c-opt
 # Compile PFLARE with optimisation by default
-ARG OPT="-O3"
+ARG OPT=-O3
 
 LABEL maintainer="Steven Dargaville"
 LABEL description="PFLARE"
@@ -16,7 +16,7 @@ LABEL description="PFLARE"
 
 ENV CHECKOUT_BRANCH=$BRANCH
 ENV PETSC_ARCH=$ARCH
-ENV OPT_FLAG=$OPT
+ENV OPT_FLAG="$(OPT)"
 
 WORKDIR /build
 
