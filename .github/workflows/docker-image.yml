@@ -73,7 +73,7 @@ jobs:
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           file: ./dockerfiles/Dockerfile
-          tags: ${{ needs.setup.outputs.branch }}:pr-build
+          tags: ${{ needs.setup.outputs.branch }}:latest
           build-args: |
             BRANCH=${{ env.BRANCH }}
             ARCH=arch-linux-c-opt
@@ -96,7 +96,7 @@ jobs:
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           file: ./dockerfiles/Dockerfile_64_bit
-          tags: ${{ needs.setup.outputs.branch }}_64_bit:pr-build
+          tags: ${{ needs.setup.outputs.branch }}_64_bit:latest
           build-args: |
             BRANCH=${{ env.BRANCH }}
             ARCH=arch-linux-c-opt
