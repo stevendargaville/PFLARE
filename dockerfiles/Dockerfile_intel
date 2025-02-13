@@ -25,7 +25,7 @@ RUN source /opt/intel/oneapi/setvars.sh && \
     echo "Cloning branch: ${CHECKOUT_BRANCH}" && \
     git clone --branch ${CHECKOUT_BRANCH} https://github.com/stevendargaville/PFLARE.git && \
     cd PFLARE && \
-    make CC=mpiicx FC=mpiifx "OPT=${OPT_FLAG}" && \
+    make CC=mpiicx FC=mpiifx "OPT=${OPT_FLAG}"
     # Skip the tests until we figure out what is breaking the 
     # power basis in parallel
     #make CC=mpiicx FC=mpiifx "OPT=${OPT_FLAG}" tests
