@@ -25,7 +25,7 @@ RUN set -e; \
     echo "Cloning branch: ${CHECKOUT_BRANCH}" && \
     git clone --branch ${CHECKOUT_BRANCH} https://github.com/stevendargaville/PFLARE.git && \
     cd PFLARE && \
-    make OPT=${OPT_FLAG} && make OPT=${OPT_FLAG} tests && \
-    make OPT=${OPT_FLAG} python && make OPT=${OPT_FLAG} tests_python
+    make OPT=$OPT_FLAG && make OPT=$OPT_FLAG tests && \
+    make OPT=$OPT_FLAG python && make OPT=$OPT_FLAG tests_python
 
 WORKDIR /build/PFLARE

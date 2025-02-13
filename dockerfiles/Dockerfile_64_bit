@@ -24,7 +24,7 @@ WORKDIR /build
 RUN echo "Cloning branch: ${CHECKOUT_BRANCH}" && \
     git clone --branch ${CHECKOUT_BRANCH} https://github.com/stevendargaville/PFLARE.git && \
     cd PFLARE && \
-    make OPT=${OPT_FLAG} && make OPT=${OPT_FLAG} build_tests && \
-    make OPT=${OPT_FLAG} tests_no_load
+    make OPT=$OPT_FLAG && make OPT=$OPT_FLAG build_tests && \
+    make OPT=$OPT_FLAG tests_no_load
 
 WORKDIR /build/PFLARE
