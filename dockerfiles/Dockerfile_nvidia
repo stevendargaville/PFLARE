@@ -5,6 +5,8 @@ FROM ${BASE_IMAGE}
 ARG BRANCH=main
 # Use the optimised petsc build by default
 ARG ARCH=arch-linux-nvidia
+# Compile PFLARE with optimisation by default
+ARG OPT="-O3"
 
 LABEL maintainer="Steven Dargaville"
 LABEL description="PFLARE_nvidia"
@@ -14,6 +16,7 @@ LABEL description="PFLARE_nvidia"
 
 ENV CHECKOUT_BRANCH=$BRANCH
 ENV PETSC_ARCH=$ARCH
+ENV OPT_FLAG=$OPT
 
 WORKDIR /build
 
@@ -22,6 +25,6 @@ RUN set -e; \
     echo "Cloning branch: ${CHECKOUT_BRANCH}" && \
     git clone --branch ${CHECKOUT_BRANCH} https://github.com/stevendargaville/PFLARE.git && \
     cd PFLARE && \
-    make && make tests
+    make OPT=${OPT_FLAG} && make OPT=${OPT_FLAG} tests
 
 WORKDIR /build/PFLARE

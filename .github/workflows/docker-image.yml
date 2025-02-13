@@ -59,6 +59,7 @@ jobs:
           build-args: |
             BRANCH=${{ env.BRANCH }}
             ARCH=arch-linux-c-debug
+            OPT="-O0"
 
   build_gnu_opt:
     runs-on: ubuntu-22.04
