@@ -65,7 +65,7 @@ jobs:
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           file: ./dockerfiles/Dockerfile
-          tags: pflare:latest
+          tags: stevendargaville/pflare:latest
           build-args: |
             BRANCH=${{ env.BRANCH }}
             ARCH=arch-linux-c-opt
@@ -87,7 +87,7 @@ jobs:
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           file: ./dockerfiles/Dockerfile_64_bit
-          tags: pflare_64_bit:latest
+          tags: stevendargaville/pflare_64_bit:latest
           build-args: |
             BRANCH=${{ env.BRANCH }}
             ARCH=arch-linux-c-opt
