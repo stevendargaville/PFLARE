@@ -106,4 +106,20 @@ jobs:
           file: ./dockerfiles/Dockerfile_nvidia
           build-args: |
             BRANCH=${{ env.BRANCH }}
-            ARCH=arch-linux-nvidia            
+            ARCH=arch-linux-nvidia
+            
+  build_intel_opt_no_test:
+    runs-on: ubuntu-22.04
+    needs: setup
+    env:
+      BRANCH: ${{ needs.setup.outputs.branch }}
+    steps:
+      - name: Build Docker image with PETSc and Intel
+        uses: docker/build-push-action@v2
+        with:
+          platforms: linux/amd64
+          push: false
+          file: ./dockerfiles/Dockerfile_intel
+          build-args: |
+            BRANCH=${{ env.BRANCH }}
+            ARCH=arch-linux-intel
