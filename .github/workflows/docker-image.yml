@@ -5,42 +5,38 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-    
+
 jobs:
-  build:
+  setup:
     runs-on: ubuntu-22.04
+    outputs:
+      branch: ${{ steps.determine_branch.outputs.branch }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ vars.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Determine branch to build
-        id: branch
+      - name: Determine branch
+        id: determine_branch
         run: |
-          # For pull requests, use the head ref (the branch that triggered the PR)
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "BRANCH=${{ github.event.pull_request.head.ref }}" >> $GITHUB_ENV
+            echo "branch=${{ github.event.pull_request.head.ref }}" >> $GITHUB_OUTPUT
           else
-            # For push events, use the ref name
-            echo "BRANCH=${{ github.ref_name }}" >> $GITHUB_ENV
+            echo "branch=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           fi
-
-      - name: downcase REPO
-        run: |
-          echo "REPO=${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV} 
 
       - name: free disk space
         run: |
           docker system prune --volumes -af            
 
+  build_gnu_debug:
+    runs-on: ubuntu-22.04
+    needs: setup
+    env:
+      BRANCH: ${{ needs.setup.outputs.branch }}
+    steps:
       - name: Build Docker image with debug PETSc
         uses: docker/build-push-action@v2
         with:
@@ -48,9 +44,76 @@ jobs:
           push: false
           file: ./dockerfiles/Dockerfile
           build-args: |
-            BRANCH=${{ env.BRANCH }}    
+            BRANCH=${{ env.BRANCH }}
             ARCH=arch-linux-c-debug
+            OPT=-O0 -g
 
+  build_gnu_opt:
+    runs-on: ubuntu-22.04
+    needs: setup
+    env:
+      BRANCH: ${{ needs.setup.outputs.branch }}
+    steps:
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}      
+      - name: Build Docker image for pull requests
+        uses: docker/build-push-action@v2
+        with:
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          file: ./dockerfiles/Dockerfile
+          tags: stevendargaville/pflare:latest
+          build-args: |
+            BRANCH=${{ env.BRANCH }}
+            ARCH=arch-linux-c-opt
+
+  build_gnu_opt_64_bit:
+    runs-on: ubuntu-22.04
+    needs: setup
+    env:
+      BRANCH: ${{ needs.setup.outputs.branch }}
+    steps:
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}        
+      - name: Build Docker image for pull requests with 64-bit PETSc
+        uses: docker/build-push-action@v2
+        with:
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          file: ./dockerfiles/Dockerfile_64_bit
+          tags: stevendargaville/pflare_64_bit:latest
+          build-args: |
+            BRANCH=${{ env.BRANCH }}
+            ARCH=arch-linux-c-opt
+
+  build_nvidia_opt:
+    runs-on: ubuntu-22.04
+    needs: setup
+    env:
+      BRANCH: ${{ needs.setup.outputs.branch }}
+    steps:
+      - name: Build Docker image with PETSc and NVIDIA compilers
+        uses: docker/build-push-action@v2
+        with:
+          platforms: linux/amd64
+          push: false
+          file: ./dockerfiles/Dockerfile_nvidia
+          build-args: |
+            BRANCH=${{ env.BRANCH }}
+            ARCH=arch-linux-nvidia
+            
+  build_intel_opt:
+    runs-on: ubuntu-22.04
+    needs: setup
+    env:
+      BRANCH: ${{ needs.setup.outputs.branch }}
+    steps:
       - name: Build Docker image with PETSc and Intel
         uses: docker/build-push-action@v2
         with:
@@ -59,62 +122,4 @@ jobs:
           file: ./dockerfiles/Dockerfile_intel
           build-args: |
             BRANCH=${{ env.BRANCH }}
-            ARCH=arch-linux-intel                  
-
-      - name: Build Docker image with PETSc and NVIDIA compilers
-        uses: docker/build-push-action@v2
-        with:
-          platforms: linux/amd64
-          push: false
-          file: ./dockerfiles/Dockerfile_nvidia
-          build-args: |
-            BRANCH=${{ env.BRANCH }}   
-            ARCH=arch-linux-nvidia 
-
-      - name: Build and push Docker image for push events
-        if: ${{ github.event_name != 'pull_request' }}
-        uses: docker/build-push-action@v2
-        with:
-          platforms: linux/amd64
-          push: true
-          file: ./dockerfiles/Dockerfile
-          tags: ${{ env.REPO }}:latest
-          build-args: |
-            BRANCH=${{ env.BRANCH }}
-            ARCH=arch-linux-c-opt
-
-      - name: Build Docker image for pull requests
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: docker/build-push-action@v2
-        with:
-          platforms: linux/amd64
-          push: false
-          file: ./dockerfiles/Dockerfile
-          tags: ${{ env.REPO }}:pr-build
-          build-args: |
-            BRANCH=${{ env.BRANCH }}
-            ARCH=arch-linux-c-opt
-
-      - name: Build and push 64-bit Docker image for push events
-        if: ${{ github.event_name != 'pull_request' }}
-        uses: docker/build-push-action@v2
-        with:
-          platforms: linux/amd64
-          push: true
-          file: ./dockerfiles/Dockerfile_64_bit
-          tags: ${{ env.REPO }}_64_bit:latest
-          build-args: |
-            BRANCH=${{ env.BRANCH }}
-            ARCH=arch-linux-c-opt
-
-      - name: Build 64-bit Docker image for pull requests
-        if: ${{ github.event_name == 'pull_request' }}
-        uses: docker/build-push-action@v2
-        with:
-          platforms: linux/amd64
-          push: false
-          file: ./dockerfiles/Dockerfile_64_bit
-          tags: ${{ env.REPO }}_64_bit:pr-build
-          build-args: |
-            BRANCH=${{ env.BRANCH }}
-            ARCH=arch-linux-c-opt
+            ARCH=arch-linux-intel

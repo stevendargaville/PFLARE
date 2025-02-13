@@ -75,11 +75,10 @@ along with specific link flags (``BLAS_LIB``, ``LAPACK_LIB``, ``MPI_LIB``, ``MAT
 
      make tests CC=cc FC=ftn OPT="-O2" BLAS_LIB="-lfblas" LAPACK_LIB="-lflapack"     
 
-A Dockerfile is also provided which builds all the dependencies, compiles the library and runs all the tests. To run this Docker image, from the top level directory use:
+An up to date Docker image is also available on Dockerhub which includes a build of PFLARE along with all dependencies. To run this Docker image interactively and run the tests use:
 
-     cd dockerfiles
-     docker build -t "pflare" .
-     docker run pflare
+     docker run -it stevendargaville/pflare
+     make tests
 
 ## Linking to PFLARE
 
