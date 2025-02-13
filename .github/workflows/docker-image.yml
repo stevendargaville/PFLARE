@@ -108,7 +108,7 @@ jobs:
             BRANCH=${{ env.BRANCH }}
             ARCH=arch-linux-nvidia
             
-  build_intel_opt:
+  build_intel_opt_no_test:
     runs-on: ubuntu-22.04
     needs: setup
     env:
