@@ -455,7 +455,7 @@ For example, on a single NVIDIA GPU with a 2D structured grid advection problem 
 
 The hierarchy in this case has 29 levels. If we turn on the auto truncation and set a very large truncation tolerance  
 
-``./adv_diff_2d.o -da_grid_x 1000 -da_grid_y 1000 -ksp_type richardson -pc_type air -pc_air_max_levels 11 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_poly_order 10 -dm_mat_type aijcusparse -dm_vec_type cuda -pc_air_auto_truncate_start_level 1 -pc_air_auto_truncate_tol 1e-1``
+``./adv_diff_2d.o -da_grid_x 1000 -da_grid_y 1000 -ksp_type richardson -pc_type air -pc_air_coarsest_inverse_type newton -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_poly_order 10 -dm_mat_type aijcusparse -dm_vec_type cuda -pc_air_auto_truncate_start_level 1 -pc_air_auto_truncate_tol 1e-1``
 
 we find that the 10th order polynomials are good enough coarse solvers to enable truncation of the hierarchy at level 11. This gives the same iteration count as without truncation and we see an overall speedup of ~1.47x in the solve on GPUs with this approach.
 
