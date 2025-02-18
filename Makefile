@@ -42,9 +42,9 @@ FFLAGS := ${FFLAGS} $(OPT) -fPIC
 # Read in the petscconf.h
 PETSC_HEADER_FILE := $(PETSC_DIR)/$(PETSC_ARCH)/include/petscconf.h
 CONTENTS := $(file < $(PETSC_HEADER_FILE))
-PETSC_HAVE_64_INT := 0
-ifneq (,$(findstring PETSC_SIZEOF_INT 8,$(CONTENTS)))
-PETSC_HAVE_64_INT := 1
+PETSC_USE_64BIT_INDICES := 0
+ifneq (,$(findstring PETSC_USE_64BIT_INDICES 1,$(CONTENTS)))
+PETSC_USE_64BIT_INDICES := 1
 endif
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -136,7 +136,7 @@ build_tests: $(OUT)
 # if PETSC has been configured without 64 bit integers
 tests: $(OUT)
 	$(MAKE) -C tests
-ifeq ($(PETSC_HAVE_64_INT),0)
+ifeq ($(PETSC_USE_64BIT_INDICES),0)
 	$(MAKE) -C tests run_tests_load
 endif	
 	$(MAKE) -C tests run_tests_no_load
