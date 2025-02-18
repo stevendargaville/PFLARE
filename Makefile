@@ -8,12 +8,13 @@
  
 # Compiler options - need both a fortran and c compiler
 # with appropriate mpi wrappings
-
+# If we want kokkos functionality we need to set a c++ compiler
+# These need to be exported into the sub-makefile for Cython to see the MPI headers
 # If you want to override these just pass in the values when you call this make
 # e.g., make CC=cc FC=ftn
-export FC := mpif90
-# This needs to be exported into the sub-makefile for Cython to see the MPI headers
-export CC := mpicc
+export FC  := mpif90
+export CC  := mpicc
+export CXX := mpicxx
 # The routine to launch an executable with mpi (sometimes mpiexec, sometimes mpirun, etc)
 # exported into the sub-makefiles for tests
 export MPIEXEC := mpiexec
@@ -31,13 +32,16 @@ export MPIEXEC := mpiexec
 #    but that would then trigger the threaded blas/lapack
 #    The only omp we want is internal to PFLARE
 
+# ~~~~~~~~~~~~~~~~~~~~~~~~
+# We currently don't require any compiler specific flags
+# ~~~~~~~~~~~~~~~~~~~~~~~~
 # By default compile with optimisations on
 export OPT := -O3
 CFLAGS := ${CFLAGS} $(OPT) -fPIC
 FFLAGS := ${FFLAGS} $(OPT) -fPIC
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
-# Has petsc has been configured with 64 bit integers
+# Has petsc has been configured with 64 bit integers and kokkos
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # Read in the petscconf.h
 PETSC_HEADER_FILE := $(PETSC_DIR)/$(PETSC_ARCH)/include/petscconf.h
@@ -46,11 +50,14 @@ PETSC_USE_64BIT_INDICES := 0
 ifneq (,$(findstring PETSC_USE_64BIT_INDICES 1,$(CONTENTS)))
 PETSC_USE_64BIT_INDICES := 1
 endif
+PETSC_HAVE_KOKKOS := 0
+ifneq (,$(findstring PETSC_HAVE_KOKKOS 1,$(CONTENTS)))
+PETSC_HAVE_KOKKOS := 1
+endif
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
-# We currently don't require any compiler specific flags
+# Set up our directory structure
 # ~~~~~~~~~~~~~~~~~~~~~~~~
-
 INCLUDEDIR  := include
 SRCDIR      := src
 OBJDIR      := obj
