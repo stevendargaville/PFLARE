@@ -37,6 +37,17 @@ CFLAGS := ${CFLAGS} $(OPT) -fPIC
 FFLAGS := ${FFLAGS} $(OPT) -fPIC
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
+# Has petsc has been configured with 64 bit integers
+# ~~~~~~~~~~~~~~~~~~~~~~~~
+# Read in the petscconf.h
+PETSC_HEADER_FILE := $(PETSC_DIR)/$(PETSC_ARCH)/include/petscconf.h
+CONTENTS := $(file < $(PETSC_HEADER_FILE))
+PETSC_USE_64BIT_INDICES := 0
+ifneq (,$(findstring PETSC_USE_64BIT_INDICES 1,$(CONTENTS)))
+PETSC_USE_64BIT_INDICES := 1
+endif
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~
 # We currently don't require any compiler specific flags
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -121,16 +132,14 @@ build_tests: $(OUT)
 	$(MAKE) -C tests
 
 # Build and run all the tests
+# Only run the tests that load the 32 bit test matrix in /tests/data
+# if PETSC has been configured without 64 bit integers
 tests: $(OUT)
 	$(MAKE) -C tests
+ifeq ($(PETSC_USE_64BIT_INDICES),0)
 	$(MAKE) -C tests run_tests_load
+endif	
 	$(MAKE) -C tests run_tests_no_load
-
-# Build and run only the tests that don't load 
-# the example matrix (which uses 32 bit ints)
-tests_no_load: $(OUT)
-	$(MAKE) -C tests
-	$(MAKE) -C tests run_tests_no_load	
 
 # Build the Python module with Cython
 .PHONY: python

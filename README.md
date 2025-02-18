@@ -60,7 +60,7 @@ This library depends on MPI, BLAS, LAPACK (>= 3.4) and PETSc (3.15 to 3.22) conf
 
 Then if desired:
 
-3) Call ``make tests`` in the top level directory to check the build worked with some simple Fortran and C tests (or ``make tests_no_load`` if PETSc has been configured with 64-bit integers).
+3) Call ``make tests`` in the top level directory to check the build worked with some simple Fortran and C tests.
 
 for the Python interface:
 
