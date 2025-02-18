@@ -53,29 +53,29 @@ PFLARE can scalably solve:
 
 ## Building PFLARE
 
-This library depends on MPI, BLAS, LAPACK (>= 3.4) and PETSc (3.15 to 3.22) configured with a graph partitioner (e.g., ParMETIS). Please compile PETSc directly from the source code, as PFLARE requires access to some of the PETSc types only available in the source. PFLARE has been tested with GNU, Intel, LLVM, NVIDIA and Cray compilers.
+This library depends on MPI, BLAS, LAPACK (>= 3.4) and PETSc (3.15 to 3.22) configured with a graph partitioner (e.g., ParMETIS). Please compile PETSc directly from the source code, as PFLARE requires access to some of the PETSc types only available in the source. PFLARE has been tested with GNU, Intel, LLVM, NVIDIA and Cray compilers. To build the shared library:
 
 1) Set `PETSC_DIR` and `PETSC_ARCH` environmental variables.
 2) Call ``make`` in the top level directory to build the PFLARE library.
 
 Then if desired:
 
-3) Call ``make tests`` in the top level directory to check the build worked with some simple Fortran and C tests.
+3) Call ``make tests`` in the top level directory to check the build worked with some simple tests.
 
-for the Python interface:
+Then if desired, build and test the Python interface:
 
 4) Call ``make python`` in the top level directory to build the Python module.
 5) Call ``make tests_python`` in the top level directory to check the Python build worked with some simple Python tests.
 
-Specific compilers (``CC`` and ``FC``) and optimisation flags (``OPT``) can be input on the command line if desired, e.g.,
+Specific compilers and optimisation flags can be input on the command line if desired, e.g.,
 
      make CC=cc FC=ftn OPT="-O2"
 
-along with specific link flags (``BLAS_LIB``, ``LAPACK_LIB``, ``MPI_LIB``, ``MATH_LIB``, ``METIS_LIB`` and ``PARMETIS_LIB``) for the tests
+along with specific link flags for the tests, e.g.,
 
      make tests CC=cc FC=ftn OPT="-O2" BLAS_LIB="-lfblas" LAPACK_LIB="-lflapack"     
 
-An up to date Docker image is also available on Dockerhub which includes a build of PFLARE along with all dependencies. To run this Docker image interactively and run the tests use:
+An up to date Docker image is also available on Dockerhub which includes a build of PFLARE along with all dependencies. To download this Docker image and run the tests use:
 
      docker run -it stevendargaville/pflare
      make tests
