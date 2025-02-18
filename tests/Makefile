@@ -37,6 +37,11 @@ MATH_LIB     := -lm
 METIS_LIB    := -lmetis
 # Can override PARMETIS_LIB from command line too
 PARMETIS_LIB := -lparmetis
+# Can override KOKKOS_KERNELS_LIB and KOKKOS_LIB from command line too
+ifeq ($(PETSC_HAVE_KOKKOS),1)
+KOKKOS_KERNELS_LIB := -lkokkoskernels
+KOKKOS_LIB         := -lkokkoscontainers -lkokkoscore -lkokkossimd 
+endif
 
 # Get any library flags we have on input
 LDFLAGS_INPUT := $(LDFLAGS)
@@ -52,14 +57,24 @@ LDFLAGS     := $(LDFLAGS) $(BLAS_LIB) $(LAPACK_LIB)
 LDFLAGS     := $(LDFLAGS) $(MPI_LIB)
 # Have to link to parmetis and metis - order is important
 LDFLAGS     := $(LDFLAGS) $(PARMETIS_LIB) $(METIS_LIB)
+# If we have kokkos we have to link to it
+ifeq ($(PETSC_HAVE_KOKKOS),1)
+LDFLAGS := $(LDFLAGS) $(KOKKOS_KERNELS_LIB) $(KOKKOS_LIB)
+endif
 # Include any input flags we had - these go last as order is important
 LDFLAGS     := $(LDFLAGS) $(LDFLAGS_INPUT)
+# ~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Define file extensions
-.SUFFIXES: .F90 .o .mod .c
+.SUFFIXES: .F90 .o .mod .c .cxx
 
 # Test examples
 OBJS := ex12f.o ex6f.o ex6f_getcoeffs.o ex6.o ex6_cf_splitting.o adv_1d.o adv_diff_2d.o
+# Include kokkos examples
+ifeq ($(PETSC_HAVE_KOKKOS),1)
+OBJS := $(OBJS) ex3k.kokkos.o
+endif
 
 # Build rules
 all: $(OBJS) 
@@ -71,6 +86,10 @@ all: $(OBJS)
 # C
 %.o: %.c
 	$(CC) $(CFLAGS) $(INCLUDE) $^ $(LDFLAGS) $(LDLIBS) -o $@
+
+# C++
+%.o: %.cxx
+	$(CXX) $(CFLAGS) $(INCLUDE) $^ $(LDFLAGS) $(LDLIBS) -o $@	
 
 run_tests_load:
 #
@@ -271,6 +290,16 @@ run_tests_no_load:
 	./adv_diff_2d.o -da_grid_x 10 -da_grid_y 10 -ksp_type richardson -pc_type air \
 	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys \
 	 -pc_air_auto_truncate_start_level 1 -pc_air_auto_truncate_tol 1e-2 -ksp_max_it 3
+# ~~~~~~~~~~~~~~~~~~~~~~~	 
+# Include kokkos examples	 
+# ~~~~~~~~~~~~~~~~~~~~~~~
+ifeq ($(PETSC_HAVE_KOKKOS),1)
+#
+	@echo ""
+	@echo "Test kokkos" 
+	./ex3k.kokkos.o -dm_vec_type kokkos -dm_mat_type aijkokkos
+endif
+
 
 clean:
 	$(RM) *.o *.mod *.out

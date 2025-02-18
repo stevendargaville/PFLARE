@@ -41,19 +41,22 @@ CFLAGS := ${CFLAGS} $(OPT) -fPIC
 FFLAGS := ${FFLAGS} $(OPT) -fPIC
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
-# Has petsc has been configured with 64 bit integers and kokkos
+# Has petsc has been configured with 64 bit integers/kokkos
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # Read in the petscconf.h
 PETSC_HEADER_FILE := $(PETSC_DIR)/$(PETSC_ARCH)/include/petscconf.h
 CONTENTS := $(file < $(PETSC_HEADER_FILE))
-PETSC_USE_64BIT_INDICES := 0
+export PETSC_USE_64BIT_INDICES := 0
 ifneq (,$(findstring PETSC_USE_64BIT_INDICES 1,$(CONTENTS)))
-PETSC_USE_64BIT_INDICES := 1
+export PETSC_USE_64BIT_INDICES := 1
 endif
-PETSC_HAVE_KOKKOS := 0
+export PETSC_HAVE_KOKKOS := 0
 ifneq (,$(findstring PETSC_HAVE_KOKKOS 1,$(CONTENTS)))
-PETSC_HAVE_KOKKOS := 1
+export PETSC_HAVE_KOKKOS := 1
 endif
+
+#$(info PETSc uses 64 bit integers $(PETSC_USE_64BIT_INDICES))
+#$(info PETSc has been configured with KOKKOS $(PETSC_HAVE_KOKKOS))
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # Set up our directory structure
