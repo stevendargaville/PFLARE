@@ -8,6 +8,12 @@
 # This uses the compilers and flags defined in the PETSc configuration
 # ~~~~~~~~~~~~~~~~~
 
+# Get the flags we have on input
+CFLAGS_INPUT := $(CFLAGS)
+FFLAGS_INPUT := $(FFLAGS)
+CPPFLAGS_INPUT := $(CPPFLAGS)
+FPPFLAGS_INPUT := $(FPPFLAGS)
+
 # Read in the petsc compile/linking variables and makefile rules
 include ${PETSC_DIR}/lib/petsc/conf/variables
 include ${PETSC_DIR}/lib/petsc/conf/rules
@@ -66,6 +72,12 @@ export TEST_TARGETS = ex12f ex6f ex6f_getcoeffs ex6 adv_1d adv_diff_2d ex6_cf_sp
 # Add the pflare include files
 PETSC_FC_INCLUDES += $(INCLUDE)
 PETSC_CC_INCLUDES += $(INCLUDE)
+
+# Include any additional flags we input
+CFLAGS += $(CFLAGS_INPUT)
+FFLAGS += $(FFLAGS_INPUT)
+CPPFLAGS += $(CPPFLAGS_INPUT)
+FPPFLAGS += $(FPPFLAGS_INPUT)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # Has petsc has been configured with 64 bit integers

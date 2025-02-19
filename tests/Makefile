@@ -5,6 +5,12 @@
 # This uses the compilers and flags defined in the PETSc configuration
 # ~~~~~~~~~~~~~~~~~
 
+# Can be overriden from the command line if needed
+CFLAGS   =
+FFLAGS   =
+CPPFLAGS =
+FPPFLAGS =
+
 # Read in the petsc compile/linking variables and makefile rules
 include ${PETSC_DIR}/lib/petsc/conf/variables
 include ${PETSC_DIR}/lib/petsc/conf/rules
