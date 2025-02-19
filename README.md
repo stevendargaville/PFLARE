@@ -363,42 +363,7 @@ To build PFLARE with OpenMP, add the appropriate OpenMP compiler flag before cal
 
 and then before running a problem with PFLARE, set the ``OMP_NUM_THREADS`` environmental variable to be the maximum number of threads to use; typically this would be the number of hardware cores per NUMA region.
 
-It is recommended that PFLARE be linked with unthreaded BLAS/LAPACK libraries, as there is often little gain from using threaded libraries with PFLARE and that ensures the ``OMP_NUM_THREADS`` environmental variable is used purely to control the OpenMP described above. 
-
-On Cray machines, adding the OpenMP compiler flag typically triggers linking to threaded libraries (e.g., BLAS/LAPACK). To work around this, it is recommended that PFLARE is built as a shared library (which is the default) with the compiler flag enabled, then any code which uses PFLARE is compiled without the compiler flag but with the OpenMP libraries included in the ``LDFLAGS``. This will ensure PFLARE can use OpenMP, but the unthreaded libraries are used to link. 
-
-For example, on ARCHER2 (a HPE Cray EX machine) to build PFLARE and the tests with GNU:
-
-     # Cray MPI compiler wrappers
-     export CC=cc
-     export FC=ftn
-
-     # Build PFLARE
-     export CFLAGS="-fopenmp"
-     export FFLAGS="-fopenmp" 
-     make CC=${CC} FC=${FC}
-
-     # Build the tests
-     export CFLAGS=""
-     export FFLAGS="" 
-     export LDFLAGS="-lgomp"
-     make build_tests CC=${CC} FC=${FC} 
-
-Running a test with OpenMP then requires setting the ``OMP_NUM_THREADS`` variable, ensuring the MPI ranks and OpenMP threads are correctly pinned and telling the queueing system that the problem is oversubscribed. For example, the (partial) slurm script to run adv_diff_2d on one node is:
-
-      #SBATCH --time=0:01:0
-      #SBATCH --nodes=1
-      #SBATCH --ntasks-per-node=128
-      #SBATCH --overcommit
-      #SBATCH --partition=standard
-      #SBATCH --qos=standard
-
-      # Give it a maximum of 4 threads
-      export OMP_NUM_THREADS=4
-
-      [ Set the hex mask which describes the pinning ]
-
-      srun --oversubscribe --distribution=block:block --cpu-bind=mask_cpu:$mask adv_diff_2d -pc_type air
+It is recommended that PFLARE be linked with unthreaded BLAS/LAPACK libraries, as there is often little gain from using threaded libraries with PFLARE and that ensures the ``OMP_NUM_THREADS`` environmental variable is used purely to control the OpenMP described above.
 
 ## GPU support           
 
