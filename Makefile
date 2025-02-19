@@ -4,148 +4,140 @@
 #
 # Must have defined PETSC_DIR and PETSC_ARCH before calling
 # PETSc must be at least version 3.15
+# Copied from $PETSC_DIR/share/petsc/Makefile.basic.user
+# This uses the compilers and flags defined in the PETSc configuration
 # ~~~~~~~~~~~~~~~~~
- 
-# Compiler options - need both a fortran and c compiler
-# with appropriate mpi wrappings
-# If we want kokkos functionality we need to set a c++ compiler
-# These need to be exported into the sub-makefile for Cython to see the MPI headers
-# If you want to override these just pass in the values when you call this make
-# e.g., make CC=cc FC=ftn
-export FC  := mpif90
-export CC  := mpicc
-export CXX := mpicxx
-# The routine to launch an executable with mpi (sometimes mpiexec, sometimes mpirun, etc)
-# exported into the sub-makefiles for tests
-export MPIEXEC := mpiexec
 
-# Compile flags - we deliberately don't export these here
-# If we want to compile PFLARE with omp, we can set the CFLAGS and FFLAGS variables
-# externally to have -fopenmp
-# When we compile the tests, we need to add -gomp to the LDFLAGS and not have
-# -fopenmp in the compile flags, as:
-# 1) They don't explicitly have any omp in them
-# 2) On cray machines, linking happens when we compile/link the tests
-#    and we want don't want PFLARE to be linked to the threaded libraries
-#    This is because we have to set the OMP_NUM_THREADS/=1 (and sort out the pinning)
-#    to have the cray runtime correctly run in oversubscribed mode 
-#    but that would then trigger the threaded blas/lapack
-#    The only omp we want is internal to PFLARE
+# Get the flags we have on input
+CFLAGS_INPUT := $(CFLAGS)
+FFLAGS_INPUT := $(FFLAGS)
+CPPFLAGS_INPUT := $(CPPFLAGS)
+FPPFLAGS_INPUT := $(FPPFLAGS)
+
+# Read in the petsc compile/linking variables and makefile rules
+include ${PETSC_DIR}/lib/petsc/conf/variables
+include ${PETSC_DIR}/lib/petsc/conf/rules
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
-# We currently don't require any compiler specific flags
-# ~~~~~~~~~~~~~~~~~~~~~~~~
-# By default compile with optimisations on
-export OPT := -O3
-CFLAGS := ${CFLAGS} $(OPT) -fPIC
-FFLAGS := ${FFLAGS} $(OPT) -fPIC
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~
-# Has petsc has been configured with 64 bit integers/kokkos
+# Has petsc has been configured with 64 bit integers/shared libraries/kokkos
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # Read in the petscconf.h
 PETSC_HEADER_FILE := $(PETSC_DIR)/$(PETSC_ARCH)/include/petscconf.h
 CONTENTS := $(file < $(PETSC_HEADER_FILE))
 export PETSC_USE_64BIT_INDICES := 0
 ifneq (,$(findstring PETSC_USE_64BIT_INDICES 1,$(CONTENTS)))
-export PETSC_USE_64BIT_INDICES := 1
+PETSC_USE_64BIT_INDICES := 1
+endif  		  
+PETSC_USE_SHARED_LIBRARIES := 0
+ifneq (,$(findstring PETSC_USE_SHARED_LIBRARIES 1,$(CONTENTS)))
+PETSC_USE_SHARED_LIBRARIES := 1
 endif
 export PETSC_HAVE_KOKKOS := 0
 ifneq (,$(findstring PETSC_HAVE_KOKKOS 1,$(CONTENTS)))
 export PETSC_HAVE_KOKKOS := 1
 endif
 
-#$(info PETSc uses 64 bit integers $(PETSC_USE_64BIT_INDICES))
-#$(info PETSc has been configured with KOKKOS $(PETSC_HAVE_KOKKOS))
+# ~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~
-# Set up our directory structure
-# ~~~~~~~~~~~~~~~~~~~~~~~~
+# Directories we want
 INCLUDEDIR  := include
 SRCDIR      := src
-OBJDIR      := obj
 # This needs to be exported into the sub-makefile for Cython
 export LIBDIR := $(CURDIR)/lib
 
 # Include directories - include top level directory in case compilers output modules there
-INCLUDE := -I$(CURDIR) -I$(INCLUDEDIR) -I$(PETSC_DIR)/include -I$(PETSC_DIR)/$(PETSC_ARCH)/include
-
-# Output the library
-OUT = $(LIBDIR)/libpflare.so
-
-# Define file extensions
-.SUFFIXES: .F90 .o .mod .c
+INCLUDE := -I$(CURDIR) -I$(INCLUDEDIR)
 
 # All the files required by PFLARE
-OBJS := $(OBJDIR)/NonBusyWait.o \
-		  $(OBJDIR)/Binary_Tree.o \
-		  $(OBJDIR)/TSQR.o \
-		  $(OBJDIR)/Gmres_Poly_Data_Type.o \
-		  $(OBJDIR)/AIR_Data_Type.o \
-		  $(OBJDIR)/Matshell_Data_Type.o \
-		  $(OBJDIR)/Matshell.o \
-		  $(OBJDIR)/Sorting.o \
-		  $(OBJDIR)/C_PETSc_Interfaces.o \
-		  $(OBJDIR)/PCPFLAREINV_Interfaces.o \
-		  $(OBJDIR)/PCAIR_Data_Type.o \
-		  $(OBJDIR)/PETSc_Helper.o \
-		  $(OBJDIR)/Gmres_Poly.o \
-		  $(OBJDIR)/Gmres_Poly_Newton.o \
-		  $(OBJDIR)/AIR_MG_Stats.o \
-		  $(OBJDIR)/SAI_Z.o \
-		  $(OBJDIR)/Constrain_Z_or_W.o \
-		  $(OBJDIR)/PMISR_DDC.o \
-		  $(OBJDIR)/Aggregation.o \
-		  $(OBJDIR)/CF_Splitting.o \
-		  $(OBJDIR)/Repartition.o \
-		  $(OBJDIR)/Timers.o \
-		  $(OBJDIR)/Weighted_Jacobi.o \
-		  $(OBJDIR)/Neumann_Poly.o \
-		  $(OBJDIR)/Approx_Inverse_Setup.o \
-		  $(OBJDIR)/AIR_MG_Setup.o \
-		  $(OBJDIR)/PCAIR_Shell.o \
-		  $(OBJDIR)/PCAIR_Interfaces.o \
-		  $(OBJDIR)/PFLARE.o \
-		  $(OBJDIR)/C_PETSc_Routines.o \
-		  $(OBJDIR)/C_Fortran_Bindings.o \
-		  $(OBJDIR)/PCAIR_C_Fortran_Bindings.o \
-		  $(OBJDIR)/PCAIR.o \
-		  $(OBJDIR)/PCPFLAREINV.o		  
+OBJS := $(SRCDIR)/NonBusyWait.o \
+		  $(SRCDIR)/Binary_Tree.o \
+		  $(SRCDIR)/TSQR.o \
+		  $(SRCDIR)/Gmres_Poly_Data_Type.o \
+		  $(SRCDIR)/AIR_Data_Type.o \
+		  $(SRCDIR)/Matshell_Data_Type.o \
+		  $(SRCDIR)/Matshell.o \
+		  $(SRCDIR)/Sorting.o \
+		  $(SRCDIR)/C_PETSc_Interfaces.o \
+		  $(SRCDIR)/PCPFLAREINV_Interfaces.o \
+		  $(SRCDIR)/PCAIR_Data_Type.o \
+		  $(SRCDIR)/PETSc_Helper.o \
+		  $(SRCDIR)/Gmres_Poly.o \
+		  $(SRCDIR)/Gmres_Poly_Newton.o \
+		  $(SRCDIR)/AIR_MG_Stats.o \
+		  $(SRCDIR)/SAI_Z.o \
+		  $(SRCDIR)/Constrain_Z_or_W.o \
+		  $(SRCDIR)/PMISR_DDC.o \
+		  $(SRCDIR)/Aggregation.o \
+		  $(SRCDIR)/CF_Splitting.o \
+		  $(SRCDIR)/Repartition.o \
+		  $(SRCDIR)/Timers.o \
+		  $(SRCDIR)/Weighted_Jacobi.o \
+		  $(SRCDIR)/Neumann_Poly.o \
+		  $(SRCDIR)/Approx_Inverse_Setup.o \
+		  $(SRCDIR)/AIR_MG_Setup.o \
+		  $(SRCDIR)/PCAIR_Shell.o \
+		  $(SRCDIR)/PCAIR_Interfaces.o \
+		  $(SRCDIR)/PFLARE.o \
+		  $(SRCDIR)/C_PETSc_Routines.o \
+		  $(SRCDIR)/C_Fortran_Bindings.o \
+		  $(SRCDIR)/PCAIR_C_Fortran_Bindings.o \
+		  $(SRCDIR)/PCAIR.o \
+		  $(SRCDIR)/PCPFLAREINV.o	
 
-# Build rules
-all: $(OBJDIR) $(OUT)
+# Define a variable containing all the tests
+export TEST_TARGETS = ex12f ex6f ex6f_getcoeffs ex6 adv_1d adv_diff_2d ex6_cf_splitting
+# Include kokkos examples
+ifeq ($(PETSC_HAVE_KOKKOS),1)
+export TEST_TARGETS := $(TEST_TARGETS) adv_1dk.kokkos
+endif
 
-# Create the build directories
-$(OBJDIR):
-	mkdir -p $(OBJDIR)
-	mkdir -p $(LIBDIR)
-	mkdir -p $(INCLUDEDIR)
+# Add the pflare include files
+PETSC_FC_INCLUDES += $(INCLUDE)
+PETSC_CC_INCLUDES += $(INCLUDE)
 
-# Fortran
-# Place the .o files in the $(OBJDIR) directory
-# Module files either go in $(OBJDIR) or the top level 
-# directory depending on compiler
-$(OBJDIR)/%.o: $(SRCDIR)/%.F90
-	$(FC) $(FFLAGS) -c $(INCLUDE) $^ -o $@
+# Include any additional flags we input
+CFLAGS += $(CFLAGS_INPUT)
+FFLAGS += $(FFLAGS_INPUT)
+CPPFLAGS += $(CPPFLAGS_INPUT)
+FPPFLAGS += $(FPPFLAGS_INPUT)
 
-# C files
-# Place the .o files in the $(OBJDIR) directory
-$(OBJDIR)/%.o: $(SRCDIR)/%.c
-	$(CC) $(CFLAGS) -c $(INCLUDE) $^ -o $@
+# Output the library - either static or dynamic
+ifeq ($(PETSC_USE_SHARED_LIBRARIES),0)
+OUT = $(LIBDIR)/libpflare.a
+else
+OUT = $(LIBDIR)/libpflare.so
+endif
 
-# Make our shared library
-$(OUT): $(OBJS) 
-	$(FC) -shared -fPIC $^ -o $(OUT)
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Rules
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.DEFAULT_GOAL := all		  	
+all: $(OUT)
+
+# # Create our directory structure and build the library
+# # (either static or dynamic depending on what petsc was configured with)
+$(OUT): $(OBJS)
+	@mkdir -p $(LIBDIR)
+	@mkdir -p $(INCLUDEDIR)
+ifeq ($(PETSC_USE_SHARED_LIBRARIES),0)	
+	ar rcs $(OUT) $(OBJS)
+else	
+	$(LINK.F) -shared -o $(OUT) $(OBJS) $(LDLIBS)
+endif
 
 # Build the tests
 build_tests: $(OUT)
-	$(MAKE) -C tests
+	@for t in $(TEST_TARGETS); do \
+		$(MAKE) -C tests $$t; \
+	done
 
 # Build and run all the tests
 # Only run the tests that load the 32 bit test matrix in /tests/data
 # if PETSC has been configured without 64 bit integers
+.PHONY: tests
 tests: $(OUT)
-	$(MAKE) -C tests
+	$(MAKE) build_tests
 ifeq ($(PETSC_USE_64BIT_INDICES),0)
 	$(MAKE) -C tests run_tests_load
 endif	
@@ -161,13 +153,11 @@ tests_python: $(OUT)
 	$(MAKE) -C python run_tests
 
 # Cleanup
-clean:
-	$(RM) -r $(OBJDIR)
+clean::
 	$(RM) -r $(LIBDIR)
 	$(RM) $(INCLUDEDIR)/*.mod
 	$(RM) $(SRCDIR)/*.mod
+	$(RM) $(SRCDIR)/*.o
 	$(RM) $(CURDIR)/*.mod
 	$(MAKE) -C tests clean
 	$(MAKE) -C python clean
-
-.PHONY: tests

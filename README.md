@@ -53,36 +53,28 @@ PFLARE can scalably solve:
 
 ## Building PFLARE
 
-This library depends on MPI, BLAS, LAPACK (>= 3.4) and PETSc (3.15 to 3.22) configured with a graph partitioner (e.g., ParMETIS). Please compile PETSc directly from the source code, as PFLARE requires access to some of the PETSc types only available in the source. PFLARE has been tested with GNU, Intel, LLVM, NVIDIA and Cray compilers.
+This library depends on MPI, BLAS, LAPACK and PETSc (3.15 to 3.22) configured with a graph partitioner (e.g., ParMETIS). Please compile PETSc directly from the source code, as PFLARE requires access to some of the PETSc types only available in the source. PFLARE has been tested with GNU, Intel, LLVM, NVIDIA and Cray compilers. PFLARE uses the same compilers and flags used in the PETSc configure.
 
 1) Set `PETSC_DIR` and `PETSC_ARCH` environmental variables.
 2) Call ``make`` in the top level directory to build the PFLARE library.
 
 Then if desired:
 
-3) Call ``make tests`` in the top level directory to check the build worked with some simple Fortran and C tests.
+3) Call ``make tests`` in the top level directory to check the build worked with some simple tests.
 
-for the Python interface:
+Then if desired, build and test the Python interface:
 
 4) Call ``make python`` in the top level directory to build the Python module.
-5) Call ``make tests_python`` in the top level directory to check the Python build worked with some simple Python tests.
+5) Call ``make tests_python`` in the top level directory to check the Python build worked with some simple Python tests.  
 
-Specific compilers (``CC`` and ``FC``) and optimisation flags (``OPT``) can be input on the command line if desired, e.g.,
-
-     make CC=cc FC=ftn OPT="-O2"
-
-along with specific link flags (``BLAS_LIB``, ``LAPACK_LIB``, ``MPI_LIB``, ``MATH_LIB``, ``METIS_LIB`` and ``PARMETIS_LIB``) for the tests
-
-     make tests CC=cc FC=ftn OPT="-O2" BLAS_LIB="-lfblas" LAPACK_LIB="-lflapack"     
-
-An up to date Docker image is also available on Dockerhub which includes a build of PFLARE along with all dependencies. To run this Docker image interactively and run the tests use:
+An up to date Docker image is also available on Dockerhub which includes a build of PFLARE along with all dependencies. To download this Docker image and run the tests use:
 
      docker run -it stevendargaville/pflare
      make tests
 
 ## Linking to PFLARE
 
-1) For Fortran/C, link the library `libpflare.so` to your application; it is output to `lib/`. For Fortran, you must include `pflare.h` in `include/finclude/`, for C you must include `pflare.h` in `include/`.
+1) For Fortran/C, link the library `libpflare` to your application; it is output to `lib/`. For Fortran, you must include `pflare.h` in `include/finclude/`, for C you must include `pflare.h` in `include/`.
 2) For Python, ensure the full path to `python/` is in your `PYTHONPATH` environmental variable along with the path for PETSc. Your `LD_LIBRARY_PATH` must include the `lib/` directory (along with paths for PETSc, BLAS and LAPACK).
 
 Using the components of PFLARE in an existing PETSc code is very simple. For C/Fortran, the user must call a single function which registers the new PC types with PETSc, while in Python this is handled by the import statement:
@@ -406,27 +398,27 @@ Running a test with OpenMP then requires setting the ``OMP_NUM_THREADS`` variabl
 
       [ Set the hex mask which describes the pinning ]
 
-      srun --oversubscribe --distribution=block:block --cpu-bind=mask_cpu:$mask adv_diff_2d.o -pc_type air
+      srun --oversubscribe --distribution=block:block --cpu-bind=mask_cpu:$mask adv_diff_2d -pc_type air
 
 ## GPU support           
 
 If PETSc has been configured with GPU support (e.g., CUDA, HIP, Kokkos) then PCPFLAREINV and PCAIR support GPUs. This relies on the matrix and vector types being set correctly by the user, which is typically done through command line options. By default the setup/solve occurs on the CPU. For example, if we solve the 1D advection problem ``tests/adv_1d`` using a 30th order GMRES polynomial applied matrix-free with the command line options:
 
-``./adv_1d.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30``
+``./adv_1d -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30``
 
 the setup/solve will occur on the CPU. If we want to run on GPUs, we must ensure the matrix/vector types match the appropriate GPU types. In both ``tests/adv_1d`` and ``tests/adv_diff_2d``, these types can be set through command line arguments. The types are specified with either ``-mat_type`` and ``-vec_type``, or if set by a DM directly (like in ``tests/adv_diff_2d``), use ``-dm_mat_type`` and ``-dm_vec_type``. 
 
 If using CUDA directly:
 
-``./adv_1d.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijcusparse -vec_type cuda``
+``./adv_1d -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijcusparse -vec_type cuda``
 
 If using HIP directly:
 
-``./adv_1d.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijhipsparse -vec_type hip``
+``./adv_1d -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijhipsparse -vec_type hip``
 
 If using KOKKOS (with either the CUDA or HIP back-end):
 
-``./adv_1d.o -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijkokkos -vec_type kokkos``
+``./adv_1d -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijkokkos -vec_type kokkos``
 
 For both PCPFLAREINV and PCAIR, the entirity of the solve happens on GPUs without any copies between the CPU/GPU if using either CUDA directly, or using KOKKOS with the CUDA or HIP back-end. Using HIP directly incurs copies during the solve so we would not recommend this currently. 
 
@@ -451,11 +443,11 @@ This is based around using the high-order polynomials applied matrix free as a c
 
 For example, on a single NVIDIA GPU with a 2D structured grid advection problem we apply a high order (10th order) Newton polynomial matrix-free as a coarse grid solver:
 
-``./adv_diff_2d.o -da_grid_x 1000 -da_grid_y 1000 -ksp_type richardson -pc_type air -pc_air_coarsest_inverse_type newton -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_poly_order 10 -dm_mat_type aijcusparse -dm_vec_type cuda``
+``./adv_diff_2d -da_grid_x 1000 -da_grid_y 1000 -ksp_type richardson -pc_type air -pc_air_coarsest_inverse_type newton -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_poly_order 10 -dm_mat_type aijcusparse -dm_vec_type cuda``
 
 The hierarchy in this case has 29 levels. If we turn on the auto truncation and set a very large truncation tolerance  
 
-``./adv_diff_2d.o -da_grid_x 1000 -da_grid_y 1000 -ksp_type richardson -pc_type air -pc_air_coarsest_inverse_type newton -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_poly_order 10 -dm_mat_type aijcusparse -dm_vec_type cuda -pc_air_auto_truncate_start_level 1 -pc_air_auto_truncate_tol 1e-1``
+``./adv_diff_2d -da_grid_x 1000 -da_grid_y 1000 -ksp_type richardson -pc_type air -pc_air_coarsest_inverse_type newton -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_poly_order 10 -dm_mat_type aijcusparse -dm_vec_type cuda -pc_air_auto_truncate_start_level 1 -pc_air_auto_truncate_tol 1e-1``
 
 we find that the 10th order polynomials are good enough coarse solvers to enable truncation of the hierarchy at level 11. This gives the same iteration count as without truncation and we see an overall speedup of ~1.47x in the solve on GPUs with this approach.
 

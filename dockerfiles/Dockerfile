@@ -5,8 +5,6 @@ FROM ${BASE_IMAGE}
 ARG BRANCH=main
 # Use the optimised petsc build by default
 ARG ARCH=arch-linux-c-opt
-# Compile PFLARE with optimisation by default
-ARG OPT=-O3
 
 LABEL maintainer="Steven Dargaville"
 LABEL description="PFLARE"
@@ -16,7 +14,6 @@ LABEL description="PFLARE"
 
 ENV CHECKOUT_BRANCH=$BRANCH
 ENV PETSC_ARCH=$ARCH
-ENV OPT_FLAG=$OPT
 
 WORKDIR /build
 
@@ -25,7 +22,7 @@ RUN set -e; \
     echo "Cloning branch: ${CHECKOUT_BRANCH}" && \
     git clone --branch ${CHECKOUT_BRANCH} https://github.com/stevendargaville/PFLARE.git && \
     cd PFLARE && \
-    make "OPT=${OPT_FLAG}" && make "OPT=${OPT_FLAG}" tests && \
-    make "OPT=${OPT_FLAG}" python && make "OPT=${OPT_FLAG}" tests_python
+    make && make tests && \
+    make python && make tests_python
 
 WORKDIR /build/PFLARE
