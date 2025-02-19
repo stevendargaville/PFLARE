@@ -60,14 +60,14 @@ This library depends on MPI, BLAS, LAPACK and PETSc (3.15 to 3.22) configured wi
 
 Then if desired:
 
-3) Call ``make tests`` in the top level directory to check the build worked with some simple Fortran and C tests.
+3) Call ``make tests`` in the top level directory to check the build worked with some simple tests.
 
-for the Python interface:
+Then if desired, build and test the Python interface:
 
 4) Call ``make python`` in the top level directory to build the Python module.
 5) Call ``make tests_python`` in the top level directory to check the Python build worked with some simple Python tests.  
 
-An up to date Docker image is also available on Dockerhub which includes a build of PFLARE along with all dependencies. To run this Docker image interactively and run the tests use:
+An up to date Docker image is also available on Dockerhub which includes a build of PFLARE along with all dependencies. To download this Docker image and run the tests use:
 
      docker run -it stevendargaville/pflare
      make tests
