@@ -17,14 +17,13 @@ ENV PETSC_ARCH=$ARCH
 WORKDIR /build
 
 # Clone PFLARE and run all the tests
+# Skip running the tests until we figure out what is breaking the 
+# power basis in parallel
 RUN source /opt/intel/oneapi/setvars.sh && \
     set -e; \
     echo "Cloning branch: ${CHECKOUT_BRANCH}" && \
     git clone --branch ${CHECKOUT_BRANCH} https://github.com/stevendargaville/PFLARE.git && \
     cd PFLARE && \
-    make
-    # Skip the tests until we figure out what is breaking the 
-    # power basis in parallel
-    #make tests
+    make && make build_tests
 
 WORKDIR /build/PFLARE
