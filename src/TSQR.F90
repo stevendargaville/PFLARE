@@ -110,7 +110,7 @@ module tsqr
       ! and no_of_row_blocks goes negative, in that case just use an ordinary QR
       ! Or if dlatsqr isnt' available on the platform can just comment out this if statement and 
       ! the else below and use the ordinary QR here
-      if (m_size .le. n_size) then
+      !if (m_size .le. n_size) then
 
          ! Skip the qr if we have zero local rows - this case can only occur here where m_size .le. n_size
          if (m_size /= 0) then
@@ -137,38 +137,38 @@ module tsqr
       ! ~~~~~~~~
       ! Tall-skinny specific QR - hopefully faster
       ! ~~~~~~~~                         
-      else
+      ! else
          
-         ! Start with a workspace query on the size of lwork
-         ! Just set the column block size to be the number of columns
-         column_block_size = n_size
-         ! Have no idea about the block sizes, but I've seen stuff saying a row block size
-         ! of 64 is a good start         
-         row_block_size = 64
-         if (row_block_size > m_size) row_block_size = m_size
+      !    ! Start with a workspace query on the size of lwork
+      !    ! Just set the column block size to be the number of columns
+      !    column_block_size = n_size
+      !    ! Have no idea about the block sizes, but I've seen stuff saying a row block size
+      !    ! of 64 is a good start         
+      !    row_block_size = 64
+      !    if (row_block_size > m_size) row_block_size = m_size
 
-         no_of_row_blocks = ceiling(dble(m_size-(n_size))/dble(row_block_size-(n_size)))
+      !    no_of_row_blocks = ceiling(dble(m_size-(n_size))/dble(row_block_size-(n_size)))
 
-         allocate(T(column_block_size * (n_size) * no_of_row_blocks))
-         call dlatsqr(m_size, n_size, &
-                     row_block_size, column_block_size, &
-                     A(1, 1), m_size, &
-                     T, column_block_size, &
-                     work, lwork, errorcode)  
-         lwork = int(work(1))
-         deallocate(work)
-         allocate(work(lwork))    
+      !    allocate(T(column_block_size * (n_size) * no_of_row_blocks))
+      !    call dlatsqr(m_size, n_size, &
+      !                row_block_size, column_block_size, &
+      !                A(1, 1), m_size, &
+      !                T, column_block_size, &
+      !                work, lwork, errorcode)  
+      !    lwork = int(work(1))
+      !    deallocate(work)
+      !    allocate(work(lwork))    
          
-         ! Now do the actual qr
-         call dlatsqr(m_size, n_size, &
-                     row_block_size, column_block_size, &
-                     A(1, 1), m_size, &
-                     T, column_block_size, &
-                     work, lwork, errorcode)       
-         ! Don't need the bits of Q
-         deallocate(T, work)
+      !    ! Now do the actual qr
+      !    call dlatsqr(m_size, n_size, &
+      !                row_block_size, column_block_size, &
+      !                A(1, 1), m_size, &
+      !                T, column_block_size, &
+      !                work, lwork, errorcode)       
+      !    ! Don't need the bits of Q
+      !    deallocate(T, work)
 
-      end if
+      ! end if
 
   
       ! We use this variable to note which rows need to be scaled by -1
@@ -307,7 +307,9 @@ module tsqr
       ! from invec and the first one from inoutvec
       allocate(R_stacked(2 * n_size, n_size))  
 
-      nb = 2               
+      ! Use nb = 2 with dtpqrt
+      !nb = 2               
+      nb = 1
       allocate(tau(nb * n_size))
       allocate(work(nb * n_size))
 
@@ -336,29 +338,29 @@ module tsqr
          ! This uses ?tpqrt which specifically assumes this sort of stacked tridiagonal form
          ! Setting M=L=N as we don't have the rectagonal component of B
          ! we just have two stacked upper triangles
-         call dtpqrt(n_size, n_size, n_size, &
-                  nb, R_stacked(1, 1), size(R_stacked, 1), &
-                  R_stacked(n_size+1, 1), size(R_stacked, 1), &
-                  tau, nb, &
-                  work, errorcode)
+         ! call dtpqrt(n_size, n_size, n_size, &
+         !          nb, R_stacked(1, 1), size(R_stacked, 1), &
+         !          R_stacked(n_size+1, 1), size(R_stacked, 1), &
+         !          tau, nb, &
+         !          work, errorcode)
 
          ! Here is some code that just uses the ordinary QR fatorisation in case dtpqrt
          ! isn't available on the platform - if you use this set nb = 1 above
          ! There won't be a big flop difference for such small matrices
 
-         ! Start with a workspace query on the size of lwork
-         ! lwork = -1
-         ! call dgeqrf(size(R_stacked, 1), size(R_stacked, 2), &
-         !             R_stacked(1, 1), size(R_stacked, 1), &
-         !             tau, work, lwork, errorcode)
-         ! lwork = work(1)
-         ! deallocate(work)
-         ! allocate(work(lwork))
+         !Start with a workspace query on the size of lwork
+         lwork = -1
+         call dgeqrf(size(R_stacked, 1), size(R_stacked, 2), &
+                     R_stacked(1, 1), size(R_stacked, 1), &
+                     tau, work, lwork, errorcode)
+         lwork = work(1)
+         deallocate(work)
+         allocate(work(lwork))
 
-         ! ! Now actually do the qr
-         ! call dgeqrf(size(R_stacked, 1), size(R_stacked, 2), &
-         !             R_stacked(1, 1), size(R_stacked, 1), &
-         !             tau, work, lwork, errorcode)  
+         ! Now actually do the qr
+         call dgeqrf(size(R_stacked, 1), size(R_stacked, 2), &
+                     R_stacked(1, 1), size(R_stacked, 1), &
+                     tau, work, lwork, errorcode)  
 
          ! We can enforce a unique solution here by enforcing positive diagonal entries
          ! in R, different versions of lapack either do or don't enforce this
