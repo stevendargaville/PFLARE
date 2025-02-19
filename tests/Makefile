@@ -73,7 +73,7 @@ LDFLAGS     := $(LDFLAGS) $(LDFLAGS_INPUT)
 OBJS := ex12f.o ex6f.o ex6f_getcoeffs.o ex6.o ex6_cf_splitting.o adv_1d.o adv_diff_2d.o
 # Include kokkos examples
 ifeq ($(PETSC_HAVE_KOKKOS),1)
-OBJS := $(OBJS) ex3k.kokkos.o
+OBJS := $(OBJS) adv_1d.kokkos.o
 endif
 
 # Build rules
@@ -290,14 +290,17 @@ run_tests_no_load:
 	./adv_diff_2d.o -da_grid_x 10 -da_grid_y 10 -ksp_type richardson -pc_type air \
 	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys \
 	 -pc_air_auto_truncate_start_level 1 -pc_air_auto_truncate_tol 1e-2 -ksp_max_it 3
+#	 
 # ~~~~~~~~~~~~~~~~~~~~~~~	 
 # Include kokkos examples	 
 # ~~~~~~~~~~~~~~~~~~~~~~~
 ifeq ($(PETSC_HAVE_KOKKOS),1)
-#
+# 
 	@echo ""
-	@echo "Test kokkos" 
-	./ex3k.kokkos.o -dm_vec_type kokkos -dm_mat_type aijkokkos
+	@echo "Test AIRG on steady 1D advection KOKKOS"
+	./adv_1d.kokkos.o -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right \
+	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys -ksp_max_it 1 \
+	 -vec_type kokkos -mat_type aijkokkos
 endif
 
 
