@@ -1,7 +1,13 @@
 # ~~~~~~~~~~~~~~~~~
 # PFLARE - Steven Dargaville
 # Makefile for python interface
+# Copied from $PETSC_DIR/share/petsc/Makefile.basic.user
+# This uses the compilers and flags defined in the PETSc configuration
 # ~~~~~~~~~~~~~~~~~
+
+# Read in the petsc compile/linking variables and makefile rules
+include ${PETSC_DIR}/lib/petsc/conf/variables
+include ${PETSC_DIR}/lib/petsc/conf/rules
 
 # Required during compilation to tell Cython where to look for libpflare
 # The CC variable has been defined to use the MPI wrapper for the C compiler in the parent Makefile
@@ -42,5 +48,5 @@ run_tests:
 	$(MPIEXEC) -n 2 python3 ex2_cf_splitting.py	
 
 # Cleanup
-clean:
+clean::
 	$(RM) *.so; $(RM) pflare.c; $(RM) pflare_defs.c; $(RM) -r build/; $(RM) -r __pycache__/
