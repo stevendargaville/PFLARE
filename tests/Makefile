@@ -2,6 +2,7 @@
 # PFLARE - Steven Dargaville
 # Makefile for tests
 # Copied from $PETSC_DIR/share/petsc/Makefile.basic.user
+# This uses the compilers and flags defined in the PETSc configuration
 # ~~~~~~~~~~~~~~~~~
 
 # Read in the petsc compile/linking variables and makefile rules
@@ -20,10 +21,12 @@ PETSC_CC_INCLUDES += $(INCLUDE)
 # Link to pflare
 LDLIBS += -L$(LIBDIR) -lpflare -Wl,-rpath,$(LIBDIR)
 
+clean::
+	$(RM) -f $(TEST_TARGETS)
+
 # ~~~~~~~~~~~
 # Run PFLARE tests
 # ~~~~~~~~~~~
-
 run_tests_load:
 #
 	@echo ""

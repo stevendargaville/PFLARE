@@ -5,6 +5,7 @@
 # Must have defined PETSC_DIR and PETSC_ARCH before calling
 # PETSc must be at least version 3.15
 # Copied from $PETSC_DIR/share/petsc/Makefile.basic.user
+# This uses the compilers and flags defined in the PETSc configuration
 # ~~~~~~~~~~~~~~~~~
 
 # Read in the petsc compile/linking variables and makefile rules
@@ -59,6 +60,9 @@ OBJS := $(SRCDIR)/NonBusyWait.o \
 		  $(SRCDIR)/PCAIR.o \
 		  $(SRCDIR)/PCPFLAREINV.o	
 
+# Define a variable containing all the tests
+export TEST_TARGETS = ex12f ex6f ex6f_getcoeffs ex6 adv_1d adv_diff_2d ex6_cf_splitting
+
 # Add the pflare include files
 PETSC_FC_INCLUDES += $(INCLUDE)
 PETSC_CC_INCLUDES += $(INCLUDE)
@@ -84,13 +88,9 @@ $(OUT): $(OBJS)
 
 # Build the tests
 build_tests: $(OUT)
-	$(MAKE) -C tests ex12f
-	$(MAKE) -C tests ex6f
-	$(MAKE) -C tests ex6f_getcoeffs
-	$(MAKE) -C tests ex6
-	$(MAKE) -C tests ex6_cf_splitting
-	$(MAKE) -C tests adv_1d
-	$(MAKE) -C tests adv_diff_2d
+	@for t in $(TEST_TARGETS); do \
+		$(MAKE) -C tests $$t; \
+	done
 
 # Build and run all the tests
 # Only run the tests that load the 32 bit test matrix in /tests/data

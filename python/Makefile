@@ -1,6 +1,8 @@
 # ~~~~~~~~~~~~~~~~~
 # PFLARE - Steven Dargaville
 # Makefile for python interface
+# Copied from $PETSC_DIR/share/petsc/Makefile.basic.user
+# This uses the compilers and flags defined in the PETSc configuration
 # ~~~~~~~~~~~~~~~~~
 
 # Read in the petsc compile/linking variables and makefile rules
