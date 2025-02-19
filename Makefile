@@ -27,9 +27,6 @@ export LIBDIR := $(CURDIR)/lib
 # Include directories - include top level directory in case compilers output modules there
 INCLUDE := -I$(CURDIR) -I$(INCLUDEDIR)
 
-# Output the library
-OUT = $(LIBDIR)/libpflare.so
-
 # All the files required by PFLARE
 OBJS := $(SRCDIR)/NonBusyWait.o \
 		  $(SRCDIR)/Binary_Tree.o \
@@ -80,7 +77,7 @@ CPPFLAGS += $(CPPFLAGS_INPUT)
 FPPFLAGS += $(FPPFLAGS_INPUT)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
-# Has petsc has been configured with 64 bit integers
+# Has petsc has been configured with 64 bit integers/shared libraries
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # Read in the petscconf.h
 PETSC_HEADER_FILE := $(PETSC_DIR)/$(PETSC_ARCH)/include/petscconf.h
@@ -89,14 +86,34 @@ PETSC_USE_64BIT_INDICES := 0
 ifneq (,$(findstring PETSC_USE_64BIT_INDICES 1,$(CONTENTS)))
 PETSC_USE_64BIT_INDICES := 1
 endif  		  
-		  	
+PETSC_USE_SHARED_LIBRARIES := 0
+ifneq (,$(findstring PETSC_USE_SHARED_LIBRARIES 1,$(CONTENTS)))
+PETSC_USE_SHARED_LIBRARIES := 1
+endif 
+
+# Output the library - either static or dynamic
+ifeq ($(PETSC_USE_SHARED_LIBRARIES),0)
+OUT = $(LIBDIR)/libpflare.a
+else
+OUT = $(LIBDIR)/libpflare.so
+endif
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Rules
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.DEFAULT_GOAL := all		  	
 all: $(OUT)
 
-# Create our directory structure and build the shared library
+# # Create our directory structure and build the library
+# # (either static or dynamic depending on what petsc was configured with)
 $(OUT): $(OBJS)
 	@mkdir -p $(LIBDIR)
 	@mkdir -p $(INCLUDEDIR)
+ifeq ($(PETSC_USE_SHARED_LIBRARIES),0)	
+	ar rcs $(OUT) $(OBJS)
+else	
 	$(LINK.F) -shared -o $(OUT) $(OBJS) $(LDLIBS)
+endif
 
 # Build the tests
 build_tests: $(OUT)

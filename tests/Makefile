@@ -24,8 +24,8 @@ INCLUDE := -I$(CURDIR)/../ -I../include
 # Add the pflare include files
 PETSC_FC_INCLUDES += $(INCLUDE)
 PETSC_CC_INCLUDES += $(INCLUDE)
-# Link to pflare
-LDLIBS += -L$(LIBDIR) -lpflare -Wl,-rpath,$(LIBDIR)
+# Link to pflare - order is important
+LDLIBS := -L$(LIBDIR) -lpflare -Wl,-rpath,$(LIBDIR):$(LDLIBS)
 
 clean::
 	$(RM) -f $(TEST_TARGETS)

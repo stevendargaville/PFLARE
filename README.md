@@ -74,7 +74,7 @@ An up to date Docker image is also available on Dockerhub which includes a build
 
 ## Linking to PFLARE
 
-1) For Fortran/C, link the library `libpflare.so` to your application; it is output to `lib/`. For Fortran, you must include `pflare.h` in `include/finclude/`, for C you must include `pflare.h` in `include/`.
+1) For Fortran/C, link the library `libpflare` to your application; it is output to `lib/`. For Fortran, you must include `pflare.h` in `include/finclude/`, for C you must include `pflare.h` in `include/`.
 2) For Python, ensure the full path to `python/` is in your `PYTHONPATH` environmental variable along with the path for PETSc. Your `LD_LIBRARY_PATH` must include the `lib/` directory (along with paths for PETSc, BLAS and LAPACK).
 
 Using the components of PFLARE in an existing PETSc code is very simple. For C/Fortran, the user must call a single function which registers the new PC types with PETSc, while in Python this is handled by the import statement:
