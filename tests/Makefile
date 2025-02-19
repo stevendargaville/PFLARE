@@ -301,6 +301,10 @@ ifeq ($(PETSC_HAVE_KOKKOS),1)
 	./adv_1d.kokkos.o -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right \
 	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys -ksp_max_it 1 \
 	 -vec_type kokkos -mat_type aijkokkos
+	@echo "Test AIRG on steady 1D advection in parallel KOKKOS"
+	$(MPIEXEC) -n 2 ./adv_1d.kokkos.o -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right \
+	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys -ksp_max_it 10 \
+	 -vec_type kokkos -mat_type aijkokkos	 
 endif
 
 
