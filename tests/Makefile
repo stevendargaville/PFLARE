@@ -5,11 +5,11 @@
 # This uses the compilers and flags defined in the PETSc configuration
 # ~~~~~~~~~~~~~~~~~
 
-# Can be overriden from the command line if needed
-CFLAGS   =
-FFLAGS   =
-CPPFLAGS =
-FPPFLAGS =
+# Get the flags we have on input
+CFLAGS_INPUT := $(CFLAGS)
+FFLAGS_INPUT := $(FFLAGS)
+CPPFLAGS_INPUT := $(CPPFLAGS)
+FPPFLAGS_INPUT := $(FPPFLAGS)
 
 # Read in the petsc compile/linking variables and makefile rules
 include ${PETSC_DIR}/lib/petsc/conf/variables
@@ -24,6 +24,13 @@ INCLUDE := -I$(CURDIR)/../ -I../include
 # Add the pflare include files
 PETSC_FC_INCLUDES += $(INCLUDE)
 PETSC_CC_INCLUDES += $(INCLUDE)
+
+# Include any additional flags we input
+CFLAGS += $(CFLAGS_INPUT)
+FFLAGS += $(FFLAGS_INPUT)
+CPPFLAGS += $(CPPFLAGS_INPUT)
+FPPFLAGS += $(FPPFLAGS_INPUT)
+
 # Link to pflare - order is important
 LDLIBS := -L$(LIBDIR) -lpflare -Wl,-rpath,$(LIBDIR):$(LDLIBS)
 
