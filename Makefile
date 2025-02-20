@@ -72,8 +72,14 @@ OBJS := $(SRCDIR)/NonBusyWait.o \
 		  $(SRCDIR)/Sorting.o \
 		  $(SRCDIR)/C_PETSc_Interfaces.o \
 		  $(SRCDIR)/PCPFLAREINV_Interfaces.o \
-		  $(SRCDIR)/PCAIR_Data_Type.o \
-		  $(SRCDIR)/PETSc_Helper.o \
+		  $(SRCDIR)/PCAIR_Data_Type.o
+
+# Include kokkos src files
+ifeq ($(PETSC_HAVE_KOKKOS),1)
+export OBJS := $(OBJS) $(SRCDIR)/PETSc_Helperk.o	
+endif	
+
+OBJS := $(OBJS) $(SRCDIR)/PETSc_Helper.o \
 		  $(SRCDIR)/Gmres_Poly.o \
 		  $(SRCDIR)/Gmres_Poly_Newton.o \
 		  $(SRCDIR)/AIR_MG_Stats.o \

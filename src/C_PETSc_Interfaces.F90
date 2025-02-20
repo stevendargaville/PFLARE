@@ -170,6 +170,18 @@ module c_petsc_interfaces
  
    end interface
 
+   interface   
+      
+      subroutine generate_identity_is_kokkos(A_array, index, B_array) &
+         bind(c, name="generate_identity_is_kokkos")
+         use iso_c_binding
+         integer(c_long_long) :: A_array
+         integer(c_long_long) :: index
+         integer(c_long_long) :: B_array
+      end subroutine generate_identity_is_kokkos         
+ 
+   end interface     
+
 ! -------------------------------------------------------------------------------------------------------------------------------
 
 end module c_petsc_interfaces
