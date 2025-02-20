@@ -14,6 +14,20 @@ FFLAGS_INPUT := $(FFLAGS)
 CPPFLAGS_INPUT := $(CPPFLAGS)
 FPPFLAGS_INPUT := $(FPPFLAGS)
 
+# Directories we want
+INCLUDEDIR  := include
+SRCDIR      := src
+# This needs to be exported into the sub-makefile for Cython
+export LIBDIR := $(CURDIR)/lib
+
+# Include directories - include top level directory in case compilers output modules there
+INCLUDE := -I$(CURDIR) -I$(INCLUDEDIR)
+
+CPPFLAGS = $(INCLUDE)
+FPPFLAGS = $(INCLUDE)
+CPPFLAGS = $(INCLUDE)
+CXXPPFLAGS = $(INCLUDE)
+
 # Read in the petsc compile/linking variables and makefile rules
 include ${PETSC_DIR}/lib/petsc/conf/variables
 include ${PETSC_DIR}/lib/petsc/conf/rules
@@ -39,15 +53,6 @@ endif
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # ~~~~~~~~~~~~~~~~~~~~~~~~
-
-# Directories we want
-INCLUDEDIR  := include
-SRCDIR      := src
-# This needs to be exported into the sub-makefile for Cython
-export LIBDIR := $(CURDIR)/lib
-
-# Include directories - include top level directory in case compilers output modules there
-INCLUDE := -I$(CURDIR) -I$(INCLUDEDIR)
 
 # All the files required by PFLARE
 OBJS := $(SRCDIR)/NonBusyWait.o \
@@ -89,12 +94,8 @@ OBJS := $(SRCDIR)/NonBusyWait.o \
 export TEST_TARGETS = ex12f ex6f ex6f_getcoeffs ex6 adv_1d adv_diff_2d ex6_cf_splitting
 # Include kokkos examples
 ifeq ($(PETSC_HAVE_KOKKOS),1)
-export TEST_TARGETS := $(TEST_TARGETS) adv_1dk.kokkos
+export TEST_TARGETS := $(TEST_TARGETS) adv_1dk
 endif
-
-# Add the pflare include files
-PETSC_FC_INCLUDES += $(INCLUDE)
-PETSC_CC_INCLUDES += $(INCLUDE)
 
 # Include any additional flags we input
 CFLAGS += $(CFLAGS_INPUT)

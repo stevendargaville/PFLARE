@@ -11,19 +11,21 @@ FFLAGS   =
 CPPFLAGS =
 FPPFLAGS =
 
-# Read in the petsc compile/linking variables and makefile rules
-include ${PETSC_DIR}/lib/petsc/conf/variables
-include ${PETSC_DIR}/lib/petsc/conf/rules
-
 # ~~~~~~~~~~~
 # PFLARE specific changes
 # ~~~~~~~~~~~
 # Include directories - include top level directory in case compilers output modules there
 INCLUDE := -I$(CURDIR)/../ -I../include
 
-# Add the pflare include files
-PETSC_FC_INCLUDES += $(INCLUDE)
-PETSC_CC_INCLUDES += $(INCLUDE)
+CPPFLAGS = $(INCLUDE)
+FPPFLAGS = $(INCLUDE)
+CPPFLAGS = $(INCLUDE)
+CXXPPFLAGS = $(INCLUDE)
+
+# Read in the petsc compile/linking variables and makefile rules
+include ${PETSC_DIR}/lib/petsc/conf/variables
+include ${PETSC_DIR}/lib/petsc/conf/rules
+
 # Link to pflare - order is important
 LDLIBS := -L$(LIBDIR) -lpflare -Wl,-rpath,$(LIBDIR):$(LDLIBS)
 
