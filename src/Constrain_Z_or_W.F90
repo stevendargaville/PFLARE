@@ -29,7 +29,6 @@ module constrain_z_or_w
 
       integer :: comm_size, errorcode, i_loc, no_nullspace_vecs
       MatNullSpace :: nullspace
-      PetscInt :: local_rows, global_rows, local_cols, global_cols
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX
       PetscBool :: has_constant
@@ -234,8 +233,7 @@ module constrain_z_or_w
       MPI_Comm :: MPI_COMM_MATRIX
       type(tMat) :: row_mat, temp_mat_aij
       PetscInt, dimension(:), allocatable :: cols, col_indices_off_proc_array
-      PetscReal, dimension(:), allocatable :: vals, row_vals, sols, diff
-      logical :: approx_solve
+      PetscReal, dimension(:), allocatable :: vals, row_vals, diff
       type(tMat) :: new_z_or_w
       PetscReal, dimension(:), pointer :: b_f_vals
       type(c_ptr) :: colmap_c_ptr, b_c_nonlocal_c_ptr

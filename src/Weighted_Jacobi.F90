@@ -32,7 +32,7 @@ module weighted_jacobi
       ! Local variables
       integer :: comm_size, errorcode
       MPI_Comm :: MPI_COMM_MATRIX 
-      PetscInt :: local_rows, local_cols, ncols, global_row_start, global_row_end_plus_one
+      PetscInt :: local_rows, local_cols, global_row_start, global_row_end_plus_one
       PetscInt :: global_rows, global_cols, i_loc, counter
       PetscErrorCode :: ierr
       PetscInt, allocatable, dimension(:) :: indices

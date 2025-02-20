@@ -103,7 +103,7 @@ module cf_splitting
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
       PetscReal :: rel_row_tol, abs_biggest_entry
       MPI_Comm :: MPI_COMM_MATRIX
-      type(tMat) :: transpose_mat, temp_mat
+      type(tMat) :: transpose_mat
       type(tIS) :: zero_diags
       PetscInt, dimension(:), pointer :: zero_diags_pointer
       logical :: drop_diag
@@ -358,17 +358,18 @@ module cf_splitting
       integer, dimension(:), allocatable, intent(inout) :: cf_markers_local
 
       ! Local
-      PetscInt :: local_c_size, global_row_start, global_row_end_plus_one, i_loc, counter
-      PetscInt :: global_row_start_dist2, global_row_end_plus_one_dist2
+      PetscInt :: global_row_start, global_row_end_plus_one, i_loc
+      ! PetscInt :: counter, local_c_size
+      ! PetscInt :: global_row_start_dist2, global_row_end_plus_one_dist2
       PetscInt :: local_rows, local_cols, ncols
       integer :: errorcode, MPI_COMM_MATRIX, comm_size
       PetscErrorCode :: ierr
-      type(tMat) :: strength_mat, strength_mat_fc, prolongators, temp_mat, strength_mat_c
-      type(tIS) :: is_fine, is_coarse, zero_diags
-      integer, dimension(:), allocatable :: cf_markers_local_c
-      PetscInt, dimension(:), allocatable :: aggregates, nnzs_row
-      PetscInt, dimension(:), pointer :: is_pointer_coarse, is_pointer_fine, zero_diags_pointer
-      type(tVec) :: diag_vec
+      type(tMat) :: strength_mat
+      ! type(tMat) :: prolongators, strength_mat_c, strength_mat_fc, temp_mat
+      ! type(tIS) :: is_fine, is_coarse, zero_diags
+      ! integer, dimension(:), allocatable :: cf_markers_local_c
+      PetscInt, dimension(:), allocatable :: aggregates
+      ! PetscInt, dimension(:), pointer :: is_pointer_coarse, is_pointer_fine, zero_diags_pointer
       PetscInt, parameter :: nz_ignore = -1
       type(tMat) :: Ad, Ao
       PetscOffset :: iicol

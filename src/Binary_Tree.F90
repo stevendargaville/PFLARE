@@ -49,7 +49,6 @@ function ihas_value_tree ( tree, value)
   type ( itree ), intent(in) :: tree
   PetscInt, intent(in)  :: value
   
-  type(tree_inode), pointer :: node
   type(tree_inode), pointer :: current_node
   logical      :: ihas_value_tree
   
@@ -168,12 +167,9 @@ subroutine iremove_tree ( tree, value )
   type ( itree ), intent(inout) :: tree
   PetscInt, intent(in)  :: value
   
-  type(tree_inode), pointer :: node
   type(tree_inode), pointer :: current_node
   type(tree_inode), pointer :: set_to => null()
-  
-  PetscReal :: temp_rand
- 
+   
  !  If the tree is empty
   if ( .not. associated ( tree%headnode ) ) then
     return
@@ -208,15 +204,9 @@ subroutine iremove_tree ( tree, value )
       ! If the node has two children
       if ( associated ( current_node%right ) .AND. associated ( current_node%left ) ) then
       
-!          call random_number(temp_rand)
-!          ! Try and keep the tree slightly balanced
-!          if (temp_rand > 0.5) then
-            ! Choose the in-order successor
-            call find_min_node(current_node%right, set_to)
-!          else
-!             ! Choose the in-order predecessor
-!             call find_max_node(current_node%left, set_to)
-!          end if
+         ! Choose the in-order successor
+         call find_min_node(current_node%right, set_to)
+
          current_node%value = set_to%value
          call remove_node(tree, set_to)
          

@@ -32,7 +32,6 @@ module neumann_poly
 
       ! Local
       PetscErrorCode :: ierr
-      type(tVec) :: rhs_copy, diag_vec
       type(mat_ctxtype), pointer :: mat_ctx_ida => null()
 
       ! ~~~~~~~~~~~~~~~~~~~~~~~~~~~

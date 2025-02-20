@@ -59,8 +59,7 @@ module sorting
       PetscInt, dimension(:), intent(in)        :: input_array
       
       integer, allocatable, dimension(:)        :: shuffle
-      integer                                   :: i, j, temp_int
-      PetscReal                                 :: rand_temp
+      integer                                   :: i
       !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
       
       allocate(shuffle(size(input_array)))

@@ -42,26 +42,25 @@ module sai_z
       PetscInt :: global_rows, global_cols, iterations_taken
       PetscInt :: i_loc, j_loc, max_nnzs, cols_ad, rows_ad
       PetscInt :: rows_ao, cols_ao, ifree, row_size, i_size, j_size
-      PetscInt :: global_col_start, global_col_end_plus_one
       PetscInt :: global_row_start_aff, global_row_end_plus_one_aff
       integer :: lwork, intersect_count, location
       integer :: errorcode, comm_size
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX      
-      type(tMat) :: submat, product, transpose_mat
+      type(tMat) :: transpose_mat
       type(tIS) :: i_row_is, j_col_is, col_indices, all_cols_indices
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0, maxits=1000
       PetscInt, dimension(:), allocatable :: cols, j_rows, i_rows, ad_indices
       integer, dimension(:), allocatable :: pivots, j_indices, i_indices
-      PetscReal, dimension(:), allocatable :: vals, e_row, j_vals, sols, e_row_plus_constraints
-      PetscReal, dimension(:,:), allocatable :: submat_vals, submat_vals_plus_constraints
+      PetscReal, dimension(:), allocatable :: vals, e_row, j_vals, sols
+      PetscReal, dimension(:,:), allocatable :: submat_vals
       type(itree) :: i_rows_tree
-      PetscReal, dimension(:), allocatable :: work, tau
-      type(tVec) :: solution, rhs, b_f
+      PetscReal, dimension(:), allocatable :: work
+      type(tVec) :: solution, rhs
       logical :: approx_solve
       ! In fortran this needs to be of size n+1 where n is the number of submatrices we want
       type(tMat), dimension(2) :: submatrices, submatrices_full
-      type(tMat) :: Ao, Ad, A_ff_power, tcf_plus_atilde_cf, temp_mat
+      type(tMat) :: Ao, Ad, temp_mat
       type(tKSP) :: ksp
       type(tPC) :: pc
       PetscOffset :: iicol
@@ -69,10 +68,7 @@ module sai_z
       type(c_ptr) :: colmap_c_ptr
       PetscInt, pointer :: colmap_c(:)
       PetscInt, dimension(:), allocatable :: col_indices_off_proc_array
-      integer(c_long_long) :: A_array, B_array, C_array
-      logical :: constrain
-      PetscReal, dimension(:), pointer :: b_f_vals, b_vals
-      PetscReal :: lambda, b_c
+      integer(c_long_long) :: A_array
       MatType:: mat_type
 
       ! ~~~~~~
@@ -574,11 +570,8 @@ module sai_z
       type(tMat), intent(inout)                         :: reuse_mat, inv_matrix    
 
       type(tMat) :: minus_I, sparsity_mat_cf, A_power
-      PetscInt :: local_rows, local_cols, global_rows, global_cols
-      PetscInt :: global_row_start, global_row_end_plus_one, i_loc
-      integer :: comm_size, order
+      integer :: order
       PetscErrorCode :: ierr
-      MPI_Comm :: MPI_COMM_MATRIX      
       logical :: destroy_mat
       integer(c_long_long) :: A_array, B_array, C_array
       PetscInt, parameter ::  one=1, zero=0
