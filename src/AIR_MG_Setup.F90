@@ -823,35 +823,35 @@ module air_mg_setup
       call timer_finish(TIMER_ID_AIR_RESTRICT)      
 
       call timer_start(TIMER_ID_AIR_IDENTITY)            
-
-      ! ~~~~~~~~~
-      ! Previously in the FC smoothing (see dba0a996be147698d7f9ce07741e7d925001ea66) 
-      ! we used VecISCopy to pull out fine and coarse points
-      ! That copies back to the cpu if doing gpu, so now we just build identity restrictors/prolongators
-      ! of various sizes and do matmults
-      ! ~~~~~~~~~              
+           
       if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then
 
-         ! Build fine to full injector
-         call generate_identity_rect(A, air_data%A_fc(our_level), air_data%IS_fine_index(our_level), &
-                  air_data%i_fine_full(our_level))
+         ! On cpus we use VecISCopy to pull out fine and coarse points
+         ! That copies back to the cpu if doing gpu, so on the gpu we build
+         ! identity restrictors/prolongators of various sizes and do matmults         
+         if (air_data%gpu_mat) then
 
-         ! Build coarse to full injector
-         call generate_identity_rect(A, air_data%A_cf(our_level), air_data%IS_coarse_index(our_level), &
-                  air_data%i_coarse_full(our_level))
-                  
-         ! Build identity that sets fine in full to zero
-         call generate_identity_is(A, air_data%IS_coarse_index(our_level), &
-                  air_data%i_coarse_full_full(our_level))               
+            ! Build fine to full injector
+            call generate_identity_rect(A, air_data%A_fc(our_level), air_data%IS_fine_index(our_level), &
+                     air_data%i_fine_full(our_level))
 
-         ! If we're C point smoothing as well
-         if (air_data%options%one_c_smooth .AND. &
-                  .NOT. air_data%options%full_smoothing_up_and_down) then     
-            
-            ! Build identity that sets coarse in full to zero
-            call generate_identity_is(A, air_data%IS_fine_index(our_level), &
-                  air_data%i_fine_full_full(our_level))                         
-         end if 
+            ! Build coarse to full injector
+            call generate_identity_rect(A, air_data%A_cf(our_level), air_data%IS_coarse_index(our_level), &
+                     air_data%i_coarse_full(our_level))
+                     
+            ! Build identity that sets fine in full to zero
+            call generate_identity_is(A, air_data%IS_coarse_index(our_level), &
+                     air_data%i_coarse_full_full(our_level))               
+
+            ! If we're C point smoothing as well
+            if (air_data%options%one_c_smooth .AND. &
+                     .NOT. air_data%options%full_smoothing_up_and_down) then     
+               
+               ! Build identity that sets coarse in full to zero
+               call generate_identity_is(A, air_data%IS_fine_index(our_level), &
+                     air_data%i_fine_full_full(our_level))                         
+            end if 
+         end if
       end if       
       
       call timer_finish(TIMER_ID_AIR_IDENTITY)            
@@ -1075,35 +1075,48 @@ module air_mg_setup
       ! Get what level we are on
       call MatShellGetContext(mat, mat_ctx, ierr)
       our_level = mat_ctx%our_level
-      air_data => mat_ctx%air_data
-
-      ! ~~~~~~~~~
-      ! Previously (see dba0a996be147698d7f9ce07741e7d925001ea66) we used VecISCopy to pull
-      ! out fine and coarse points
-      ! That copies back to the cpu if doing gpu, so now we just build identity restrictors/prolongators
-      ! of various sizes and do matmults
-      ! ~~~~~~~~~       
+      air_data => mat_ctx%air_data  
 
       ! Get out just the fine points from b - this is b_f
-      call MatMult(air_data%i_fine_full(our_level), b, &
+      if (air_data%gpu_mat) then
+         call MatMult(air_data%i_fine_full(our_level), b, &
                         air_data%temp_vecs_fine(4)%array(our_level), ierr)                          
+      else
+         call VecISCopy(b, air_data%is_fine_index(our_level), SCATTER_REVERSE, &
+                  air_data%temp_vecs_fine(4)%array(our_level), ierr)
+      end if
 
       if (.NOT. guess_zero) then 
 
-         ! Get out just the fine points from x - this is x_f^0
-         call MatMult(air_data%i_fine_full(our_level), x, &
-                           air_data%temp_vecs_fine(1)%array(our_level), ierr)       
-                           
-         ! Get the coarse points from x - this is x_c^0
-         call MatMult(air_data%i_coarse_full(our_level), x, &
-                  air_data%temp_vecs_coarse(1)%array(our_level), ierr)                             
+         ! Get out x_f and x_c
+         if (air_data%gpu_mat) then
+
+            ! Get out just the fine points from x - this is x_f^0
+            call MatMult(air_data%i_fine_full(our_level), x, &
+                              air_data%temp_vecs_fine(1)%array(our_level), ierr)       
+                              
+            ! Get the coarse points from x - this is x_c^0
+            call MatMult(air_data%i_coarse_full(our_level), x, &
+                     air_data%temp_vecs_coarse(1)%array(our_level), ierr) 
+
+         else
+                  
+            ! Get out just the fine points from x - this is x_f^0
+            call VecISCopy(x, air_data%is_fine_index(our_level), SCATTER_REVERSE, &
+                     air_data%temp_vecs_fine(1)%array(our_level), ierr)
+            ! ! Get the coarse points from x - this is x_c^0
+            call VecISCopy(x, air_data%is_coarse_index(our_level), SCATTER_REVERSE, &
+                     air_data%temp_vecs_coarse(1)%array(our_level), ierr)                   
+
+         end if
 
          ! Compute Afc * x_c^0 - this never changes
          call MatMult(air_data%A_fc(our_level), air_data%temp_vecs_coarse(1)%array(our_level), &
                   air_data%temp_vecs_fine(2)%array(our_level), ierr)               
          
          ! This is b_f - A_fc * x_c^0 - this never changes
-         call VecAXPY(air_data%temp_vecs_fine(4)%array(our_level), -1d0, air_data%temp_vecs_fine(2)%array(our_level), ierr)                      
+         call VecAXPY(air_data%temp_vecs_fine(4)%array(our_level), -1d0, &
+                  air_data%temp_vecs_fine(2)%array(our_level), ierr)                      
 
       else
          ! x_f^0 and x_c^0 are zero
@@ -1125,14 +1138,16 @@ module air_mg_setup
          end if
 
          ! This is b_f - A_fc * x_c - A_ff * x_f^n
-         call VecAYPX(air_data%temp_vecs_fine(3)%array(our_level), -1d0, air_data%temp_vecs_fine(4)%array(our_level), ierr)           
+         call VecAYPX(air_data%temp_vecs_fine(3)%array(our_level), -1d0, &
+                  air_data%temp_vecs_fine(4)%array(our_level), ierr)           
 
          ! ! Compute A_ff^{-1} ( b_f - A_fc * x_c - A_ff * x_f^n)
          call MatMult(air_data%inv_A_ff(our_level), air_data%temp_vecs_fine(3)%array(our_level), &
                      air_data%temp_vecs_fine(2)%array(our_level), ierr)    
 
          ! Compute x_f^n + A_ff^{-1} ( b_f - A_fc * x_c - A_ff * x_f^n)
-         call VecAXPY(air_data%temp_vecs_fine(1)%array(our_level), 1d0, air_data%temp_vecs_fine(2)%array(our_level), ierr)                      
+         call VecAXPY(air_data%temp_vecs_fine(1)%array(our_level), 1d0, &
+                  air_data%temp_vecs_fine(2)%array(our_level), ierr)                      
 
       end do
 
@@ -1140,19 +1155,26 @@ module air_mg_setup
       ! Reverse put fine x_f back into x
       ! ~~~~~~~~
 
-      ! Copy x but only the non-coarse points from x are non-zero
-      ! ie get x_c but in a vec of full size 
-      call MatMult(air_data%i_coarse_full_full(our_level), x, &
-                        air_data%temp_vecs(1)%array(our_level), ierr)        
+      if (air_data%gpu_mat) then
 
-      ! If we're just doing F point smoothing, don't change the coarse points 
-      ! Not sure why we need the vecset, but on the gpu x is twice the size it should be if we don't
-      ! x should be overwritten by the MatMultTransposeAdd
-      call VecSet(x, 0d0, ierr)
-      call MatMultTransposeAdd(air_data%i_fine_full(our_level), &
-            air_data%temp_vecs_fine(1)%array(our_level), &
-            air_data%temp_vecs(1)%array(our_level), &
-            x, ierr)
+         ! Copy x but only the non-coarse points from x are non-zero
+         ! ie get x_c but in a vec of full size 
+         call MatMult(air_data%i_coarse_full_full(our_level), x, &
+                           air_data%temp_vecs(1)%array(our_level), ierr)        
+
+         ! If we're just doing F point smoothing, don't change the coarse points 
+         ! Not sure why we need the vecset, but on the gpu x is twice the size it should be if we don't
+         ! x should be overwritten by the MatMultTransposeAdd
+         call VecSet(x, 0d0, ierr)
+         call MatMultTransposeAdd(air_data%i_fine_full(our_level), &
+               air_data%temp_vecs_fine(1)%array(our_level), &
+               air_data%temp_vecs(1)%array(our_level), &
+               x, ierr)
+
+      else   
+         call VecISCopy(x, air_data%is_fine_index(our_level), SCATTER_FORWARD, &
+                  air_data%temp_vecs_fine(1)%array(our_level), ierr)         
+      end if
 
       ! ~~~~~~~~~~~~~~~~
       ! If we want to let's do a single C-point smooth
@@ -1160,45 +1182,60 @@ module air_mg_setup
       if (air_data%options%one_c_smooth) then        
 
          ! Get out just the coarse points from b - this is b_c
-         call MatMult(air_data%i_coarse_full(our_level), b, &
-                  air_data%temp_vecs_coarse(4)%array(our_level), ierr)           
+         if (air_data%gpu_mat) then
+            call MatMult(air_data%i_coarse_full(our_level), b, &
+                     air_data%temp_vecs_coarse(4)%array(our_level), ierr)           
+         else
+            call VecISCopy(b, air_data%is_coarse_index(our_level), SCATTER_REVERSE, &
+                  air_data%temp_vecs_coarse(4)%array(our_level), ierr) 
+         end if
 
          ! Compute Acf * x_f^0 - this never changes
          call MatMult(air_data%A_cf(our_level), air_data%temp_vecs_fine(1)%array(our_level), &
                      air_data%temp_vecs_coarse(2)%array(our_level), ierr)
          ! This is b_c - A_cf * x_f^0 - this never changes
-         call VecAXPY(air_data%temp_vecs_coarse(4)%array(our_level), -1d0, air_data%temp_vecs_coarse(2)%array(our_level), ierr)  
+         call VecAXPY(air_data%temp_vecs_coarse(4)%array(our_level), -1d0, &
+                  air_data%temp_vecs_coarse(2)%array(our_level), ierr)  
 
          ! Then A_cc * x_c^n - this changes at each richardson iteration
          call MatMult(air_data%A_cc(our_level), air_data%temp_vecs_coarse(1)%array(our_level), &
                      air_data%temp_vecs_coarse(3)%array(our_level), ierr)       
 
          ! This is b_c - A_cf * x_f^0 - A_cc * x_c^n
-         call VecAYPX(air_data%temp_vecs_coarse(3)%array(our_level), -1d0, air_data%temp_vecs_coarse(4)%array(our_level), ierr)          
+         call VecAYPX(air_data%temp_vecs_coarse(3)%array(our_level), -1d0, &
+                  air_data%temp_vecs_coarse(4)%array(our_level), ierr)          
 
          ! ! Compute A_cc^{-1} (b_c - A_cf * x_f^0 - A_cc * x_c^n)
          call MatMult(air_data%inv_A_cc(our_level), air_data%temp_vecs_coarse(3)%array(our_level), &
                      air_data%temp_vecs_coarse(2)%array(our_level), ierr)    
 
          ! Compute x_c^n + A_cc^{-1} (b_c - A_cf * x_f^0 - A_cc * x_c^n)
-         call VecAXPY(air_data%temp_vecs_coarse(1)%array(our_level), 1d0, air_data%temp_vecs_coarse(2)%array(our_level), ierr)         
+         call VecAXPY(air_data%temp_vecs_coarse(1)%array(our_level), 1d0, &
+                     air_data%temp_vecs_coarse(2)%array(our_level), ierr)         
 
          ! ~~~~~~~~
          ! Reverse put coarse x_c back into x
          ! ~~~~~~~~
 
-         ! Copy x but only the non-fine points from x are non-zero
-         ! ie get x_f but in a vec of full size 
-         call MatMult(air_data%i_fine_full_full(our_level), x, &
-                           air_data%temp_vecs(1)%array(our_level), ierr)        
+         if (air_data%gpu_mat) then
 
-         ! Not sure why we need the vecset, but on the gpu x is twice the size it should be if we don't
-         ! x should be overwritten by the MatMultTransposeAdd
-         call VecSet(x, 0d0, ierr)
-         call MatMultTransposeAdd(air_data%i_coarse_full(our_level), &
-               air_data%temp_vecs_coarse(1)%array(our_level), &
-               air_data%temp_vecs(1)%array(our_level), &
-               x, ierr)         
+            ! Copy x but only the non-fine points from x are non-zero
+            ! ie get x_f but in a vec of full size 
+            call MatMult(air_data%i_fine_full_full(our_level), x, &
+                              air_data%temp_vecs(1)%array(our_level), ierr)        
+
+            ! Not sure why we need the vecset, but on the gpu x is twice the size it should be if we don't
+            ! x should be overwritten by the MatMultTransposeAdd
+            call VecSet(x, 0d0, ierr)
+            call MatMultTransposeAdd(air_data%i_coarse_full(our_level), &
+                  air_data%temp_vecs_coarse(1)%array(our_level), &
+                  air_data%temp_vecs(1)%array(our_level), &
+                  x, ierr)  
+
+         else
+            call VecISCopy(x, air_data%is_coarse_index(our_level), SCATTER_FORWARD, &
+                  air_data%temp_vecs_coarse(1)%array(our_level), ierr) 
+         end if
 
       end if 
       
@@ -1253,6 +1290,7 @@ module air_mg_setup
       VecType :: vec_type
       logical :: auto_truncated
       PetscRandom :: rctx
+      MatType:: mat_type
 
       ! ~~~~~~     
 
@@ -1274,6 +1312,24 @@ module air_mg_setup
       ! Copy the top grid matrix pointer
       air_data%coarse_matrix(1) = pmat
       reusing_temp_mg_vecs = .TRUE.
+
+      ! Get the mat type to work out if the matrix could be on the gpu
+      ! All this does is works around the absence of veciscopy on the gpu
+      ! by creating some extra matrices to use during the smoothing
+      ! If veciscopy gets a gpu implementation on some of these types, we can remove them
+      ! and use less memory with a faster smooth
+      call MatGetType(air_data%coarse_matrix(1), mat_type, ierr)
+      air_data%gpu_mat = .FALSE.
+      if (mat_type == MATSEQAIJKOKKOS .OR. mat_type == MATMPIAIJKOKKOS .OR. mat_type == MATAIJKOKKOS .OR. &
+          mat_type == MATSEQAIJCUSPARSE .OR. mat_type == MATMPIAIJCUSPARSE .OR. mat_type == MATAIJCUSPARSE .OR. &  
+          mat_type == MATSEQAIJHIPSPARSE .OR. mat_type == MATMPIAIJHIPSPARSE .OR. mat_type == MATAIJHIPSPARSE .OR. &
+          mat_type == MATSEQAIJVIENNACL .OR. mat_type == MATMPIAIJVIENNACL .OR. mat_type == MATAIJVIENNACL .OR. &
+          mat_type == MATDENSECUDA .OR. mat_type == MATDENSEHIP .OR. &
+          mat_type == MATSEQDENSECUDA .OR. mat_type == MATSEQDENSEHIP .OR. &
+          mat_type == MATMPIDENSECUDA .OR. mat_type == MATMPIDENSEHIP) then
+
+         air_data%gpu_mat = .TRUE.
+      end if
 
       ! ~~~~~~~~~~~~~~~~~~~~~
       ! Check if the user has provided a near nullspace before we do anything
@@ -2317,10 +2373,12 @@ module air_mg_setup
                      call MatDestroy(air_data%restrictors(our_level), ierr)
                   end if                  
 
-                  call MatDestroy(air_data%i_fine_full(our_level), ierr)
-                  call MatDestroy(air_data%i_coarse_full(our_level), ierr)
-                  call MatDestroy(air_data%i_fine_full_full(our_level), ierr)
-                  call MatDestroy(air_data%i_coarse_full_full(our_level), ierr)
+                  if (air_data%gpu_mat) then
+                     call MatDestroy(air_data%i_fine_full(our_level), ierr)
+                     call MatDestroy(air_data%i_coarse_full(our_level), ierr)
+                     call MatDestroy(air_data%i_fine_full_full(our_level), ierr)
+                     call MatDestroy(air_data%i_coarse_full_full(our_level), ierr)
+                  end if
 
                   air_data%allocated_matrices_A_ff(our_level) = .FALSE.
                   call reset_inverse_mat(air_data%inv_A_ff(our_level))

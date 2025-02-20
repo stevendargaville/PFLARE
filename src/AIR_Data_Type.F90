@@ -268,7 +268,9 @@ module air_data_type
       type(air_options) :: options
 
       ! Actual number of levels in the hierarchy after coarsening
-      integer :: no_levels = -1    
+      integer :: no_levels = -1   
+      ! Do we have a gpu matrix or one on the cpu 
+      logical :: gpu_mat = .FALSE.
 
       ! Indices of F and C points on each level
       type(tIS), allocatable, dimension(:)               :: IS_fine_index, IS_coarse_index
