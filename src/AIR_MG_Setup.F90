@@ -1082,7 +1082,8 @@ module air_mg_setup
          call MatMult(air_data%i_fine_full(our_level), b, &
                         air_data%temp_vecs_fine(4)%array(our_level), ierr)                          
       else
-         call VecISCopy(b, air_data%is_fine_index(our_level), SCATTER_REVERSE, air_data%temp_vecs_fine(4)%array(our_level), ierr)
+         call VecISCopy(b, air_data%is_fine_index(our_level), SCATTER_REVERSE, &
+                  air_data%temp_vecs_fine(4)%array(our_level), ierr)
       end if
 
       if (.NOT. guess_zero) then 
@@ -1101,9 +1102,11 @@ module air_mg_setup
          else
                   
             ! Get out just the fine points from x - this is x_f^0
-            call VecISCopy(x, air_data%is_fine_index(our_level), SCATTER_REVERSE, air_data%temp_vecs_fine(1)%array(our_level), ierr)
+            call VecISCopy(x, air_data%is_fine_index(our_level), SCATTER_REVERSE, &
+                     air_data%temp_vecs_fine(1)%array(our_level), ierr)
             ! ! Get the coarse points from x - this is x_c^0
-            call VecISCopy(x, air_data%is_coarse_index(our_level), SCATTER_REVERSE, air_data%temp_vecs_coarse(1)%array(our_level), ierr)                   
+            call VecISCopy(x, air_data%is_coarse_index(our_level), SCATTER_REVERSE, &
+                     air_data%temp_vecs_coarse(1)%array(our_level), ierr)                   
 
          end if
 
@@ -1112,7 +1115,8 @@ module air_mg_setup
                   air_data%temp_vecs_fine(2)%array(our_level), ierr)               
          
          ! This is b_f - A_fc * x_c^0 - this never changes
-         call VecAXPY(air_data%temp_vecs_fine(4)%array(our_level), -1d0, air_data%temp_vecs_fine(2)%array(our_level), ierr)                      
+         call VecAXPY(air_data%temp_vecs_fine(4)%array(our_level), -1d0, &
+                  air_data%temp_vecs_fine(2)%array(our_level), ierr)                      
 
       else
          ! x_f^0 and x_c^0 are zero
@@ -1134,14 +1138,16 @@ module air_mg_setup
          end if
 
          ! This is b_f - A_fc * x_c - A_ff * x_f^n
-         call VecAYPX(air_data%temp_vecs_fine(3)%array(our_level), -1d0, air_data%temp_vecs_fine(4)%array(our_level), ierr)           
+         call VecAYPX(air_data%temp_vecs_fine(3)%array(our_level), -1d0, &
+                  air_data%temp_vecs_fine(4)%array(our_level), ierr)           
 
          ! ! Compute A_ff^{-1} ( b_f - A_fc * x_c - A_ff * x_f^n)
          call MatMult(air_data%inv_A_ff(our_level), air_data%temp_vecs_fine(3)%array(our_level), &
                      air_data%temp_vecs_fine(2)%array(our_level), ierr)    
 
          ! Compute x_f^n + A_ff^{-1} ( b_f - A_fc * x_c - A_ff * x_f^n)
-         call VecAXPY(air_data%temp_vecs_fine(1)%array(our_level), 1d0, air_data%temp_vecs_fine(2)%array(our_level), ierr)                      
+         call VecAXPY(air_data%temp_vecs_fine(1)%array(our_level), 1d0, &
+                  air_data%temp_vecs_fine(2)%array(our_level), ierr)                      
 
       end do
 
@@ -1166,7 +1172,8 @@ module air_mg_setup
                x, ierr)
 
       else   
-         call VecISCopy(x, air_data%is_fine_index(our_level), SCATTER_FORWARD, air_data%temp_vecs_fine(1)%array(our_level), ierr)         
+         call VecISCopy(x, air_data%is_fine_index(our_level), SCATTER_FORWARD, &
+                  air_data%temp_vecs_fine(1)%array(our_level), ierr)         
       end if
 
       ! ~~~~~~~~~~~~~~~~
@@ -1179,28 +1186,32 @@ module air_mg_setup
             call MatMult(air_data%i_coarse_full(our_level), b, &
                      air_data%temp_vecs_coarse(4)%array(our_level), ierr)           
          else
-            call VecISCopy(b, air_data%is_coarse_index(our_level), SCATTER_REVERSE, air_data%temp_vecs_coarse(4)%array(our_level), ierr) 
+            call VecISCopy(b, air_data%is_coarse_index(our_level), SCATTER_REVERSE, &
+                  air_data%temp_vecs_coarse(4)%array(our_level), ierr) 
          end if
 
          ! Compute Acf * x_f^0 - this never changes
          call MatMult(air_data%A_cf(our_level), air_data%temp_vecs_fine(1)%array(our_level), &
                      air_data%temp_vecs_coarse(2)%array(our_level), ierr)
          ! This is b_c - A_cf * x_f^0 - this never changes
-         call VecAXPY(air_data%temp_vecs_coarse(4)%array(our_level), -1d0, air_data%temp_vecs_coarse(2)%array(our_level), ierr)  
+         call VecAXPY(air_data%temp_vecs_coarse(4)%array(our_level), -1d0, &
+                  air_data%temp_vecs_coarse(2)%array(our_level), ierr)  
 
          ! Then A_cc * x_c^n - this changes at each richardson iteration
          call MatMult(air_data%A_cc(our_level), air_data%temp_vecs_coarse(1)%array(our_level), &
                      air_data%temp_vecs_coarse(3)%array(our_level), ierr)       
 
          ! This is b_c - A_cf * x_f^0 - A_cc * x_c^n
-         call VecAYPX(air_data%temp_vecs_coarse(3)%array(our_level), -1d0, air_data%temp_vecs_coarse(4)%array(our_level), ierr)          
+         call VecAYPX(air_data%temp_vecs_coarse(3)%array(our_level), -1d0, &
+                  air_data%temp_vecs_coarse(4)%array(our_level), ierr)          
 
          ! ! Compute A_cc^{-1} (b_c - A_cf * x_f^0 - A_cc * x_c^n)
          call MatMult(air_data%inv_A_cc(our_level), air_data%temp_vecs_coarse(3)%array(our_level), &
                      air_data%temp_vecs_coarse(2)%array(our_level), ierr)    
 
          ! Compute x_c^n + A_cc^{-1} (b_c - A_cf * x_f^0 - A_cc * x_c^n)
-         call VecAXPY(air_data%temp_vecs_coarse(1)%array(our_level), 1d0, air_data%temp_vecs_coarse(2)%array(our_level), ierr)         
+         call VecAXPY(air_data%temp_vecs_coarse(1)%array(our_level), 1d0, &
+                     air_data%temp_vecs_coarse(2)%array(our_level), ierr)         
 
          ! ~~~~~~~~
          ! Reverse put coarse x_c back into x
@@ -1222,7 +1233,8 @@ module air_mg_setup
                   x, ierr)  
 
          else
-            call VecISCopy(x, air_data%is_coarse_index(our_level), SCATTER_FORWARD, air_data%temp_vecs_coarse(1)%array(our_level), ierr) 
+            call VecISCopy(x, air_data%is_coarse_index(our_level), SCATTER_FORWARD, &
+                  air_data%temp_vecs_coarse(1)%array(our_level), ierr) 
          end if
 
       end if 
