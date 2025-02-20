@@ -122,7 +122,8 @@ $(OUT): $(OBJS)
 	@mkdir -p $(LIBDIR)
 	@mkdir -p $(INCLUDEDIR)
 ifeq ($(PETSC_USE_SHARED_LIBRARIES),0)	
-	ar rcs $(OUT) $(OBJS)
+	$(AR) $(AR_FLAGS) $(OUT) $(OBJS)
+	$(RANLIB) $(OUT)
 else	
 	$(LINK.F) -shared -o $(OUT) $(OBJS) $(LDLIBS)
 endif
