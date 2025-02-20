@@ -33,11 +33,10 @@ include ${PETSC_DIR}/lib/petsc/conf/variables
 include ${PETSC_DIR}/lib/petsc/conf/rules
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
-# Has petsc has been configured with 64 bit integers/shared libraries/kokkos
+# Check if petsc has been configured with various options
 # ~~~~~~~~~~~~~~~~~~~~~~~~
 # Read in the petscconf.h
-PETSC_HEADER_FILE := $(PETSC_DIR)/$(PETSC_ARCH)/include/petscconf.h
-CONTENTS := $(file < $(PETSC_HEADER_FILE))
+CONTENTS := $(file < $(PETSCCONF_H))
 export PETSC_USE_64BIT_INDICES := 0
 ifneq (,$(findstring PETSC_USE_64BIT_INDICES 1,$(CONTENTS)))
 PETSC_USE_64BIT_INDICES := 1
@@ -49,6 +48,14 @@ endif
 export PETSC_HAVE_KOKKOS := 0
 ifneq (,$(findstring PETSC_HAVE_KOKKOS 1,$(CONTENTS)))
 export PETSC_HAVE_KOKKOS := 1
+endif
+export PETSC_HAVE_CUDA := 0
+ifneq (,$(findstring PETSC_HAVE_CUDA 1,$(CONTENTS)))
+export PETSC_HAVE_CUDA := 1
+endif
+export PETSC_HAVE_HIP := 0
+ifneq (,$(findstring PETSC_HAVE_HIP 1,$(CONTENTS)))
+export PETSC_HAVE_HIP := 1
 endif
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~
