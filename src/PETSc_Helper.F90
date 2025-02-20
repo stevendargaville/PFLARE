@@ -570,7 +570,7 @@ module petsc_helper
       PetscInt :: local_rows_rect, local_cols_rect, global_rows_rect, global_cols_rect
       PetscInt :: global_row_start_rect, global_row_end_plus_one_rect
       PetscInt :: local_indices_size
-      PetscInt, allocatable, dimension(:) :: indices
+      PetscInt, allocatable, dimension(:) :: row_indices, col_indices
       PetscReal, allocatable, dimension(:) :: v      
       PetscErrorCode :: ierr
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
@@ -612,15 +612,18 @@ module petsc_helper
       ! Get the indices we need
       call ISGetIndicesF90(rect_indices, is_pointer, ierr)
 
-      allocate(indices(local_indices_size))
+      allocate(row_indices(local_indices_size))
+      allocate(col_indices(local_indices_size))
       allocate(v(local_indices_size))
       do i_loc = 1, local_indices_size
-         indices(i_loc) = global_row_start_rect + i_loc-1
+         row_indices(i_loc) = global_row_start_rect + i_loc-1
       end do
       v = 1d0
+      ! MatSetPreallocationCOO could modify the values in is_pointer
+      col_indices = is_pointer
       ! Set the diagonal
-      call MatSetPreallocationCOO(output_mat, local_indices_size, indices, is_pointer, ierr)
-      deallocate(indices)
+      call MatSetPreallocationCOO(output_mat, local_indices_size, row_indices, col_indices, ierr)
+      deallocate(row_indices, col_indices)
       call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
       deallocate(v)      
 
@@ -652,6 +655,7 @@ module petsc_helper
       MPI_Comm :: MPI_COMM_MATRIX
       MatType:: mat_type
       PetscInt, dimension(:), pointer :: is_pointer
+      PetscInt, allocatable, dimension(:) :: row_indices, col_indices
       
       ! ~~~~~~~~~~
 
@@ -681,9 +685,15 @@ module petsc_helper
       call ISGetIndicesF90(indices, is_pointer, ierr)
 
       allocate(v(local_indices_size))
+      allocate(row_indices(local_indices_size))
+      allocate(col_indices(local_indices_size))
+      ! MatSetPreallocationCOO could modify the values in is_pointer
+      row_indices = is_pointer
+      col_indices = row_indices
       v = 1d0
       ! Set the diagonal
-      call MatSetPreallocationCOO(output_mat, local_indices_size, is_pointer, is_pointer, ierr)
+      call MatSetPreallocationCOO(output_mat, local_indices_size, row_indices, col_indices, ierr)
+      deallocate(row_indices, col_indices)
       call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
       deallocate(v)  
 

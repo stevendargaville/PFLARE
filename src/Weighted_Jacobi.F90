@@ -35,7 +35,7 @@ module weighted_jacobi
       PetscInt :: local_rows, local_cols, global_row_start, global_row_end_plus_one
       PetscInt :: global_rows, global_cols, i_loc, counter
       PetscErrorCode :: ierr
-      PetscInt, allocatable, dimension(:) :: indices
+      PetscInt, allocatable, dimension(:) :: row_indices, col_indices
       type(tMat) :: temp_mat
       type(tVec) :: rhs_copy, diag_vec
       PetscReal :: norm_inf, weight
@@ -112,18 +112,21 @@ module weighted_jacobi
       call MatSetOption(inv_matrix, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)          
 
       if (.NOT. reuse_triggered) then
-         allocate(indices(local_rows))
+         allocate(row_indices(local_rows))
+         allocate(col_indices(local_rows))
 
          ! Set the diagonal
          counter = 1
          do i_loc = global_row_start, global_row_end_plus_one-1
-            indices(counter) = i_loc
+            row_indices(counter) = i_loc
             counter = counter + 1
          end do
+         ! MatSetPreallocationCOO could modify the values in either row_indices or col_indices
+         col_indices = row_indices
          ! Set the diagonal
          ! Don't need to set the values as we do that directly with MatDiagonalSet
-         call MatSetPreallocationCOO(inv_matrix, local_rows, indices, indices, ierr)
-         deallocate(indices)         
+         call MatSetPreallocationCOO(inv_matrix, local_rows, row_indices, col_indices, ierr)
+         deallocate(row_indices, col_indices)         
       end if  
 
       ! Set the diagonal to our weighted jacobi
