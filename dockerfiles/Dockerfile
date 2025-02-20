@@ -18,11 +18,14 @@ ENV PETSC_ARCH=$ARCH
 WORKDIR /build
 
 # Clone PFLARE and run all the tests
+# Set the line length to 132 to check for truncation problems - the cray fortran
+# compiler was defaulting to 132 and we don't have a CI for that, so this will trigger it
 RUN set -e; \
     echo "Cloning branch: ${CHECKOUT_BRANCH}" && \
     git clone --branch ${CHECKOUT_BRANCH} https://github.com/stevendargaville/PFLARE.git && \
     cd PFLARE && \
-    make && make tests && \
+    make "FFLAGS=-ffree-line-length-132 -ffixed-line-length-132" && \
+    make tests "FFLAGS=-ffree-line-length-132 -ffixed-line-length-132" && \
     make python && make tests_python
 
 WORKDIR /build/PFLARE
