@@ -167,18 +167,15 @@ module gmres_poly_newton
       MPI_Comm :: MPI_COMM_MATRIX
       PetscReal, dimension(poly_order+2,poly_order+1) :: H_n
       PetscReal, dimension(poly_order+1,poly_order+2) :: H_n_T
-      PetscReal, dimension(poly_order+1,poly_order+1) :: H_n_square
-      PetscReal, dimension(poly_order+1) :: e_d, r, col_scale, solution, gamma, s, pof
-      integer, dimension(poly_order+1) :: iwork, pivots, extra_pair_roots, overflow
+      PetscReal, dimension(poly_order+1) :: e_d, solution, s, pof
+      integer, dimension(poly_order+1) :: extra_pair_roots, overflow
       integer, dimension(:), allocatable :: iwork_allocated, indices
-      PetscReal, dimension(1) :: ferr, berr
       PetscReal, dimension(:), allocatable :: work
       PetscReal, dimension(:,:), allocatable :: VL, VR
       PetscReal :: beta, div_real, div_imag, a, b, c, d, div_mag
       PetscReal, dimension(:, :), allocatable :: coefficients_temp
       type(tVec) :: w_j
       type(tVec), dimension(poly_order+2) :: V_n
-      character(1) :: equed
       logical :: use_harmonic_ritz = .TRUE.
       PetscReal :: rcond = 1e-12
 
@@ -243,25 +240,7 @@ module gmres_poly_newton
          ! but then we have some eigenvalues that are numerically zero
          ! We keep those and our application of the newton polynomial in 
          ! petsc_matvec_gmres_newton_mf just skips them and hence we don't do any 
-         ! extra work in the application phase than we would have done with lower order
-
-         ! ~~~~~~~~~~~
-         ! Direct LU
-         ! ~~~~~~~~~~~
-
-         ! allocate(work(4 * (poly_order + 1)))
-         ! ! Compute H_d^-H e_d
-         ! ! Doesn't modify H_n on output
-         ! call dgesvx('N', 'T', poly_order + 1, 1, &
-         !       H_n, size(H_n, 1), H_n_square, poly_order + 1, &
-         !       pivots, equed, r, col_scale, &
-         !       e_d, poly_order + 1, &
-         !       solution, poly_order + 1, &
-         !       rcond, ferr, berr, work, iwork, errorcode)
-         ! deallocate(work)
-
-         ! Rearrange given the row permutations done by the LU
-         !solution(pivots) = solution        
+         ! extra work in the application phase than we would have done with lower order     
          
          ! ~~~~~~~~~~~
          ! ~~~~~~~~~~~
@@ -375,7 +354,7 @@ module gmres_poly_newton
                ! We can hit this for very high order polynomials, where we have to 
                ! add more roots than 22 (ie pof > 1e308)
                if (log10(pof(k_loc)) + log10(div_mag) > 307) then
-                  overflow(k_loc) = overflow(k_loc) + log10(pof(k_loc))
+                  overflow(k_loc) = overflow(k_loc) + int(log10(pof(k_loc)))
                   pof(k_loc) = 1
                end if            
 
@@ -613,7 +592,7 @@ module gmres_poly_newton
 
       ! Local variables
       PetscInt :: global_rows, global_cols, local_rows, local_cols
-      integer :: comm_size, errorcode, order
+      integer :: comm_size, errorcode
       PetscErrorCode :: ierr      
       MPI_Comm :: MPI_COMM_MATRIX
       type(mat_ctxtype), pointer :: mat_ctx

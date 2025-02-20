@@ -272,7 +272,7 @@ contains
       PetscInt Istart,Iend
       PetscInt nsteps,one
       PetscErrorCode ierr
-      PetscBool  flg, check
+      PetscBool  flg
       PetscScalar  v
       type(real_coeffs), dimension(:), allocatable :: coeffs_levels
 

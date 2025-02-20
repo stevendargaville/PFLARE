@@ -32,7 +32,7 @@ module air_mg_setup
       type(air_multigrid_data), intent(inout)   :: air_data
 
       PetscErrorCode :: ierr
-      type(tMat) :: smoothing_mat, atilde, temp_mat
+      type(tMat) :: smoothing_mat, temp_mat
 
       ! ~~~~~~~~~~   
 
@@ -280,17 +280,14 @@ module air_mg_setup
       type(tVec), dimension(:), allocatable, intent(inout)  :: left_null_vecs_c, right_null_vecs_c
 
       PetscErrorCode :: ierr
-      type(tMat) :: minus_mat, sparsity_mat_cf, A_ff_power, inv_dropped_Aff, smoothing_mat, temp_identity
+      type(tMat) :: minus_mat, sparsity_mat_cf, A_ff_power, inv_dropped_Aff, smoothing_mat
       type(tMat) :: temp_mat
       type(tIS)  :: temp_is
       type(tVec), dimension(:), allocatable   :: left_null_vecs_f, right_null_vecs_f
-      PetscReal :: sol_start, sol_end, strong_r_tol
       integer :: comm_size, errorcode, order, i_loc
       MPI_Comm :: MPI_COMM_MATRIX
       integer(c_long_long) :: A_array, B_array, C_array
-      PetscInt, dimension(:), allocatable :: nnzs_row, onzs_row, cols
-      PetscReal, dimension(:), allocatable :: vals
-      PetscInt :: global_row_start, global_row_end_plus_one, global_col_start, global_col_end_plus_one
+      PetscInt :: global_row_start, global_row_end_plus_one
       PetscInt, parameter :: nz_ignore = -1
       logical :: destroy_mat, reuse_one_point_classical, reuse_grid_transfer
 
@@ -1242,8 +1239,8 @@ module air_mg_setup
       PetscErrorCode      :: ierr
       MPI_Comm            :: MPI_COMM_MATRIX
       PetscReal           :: ratio_local_nnzs_off_proc, achieved_rel_tol, norm_b
-      logical             :: continue_coarsening, trigger_proc_agglom, proc_agglom_exists, reusing_temp_mg_vecs
-      type(tMat)          :: coarse_matrix_temp, temp_mat
+      logical             :: continue_coarsening, trigger_proc_agglom, reusing_temp_mg_vecs
+      type(tMat)          :: temp_mat
       type(tKSP)          :: ksp_smoother_up, ksp_smoother_down, ksp_coarse_solver
       type(tPC)           :: pc_smoother_up, pc_smoother_down, pc_coarse_solver
       type(tVec)          :: temp_coarse_vec, rand_vec, sol_vec, temp_vec
@@ -2284,7 +2281,6 @@ module air_mg_setup
 
       integer :: our_level
       PetscErrorCode :: ierr
-      MatType:: mat_type
       integer :: i_loc
       logical :: reuse
       type(tMat) :: temp_mat
@@ -2444,9 +2440,6 @@ module air_mg_setup
 
       ! ~~~~~~
       type(air_multigrid_data), intent(inout) :: air_data
-
-      integer :: our_level
-      MatType:: mat_type
       ! ~~~~~~    
 
       call reset_air_data(air_data)

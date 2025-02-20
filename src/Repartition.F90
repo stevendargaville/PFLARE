@@ -37,7 +37,7 @@ module repartition
       integer :: errorcode
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX      
-      PetscReal :: ratio_local_nnzs_off_proc, ratio_parallel
+      PetscReal :: ratio_parallel
       type(tMat) :: Ad, Ao
       PetscOffset :: iicol
       PetscInt :: icol(1)

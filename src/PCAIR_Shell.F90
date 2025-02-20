@@ -138,7 +138,6 @@ module pcair_shell
       type(pc_air_multigrid_data), pointer  :: pc_air_data
       integer                    :: structure_flag
       PetscInt                   :: setupcalled
-      logical                    :: already_setup
 
       ! ~~~~~~  
 

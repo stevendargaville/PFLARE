@@ -272,7 +272,7 @@ module gmres_poly
       ! Overwrite y
       errorcode = 0
       call dgels('N', m+1, m, 1, H_n_copy(1,1), size(H_n_copy, 1), g0, size(g0), work, lwork, errorcode)
-      lwork = work(1)
+      lwork = int(work(1))
       deallocate(work)
       allocate(work(lwork))  
       call dgels('N', m+1, m, 1, H_n_copy(1,1), size(H_n_copy, 1), g0, size(g0), work, lwork, errorcode)
@@ -310,12 +310,10 @@ module gmres_poly
       integer, intent(out)                              :: m
 
       ! Local variables
-      integer :: i_loc, subspace_size, errorcode, lwork
+      integer :: i_loc, subspace_size
       PetscErrorCode :: ierr      
       PetscReal, dimension(poly_order+2) :: c_j, g0
-      PetscReal, dimension(size(H_n,1), size(H_n,2)) :: H_n_copy
       logical :: compute_cn
-      PetscReal, dimension(:), allocatable :: work
       PetscReal :: rel_tol
 
       ! ~~~~~~   
@@ -447,22 +445,17 @@ module gmres_poly
       PetscReal, optional, intent(inout)                     :: user_rel_tol
 
       ! Local variables
-      PetscInt :: global_rows, global_cols, local_rows, local_cols
-      integer :: i_loc, lwork, subspace_size, iwork_size, rank, m
-      integer :: comm_size, comm_rank
+      PetscInt :: global_rows, global_cols
+      integer :: i_loc, subspace_size, m
       integer :: errorcode
       PetscErrorCode :: ierr      
-      MPI_Comm :: MPI_COMM_MATRIX
       PetscReal, dimension(poly_order+2,poly_order+1) :: H_n
       PetscReal, dimension(poly_order+2,poly_order+2) :: C_n
-      PetscReal, dimension(poly_order+2) :: g0, c_j, s
       PetscReal, dimension(poly_order+1) :: y
-      PetscReal, dimension(:), allocatable :: work
       PetscReal :: beta
       type(tVec) :: w_j
       type(tVec), dimension(poly_order+2) :: V_n
-      integer, dimension(:), allocatable :: iwork
-      PetscReal :: rcond = -1d0, rel_tol
+      PetscReal :: rel_tol
 
       ! ~~~~~~    
 
@@ -748,8 +741,12 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       PetscInt :: global_row_start, global_row_end_plus_one
       PetscInt :: global_col_start, global_col_end_plus_one, n, ncols, ncols_two, ifree, max_nnzs
       PetscInt :: i_loc, j_loc, row_size, rows_ao, cols_ao, rows_ad, cols_ad, shift = 0, counter
-      integer :: errorcode, omp_threads, match_counter, term, order, location
-      integer :: comm_size, comm_size_world, status, length
+#ifdef _OPENMP
+      integer :: omp_threads, omp_threads_env, length, status
+      CHARACTER(len=255) :: omp_threads_env_char
+#endif      
+      integer :: errorcode, match_counter, term, order, location
+      integer :: comm_size, comm_size_world
       PetscErrorCode :: ierr      
       PetscReal, dimension(:), allocatable :: vals_two, vals_power_temp, vals_previous_power_temp
       PetscReal, dimension(:), allocatable, target :: vals
@@ -758,7 +755,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       PetscInt, dimension(:), allocatable :: col_indices_off_proc_array
       PetscInt, pointer :: colmap_c(:)
       type(tIS) :: col_indices
-      type(tMat) :: matrix_condensed, Ad, Ao
+      type(tMat) :: Ad, Ao
       type(tMat), target :: temp_mat
       PetscOffset :: iicol
       PetscInt :: icol(1)
@@ -770,7 +767,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       type(int_vec), dimension(:), allocatable :: symbolic_ones
       type(real_vec), dimension(:), allocatable :: symbolic_vals
       integer(c_long_long) A_array
-      MPI_Comm :: MPI_COMM_MATRIX, MPI_COMM_MATRIX_SUBCOMM
+      MPI_Comm :: MPI_COMM_MATRIX
       PetscReal, dimension(:), allocatable :: vals_temp, vals_prev_temp
       PetscInt, dimension(:), pointer :: submatrices_ia, submatrices_ja, cols_two_ptr, cols_ptr
       PetscReal, dimension(:), pointer :: vals_two_ptr, vals_ptr
@@ -778,11 +775,8 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       logical :: symmetric = .false., inodecompressed=.false., done, reuse_triggered
       type(tVec) :: rhs_copy, diag_vec, power_vec
       PetscInt, parameter :: one = 1, zero = 0
-      CHARACTER(len=255) :: omp_threads_env_char
-      integer :: omp_threads_env
       MatType:: mat_type    
       PetscInt, allocatable, dimension(:) :: indices
-      PetscReal, allocatable, dimension(:) :: v 
       
       ! ~~~~~~~~~~  
 
@@ -849,10 +843,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
 
          ! Don't set any off processor entries so no need for a reduction when assembling
          call MatSetOption(cmat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)
-         call MatSetOption(cmat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)          
-
-         !allocate(v(local_rows))
-         !v = 1d0         
+         call MatSetOption(cmat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)                
    
          if (.NOT. reuse_triggered) then
             allocate(indices(local_rows))
@@ -867,11 +858,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
             call MatSetPreallocationCOO(cmat, local_rows, indices, indices, ierr)
             deallocate(indices)
 
-         end if            
-
-         ! Don't need to set the values as we do that directly with MatDiagonalSet
-         ! call MatSetValuesCOO(cmat, v, INSERT_VALUES, ierr)    
-         ! deallocate(v)         
+         end if                   
 
          ! Set the diagonal to our polynomial
          call MatDiagonalSet(cmat, rhs_copy, INSERT_VALUES, ierr)
@@ -1500,7 +1487,6 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       MPI_Comm :: MPI_COMM_MATRIX
       type(tMat) :: mat_power, temp_mat
       type(mat_ctxtype), pointer :: mat_ctx
-      PetscInt :: one=1, zero=0
       logical :: reuse_triggered
       MatType:: mat_type
       PetscInt, allocatable, dimension(:) :: indices

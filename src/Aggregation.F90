@@ -28,12 +28,12 @@ module aggregation
       ! Local
       PetscInt :: local_rows, local_cols, global_rows, global_cols
       PetscInt :: a_global_row_start, a_global_row_end_plus_one, ifree, ncols, kfree
-      PetscInt :: max_nnzs, ncols_store, aggregate, max_neighbour_index, max_neighbour_value
+      PetscInt :: max_nnzs, aggregate, max_neighbour_index, max_neighbour_value
       integer :: errorcode, jfree, comm_size
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX      
       PetscInt, dimension(:), allocatable :: indices, cols
-      logical :: mark, mark_neigh
+      logical :: mark_neigh
 
       ! ~~~~~~   
 
@@ -170,7 +170,7 @@ module aggregation
 
       ! Swap the negative ones back to positive
       do ifree = 1, size(indices)
-         if (aggregates(ifree) < 0) aggregates(ifree) = aggregates(ifree) * (-1d0)
+         if (aggregates(ifree) < 0) aggregates(ifree) = aggregates(ifree) * (-1)
       end do
 
       ! Step 3 - any remnants

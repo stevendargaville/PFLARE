@@ -25,7 +25,6 @@ module air_mg_stats
       type(air_multigrid_data), intent(inout) :: air_data
 
       integer :: our_level
-      PetscInt :: global_rows, global_cols
       PetscErrorCode :: ierr
       MatType:: mat_type
 
@@ -90,15 +89,14 @@ module air_mg_stats
       type(tPC), intent(in)                  :: pcmg
       integer(kind=8), intent(out)           :: nnzs
 
-      integer :: our_level, i_loc, non_zero_order
-      PetscInt :: global_rows, global_cols, maxits, petsc_level
+      integer :: our_level, non_zero_order
+      PetscInt :: maxits, petsc_level
       PetscErrorCode :: ierr
       PCType pc_type
       type(tKSP) :: ksp
       PetscReal :: rtol, atol, dtol
       integer(kind=8) maxits_long, maxits_aff_long, gmres_size_long, poly_order_long
       MatType:: mat_type
-      logical :: zero_root
 
       ! ~~~~~~    
       

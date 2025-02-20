@@ -80,12 +80,14 @@ module tsqr
       PetscReal, dimension(:, :), intent(inout)                     :: A
       type(tsqr_buffers), target, intent(inout)                :: buffers
       
-      PetscReal, dimension(:), allocatable :: work, T
+      PetscReal, dimension(:), allocatable :: work
+      ! PetscReal, dimension(:), allocatable :: T
       PetscReal, dimension(size(A, 2)) :: tau
       logical, dimension(size(A, 2)) :: scale_row
       PetscReal, dimension(:,:), pointer :: R_pointer
 
-      integer :: lwork, column_block_size, row_block_size, no_of_row_blocks
+      ! integer :: column_block_size, row_block_size, no_of_row_blocks
+      integer :: lwork
       integer :: m_size, n_size, errorcode, comm_size, row_length, i_loc
       ! ~~~~~~    
 
@@ -138,7 +140,7 @@ module tsqr
       ! Tall-skinny specific QR - hopefully faster
       ! ~~~~~~~~                         
       ! else
-         
+      !    ! Uncomment the column_block_size variables and T above if using this
       !    ! Start with a workspace query on the size of lwork
       !    ! Just set the column block size to be the number of columns
       !    column_block_size = n_size
@@ -278,7 +280,7 @@ module tsqr
       integer :: number_chunks, i_loc, lwork, chunk_size
       integer :: start_chunk, end_chunk, errorcode, j_loc, nb, n_size
       PetscReal, dimension(:, :), allocatable :: R_stacked
-      PetscReal, dimension(:), allocatable :: work, tau, T      
+      PetscReal, dimension(:), allocatable :: work, tau
       ! ~~~~~~~~~
 
       ! ~~~~~~~~~~
@@ -353,7 +355,7 @@ module tsqr
          call dgeqrf(size(R_stacked, 1), size(R_stacked, 2), &
                      R_stacked(1, 1), size(R_stacked, 1), &
                      tau, work, lwork, errorcode)
-         lwork = work(1)
+         lwork = int(work(1))
          deallocate(work)
          allocate(work(lwork))
 
