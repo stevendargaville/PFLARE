@@ -14,10 +14,6 @@ FFLAGS_INPUT := $(FFLAGS)
 CPPFLAGS_INPUT := $(CPPFLAGS)
 FPPFLAGS_INPUT := $(FPPFLAGS)
 
-# Read in the petsc compile/linking variables and makefile rules
-include ${PETSC_DIR}/lib/petsc/conf/variables
-include ${PETSC_DIR}/lib/petsc/conf/rules
-
 # Directories we want
 INCLUDEDIR  := include
 SRCDIR      := src
@@ -26,6 +22,37 @@ export LIBDIR := $(CURDIR)/lib
 
 # Include directories - include top level directory in case compilers output modules there
 INCLUDE := -I$(CURDIR) -I$(INCLUDEDIR)
+
+CPPFLAGS = $(INCLUDE)
+FPPFLAGS = $(INCLUDE)
+CPPFLAGS = $(INCLUDE)
+CXXPPFLAGS = $(INCLUDE)
+
+# Read in the petsc compile/linking variables and makefile rules
+include ${PETSC_DIR}/lib/petsc/conf/variables
+include ${PETSC_DIR}/lib/petsc/conf/rules
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~
+# Has petsc has been configured with 64 bit integers/shared libraries/kokkos
+# ~~~~~~~~~~~~~~~~~~~~~~~~
+# Read in the petscconf.h
+PETSC_HEADER_FILE := $(PETSC_DIR)/$(PETSC_ARCH)/include/petscconf.h
+CONTENTS := $(file < $(PETSC_HEADER_FILE))
+export PETSC_USE_64BIT_INDICES := 0
+ifneq (,$(findstring PETSC_USE_64BIT_INDICES 1,$(CONTENTS)))
+PETSC_USE_64BIT_INDICES := 1
+endif  		  
+PETSC_USE_SHARED_LIBRARIES := 0
+ifneq (,$(findstring PETSC_USE_SHARED_LIBRARIES 1,$(CONTENTS)))
+PETSC_USE_SHARED_LIBRARIES := 1
+endif
+export PETSC_HAVE_KOKKOS := 0
+ifneq (,$(findstring PETSC_HAVE_KOKKOS 1,$(CONTENTS)))
+export PETSC_HAVE_KOKKOS := 1
+endif
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~
+# ~~~~~~~~~~~~~~~~~~~~~~~~
 
 # All the files required by PFLARE
 OBJS := $(SRCDIR)/NonBusyWait.o \
@@ -65,31 +92,16 @@ OBJS := $(SRCDIR)/NonBusyWait.o \
 
 # Define a variable containing all the tests
 export TEST_TARGETS = ex12f ex6f ex6f_getcoeffs ex6 adv_1d adv_diff_2d ex6_cf_splitting
-
-# Add the pflare include files
-PETSC_FC_INCLUDES += $(INCLUDE)
-PETSC_CC_INCLUDES += $(INCLUDE)
+# Include kokkos examples
+ifeq ($(PETSC_HAVE_KOKKOS),1)
+export TEST_TARGETS := $(TEST_TARGETS) adv_1dk
+endif
 
 # Include any additional flags we input
 CFLAGS += $(CFLAGS_INPUT)
 FFLAGS += $(FFLAGS_INPUT)
 CPPFLAGS += $(CPPFLAGS_INPUT)
 FPPFLAGS += $(FPPFLAGS_INPUT)
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~
-# Has petsc has been configured with 64 bit integers/shared libraries
-# ~~~~~~~~~~~~~~~~~~~~~~~~
-# Read in the petscconf.h
-PETSC_HEADER_FILE := $(PETSC_DIR)/$(PETSC_ARCH)/include/petscconf.h
-CONTENTS := $(file < $(PETSC_HEADER_FILE))
-PETSC_USE_64BIT_INDICES := 0
-ifneq (,$(findstring PETSC_USE_64BIT_INDICES 1,$(CONTENTS)))
-PETSC_USE_64BIT_INDICES := 1
-endif  		  
-PETSC_USE_SHARED_LIBRARIES := 0
-ifneq (,$(findstring PETSC_USE_SHARED_LIBRARIES 1,$(CONTENTS)))
-PETSC_USE_SHARED_LIBRARIES := 1
-endif 
 
 # Output the library - either static or dynamic
 ifeq ($(PETSC_USE_SHARED_LIBRARIES),0)

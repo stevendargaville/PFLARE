@@ -11,19 +11,20 @@ FFLAGS_INPUT := $(FFLAGS)
 CPPFLAGS_INPUT := $(CPPFLAGS)
 FPPFLAGS_INPUT := $(FPPFLAGS)
 
-# Read in the petsc compile/linking variables and makefile rules
-include ${PETSC_DIR}/lib/petsc/conf/variables
-include ${PETSC_DIR}/lib/petsc/conf/rules
-
 # ~~~~~~~~~~~
 # PFLARE specific changes
 # ~~~~~~~~~~~
 # Include directories - include top level directory in case compilers output modules there
 INCLUDE := -I$(CURDIR)/../ -I../include
 
-# Add the pflare include files
-PETSC_FC_INCLUDES += $(INCLUDE)
-PETSC_CC_INCLUDES += $(INCLUDE)
+CPPFLAGS = $(INCLUDE)
+FPPFLAGS = $(INCLUDE)
+CPPFLAGS = $(INCLUDE)
+CXXPPFLAGS = $(INCLUDE)
+
+# Read in the petsc compile/linking variables and makefile rules
+include ${PETSC_DIR}/lib/petsc/conf/variables
+include ${PETSC_DIR}/lib/petsc/conf/rules
 
 # Include any additional flags we input
 CFLAGS += $(CFLAGS_INPUT)
@@ -239,3 +240,19 @@ run_tests_no_load:
 	./adv_diff_2d -da_grid_x 10 -da_grid_y 10 -ksp_type richardson -pc_type air \
 	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys \
 	 -pc_air_auto_truncate_start_level 1 -pc_air_auto_truncate_tol 1e-2 -ksp_max_it 3
+#	 
+# ~~~~~~~~~~~~~~~~~~~~~~~	 
+# Include kokkos examples	 
+# ~~~~~~~~~~~~~~~~~~~~~~~
+ifeq ($(PETSC_HAVE_KOKKOS),1)
+# 
+	@echo ""
+	@echo "Test AIRG on steady 1D advection KOKKOS"
+	./adv_1dk -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right \
+	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys -ksp_max_it 1 \
+	 -vec_type kokkos -mat_type aijkokkos
+	@echo "Test AIRG on steady 1D advection in parallel KOKKOS"
+	$(MPIEXEC) -n 2 ./adv_1dk -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right \
+	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys -ksp_max_it 10 \
+	 -vec_type kokkos -mat_type aijkokkos	 
+endif

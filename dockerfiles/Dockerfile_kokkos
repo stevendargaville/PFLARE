@@ -1,0 +1,27 @@
+ARG BASE_IMAGE=stevendargaville/petsc_kokkos
+
+FROM ${BASE_IMAGE}
+# Checkout the main branch by default
+ARG BRANCH=main
+# Use the optimised petsc build by default
+ARG ARCH=arch-linux-c-opt
+
+LABEL maintainer="Steven Dargaville"
+LABEL description="PFLARE_kokkos"
+
+# If you want to debug inside the container
+# RUN apt-get update && apt-get install -y valgrind 
+
+ENV CHECKOUT_BRANCH=$BRANCH
+ENV PETSC_ARCH=$ARCH
+
+WORKDIR /build
+
+# Clone PFLARE and run all the tests
+RUN set -e; \
+    echo "Cloning branch: ${CHECKOUT_BRANCH}" && \
+    git clone --branch ${CHECKOUT_BRANCH} https://github.com/stevendargaville/PFLARE.git && \
+    cd PFLARE && \
+    make && make tests
+
+WORKDIR /build/PFLARE
