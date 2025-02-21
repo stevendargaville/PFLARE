@@ -158,7 +158,6 @@ module petsc_helper
       ! By default drop everything
       row_indices = -1
       allocate(col_indices(max_nnzs_total))
-      col_indices = -1
       allocate(v(max_nnzs_total))      
 
       call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
