@@ -83,7 +83,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    PetscInt global_row_start, global_row_end_plus_one;
    PetscInt global_col_start, global_col_end_plus_one;
    MatType mat_type;
-   PetscReal rel_row_tol;
+   PetscReal *rel_row_tol;
    PetscInt max_nnzs, max_nnzs_total, ncols, ncols_seq_local, ncols_seq_nonlocal;
    const PetscScalar *local_data, *nonlocal_data;
 
@@ -116,12 +116,6 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       mat_local = *input_mat;
    }
 
-   rel_row_tol = tol;
-   if (relative_max_row_tolerance_int) 
-   {
-      rel_row_tol = 1.0;
-   }
-
    // Get the comm
    PetscObjectGetComm((PetscObject)*input_mat, &MPI_COMM_MATRIX);
    MatGetLocalSize(*input_mat, &local_rows, &local_cols);
@@ -148,8 +142,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    // We know we never have more to do than the original nnzs
    PetscInt *row_indices, *col_indices;
    PetscScalar *v;
-   PetscMalloc2(max_nnzs_total, &row_indices, \
-            max_nnzs_total, &col_indices);
+   PetscMalloc2(max_nnzs_total, &row_indices, max_nnzs_total, &col_indices);
    PetscMalloc1(max_nnzs_total, &v);   
    // By default drop everything
    for (int i = 0; i < max_nnzs_total; i++)
@@ -158,8 +151,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    }
 
    MatCreate(MPI_COMM_MATRIX, output_mat);
-   MatSetSizes(*output_mat, local_rows, local_cols, \
-                       global_rows, global_cols);
+   MatSetSizes(*output_mat, local_rows, local_cols, global_rows, global_cols);
    // Match the output type
    MatSetType(*output_mat, mat_type);
    MatSetUp(*output_mat);
@@ -173,19 +165,20 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    MatSeqAIJGetArrayRead(mat_local, &local_data);
    if (mpi) MatSeqAIJGetArrayRead(mat_nonlocal, &nonlocal_data);
 
-   // Now go and fill the new matrix
-   // These loops just set the row and col indices to not be -1
-   // if we are including it in the matrix
-   // Loop over global row indices
-   PetscInt counter = 0;
+   // Relative dropping tolerance per row
+   PetscMalloc1(local_rows, &rel_row_tol);   
+   // Let's work out what the row tolerance is in each row  
    for (int i = 0; i < local_rows; i++)
    {
-      ncols_seq_local = mat_seq_local->i[i + 1] - mat_seq_local->i[i];
-      if (mpi) ncols_seq_nonlocal = mat_seq_nonlocal->i[i + 1] - mat_seq_nonlocal->i[i];
+      rel_row_tol[i] = tol;
 
-      // Let's get the max value in this row
+      // If we want the row tolerance to be relative to the max value in the row
       if (relative_max_row_tolerance_int) 
-      {
+      {       
+         ncols_seq_local = mat_seq_local->i[i + 1] - mat_seq_local->i[i];
+         if (mpi) ncols_seq_nonlocal = mat_seq_nonlocal->i[i + 1] - mat_seq_nonlocal->i[i];
+
+         // Let's get the max value in this row
          PetscScalar max_val = -1.0;
 
          // Do the local part
@@ -203,15 +196,27 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
             }  
          }       
 
-         rel_row_tol = tol * max_val;
+         rel_row_tol[i] *= max_val;
       }
+   }
+
+   // Now go and fill the new matrix
+   // These loops just set the row and col indices to not be -1
+   // if we are including it in the matrix
+   // Loop over global row indices
+   PetscInt counter = 0;
+   
+   // Go and do the local part
+   for (int i = 0; i < local_rows; i++)
+   {
+      ncols_seq_local = mat_seq_local->i[i + 1] - mat_seq_local->i[i];
 
       // Do the local part
       for (int j = 0; j < ncols_seq_local; j++)
       {
          // Set the row/col to be included (ie not -1) 
          // if it is bigger than the tolerance
-         if (abs(local_data[mat_seq_local->i[i] + j]) >= rel_row_tol)
+         if (abs(local_data[mat_seq_local->i[i] + j]) >= rel_row_tol[i])
          {
             row_indices[counter + j] = i + global_row_start;
             // Careful here to use global_col_start in case we are rectangular
@@ -230,15 +235,20 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
          v[counter + j] = local_data[mat_seq_local->i[i] + j];
       }     
       counter = counter + ncols_seq_local;
+   }
 
-      // Do the non-local part
-      if (mpi)
+   // Do the non-local part
+   if (mpi)
+   {
+      for (int i = 0; i < local_rows; i++)
       {
+         ncols_seq_nonlocal = mat_seq_nonlocal->i[i + 1] - mat_seq_nonlocal->i[i];
+
          for (int j = 0; j < ncols_seq_nonlocal; j++)
          {
             // Set the row/col to be included (ie not -1) 
             // if it is bigger than the tolerance
-            if (abs(nonlocal_data[mat_seq_nonlocal->i[i] + j]) >= rel_row_tol)
+            if (abs(nonlocal_data[mat_seq_nonlocal->i[i] + j]) >= rel_row_tol[i])
             {
                row_indices[counter + j] = i + global_row_start;
                // garray is the colmap
@@ -258,7 +268,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
             v[counter + j] = nonlocal_data[mat_seq_nonlocal->i[i] + j];
          }
          counter = counter + ncols_seq_nonlocal;
-      }
+      } 
    }
 
    MatSeqAIJRestoreArrayRead(mat_local, &local_data);
@@ -268,7 +278,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    MatSetPreallocationCOO(*output_mat, counter, row_indices, col_indices);
    PetscFree2(row_indices, col_indices);   
    MatSetValuesCOO(*output_mat, v, INSERT_VALUES);    
-   PetscFree(v);
+   PetscFree2(v, rel_row_tol);
 
    return;
 }
