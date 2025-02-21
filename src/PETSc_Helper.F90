@@ -153,10 +153,13 @@ module petsc_helper
       allocate(cols(max_nnzs))
       allocate(vals(max_nnzs)) 
 
-      ! Times 2 here in case we are lumping
-      allocate(row_indices(max_nnzs_total * 2))
-      allocate(col_indices(max_nnzs_total * 2))
-      allocate(v(max_nnzs_total * 2))      
+      ! We know we never have more to do than the original nnzs
+      allocate(row_indices(max_nnzs_total))
+      ! By default drop everything
+      row_indices = -1
+      allocate(col_indices(max_nnzs_total))
+      col_indices = -1
+      allocate(v(max_nnzs_total))      
 
       call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
       call MatSetSizes(output_mat, local_rows, local_cols, &
@@ -173,12 +176,16 @@ module petsc_helper
       call MatSetOption(output_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)     
       
       ! Now go and fill the new matrix
+      ! These loops just set the row and col indices to not be -1
+      ! if we are including it in the matrix
       ! Loop over global row indices
       counter = 1
       do ifree = global_row_start, global_row_end_plus_one-1                  
       
          ! Get the row
-         call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)            
+         call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)     
+         ! Copy in all the values
+         v(counter:counter + ncols - 1) = vals(1:ncols)
 
          if (rel_row_tol_logical) then
             rel_row_tol = tol * maxval(abs(vals(1:ncols)))
@@ -186,25 +193,23 @@ module petsc_helper
                   
          do col = 1, ncols
 
-            ! Copy the value in if it is bigger than the tolerance
+            ! Set the row/col to be included (ie not -1) 
+            ! if it is bigger than the tolerance
             if (abs(vals(col)) .ge. rel_row_tol ) then
 
-               row_indices(counter) = ifree
-               col_indices(counter) = cols(col)
-               v(counter) = vals(col)    
-               counter = counter + 1 
+               row_indices(counter + col - 1) = ifree
+               col_indices(counter + col - 1) = cols(col)
 
             ! If the entry is small and we are lumping, then add it to the diagonal
             ! or if this is the diagonal and it's small but we are not dropping it
             else if (lump_entries .OR. (.NOT. drop_diag .AND. cols(col) == ifree)) then
 
-               row_indices(counter) = ifree
-               col_indices(counter) = ifree
-               v(counter) = vals(col)    
-               counter = counter + 1                   
+               row_indices(counter + col - 1) = ifree
+               col_indices(counter + col - 1) = ifree
 
             end if
          end do                       
+         counter = counter + ncols
 
          ! Must call otherwise petsc leaks memory
          call MatRestoreRow(input_mat, ifree, ncols, cols, vals, ierr)   

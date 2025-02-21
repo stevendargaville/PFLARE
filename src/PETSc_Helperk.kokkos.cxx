@@ -145,12 +145,17 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       max_nnzs_total = max_nnzs_total + ncols;
    }   
 
-   // Times 2 here in case we are lumping
+   // We know we never have more to do than the original nnzs
    PetscInt *row_indices, *col_indices;
    PetscScalar *v;
-   PetscMalloc2(max_nnzs_total * 2, &row_indices, \
-            max_nnzs_total * 2, &col_indices);
-   PetscMalloc1(max_nnzs_total * 2, &v);   
+   PetscMalloc2(max_nnzs_total, &row_indices, \
+            max_nnzs_total, &col_indices);
+   PetscMalloc1(max_nnzs_total, &v);   
+   // By default drop everything
+   for (int i = 0; i < max_nnzs_total; i++)
+   {
+      row_indices[i] = -1;
+   }
 
    MatCreate(MPI_COMM_MATRIX, output_mat);
    MatSetSizes(*output_mat, local_rows, local_cols, \
@@ -168,7 +173,10 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    MatSeqAIJGetArrayRead(mat_local, &local_data);
    if (mpi) MatSeqAIJGetArrayRead(mat_nonlocal, &nonlocal_data);
 
-   // Loop over all the rows
+   // Now go and fill the new matrix
+   // These loops just set the row and col indices to not be -1
+   // if we are including it in the matrix
+   // Loop over global row indices
    PetscInt counter = 0;
    for (int i = 0; i < local_rows; i++)
    {
@@ -201,55 +209,55 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       // Do the local part
       for (int j = 0; j < ncols_seq_local; j++)
       {
-         // Copy the value in if it is bigger than the tolerance
+         // Set the row/col to be included (ie not -1) 
+         // if it is bigger than the tolerance
          if (abs(local_data[mat_seq_local->i[i] + j]) >= rel_row_tol)
          {
-            row_indices[counter] = i + global_row_start;
+            row_indices[counter + j] = i + global_row_start;
             // Careful here to use global_col_start in case we are rectangular
-            col_indices[counter] = mat_seq_local->j[mat_seq_local->i[i] + j] + global_col_start;
-            v[counter] = local_data[mat_seq_local->i[i] + j];
-            counter = counter + 1;
+            col_indices[counter + j] = mat_seq_local->j[mat_seq_local->i[i] + j] + global_col_start;
          }
-         // Lumping
+         // If the entry is small and we are lumping, then add it to the diagonal
+         // or if this is the diagonal and it's small but we are not dropping it 
          else if (lump_int || \
                (!allow_drop_diagonal_int && \
                   mat_seq_local->j[mat_seq_local->i[i] + j] + global_col_start == i + global_row_start))
          {
-            row_indices[counter] = i + global_row_start;
-            col_indices[counter] = i + global_row_start;
-            v[counter] = local_data[mat_seq_local->i[i] + j];
-            counter = counter + 1;            
+            row_indices[counter + j] = i + global_row_start;
+            col_indices[counter + j] = i + global_row_start;
          }
+         // Always copy in all the values
+         v[counter + j] = local_data[mat_seq_local->i[i] + j];
       }     
+      counter = counter + ncols_seq_local;
 
       // Do the non-local part
       if (mpi)
       {
          for (int j = 0; j < ncols_seq_nonlocal; j++)
          {
-            // Copy the value in if it is bigger than the tolerance
+            // Set the row/col to be included (ie not -1) 
+            // if it is bigger than the tolerance
             if (abs(nonlocal_data[mat_seq_nonlocal->i[i] + j]) >= rel_row_tol)
             {
-               row_indices[counter] = i + global_row_start;
+               row_indices[counter + j] = i + global_row_start;
                // garray is the colmap
-               col_indices[counter] = mat_mpi->garray[mat_seq_nonlocal->j[mat_seq_nonlocal->i[i] + j]];
-               v[counter] = nonlocal_data[mat_seq_nonlocal->i[i] + j];
-               counter = counter + 1;
-            }      
-            // If the entry is small and we are lumping, then add it to the diagonal
-            // or if this is the diagonal and it's small but we are not dropping it            
+               col_indices[counter + j] = mat_mpi->garray[mat_seq_nonlocal->j[mat_seq_nonlocal->i[i] + j]];
+            }                 
             // Be careful to use the colmap to get the off-diagonal global column index
             else if (lump_int || \
                   (!allow_drop_diagonal_int && \
                      mat_mpi->garray[mat_seq_nonlocal->j[mat_seq_nonlocal->i[i] + j]] \
                         == i + global_row_start))
             {
-               row_indices[counter] = i + global_row_start;
-               col_indices[counter] = i + global_row_start;
-               v[counter] = nonlocal_data[mat_seq_nonlocal->i[i] + j];
-               counter = counter + 1;            
-            }             
+               row_indices[counter + j] = i + global_row_start;
+               col_indices[counter + j] = i + global_row_start;
+            }     
+            
+            // Always copy in all the values
+            v[counter + j] = nonlocal_data[mat_seq_nonlocal->i[i] + j];
          }
+         counter = counter + ncols_seq_nonlocal;
       }
    }
 
