@@ -180,7 +180,23 @@ module c_petsc_interfaces
          integer(c_long_long) :: B_array
       end subroutine generate_identity_is_kokkos         
  
-   end interface     
+   end interface 
+   
+   interface   
+      
+      subroutine remove_small_from_sparse_kokkos(A_array, tol, B_array, &
+                     relative_max_row_tolerance_int, lump_int, allow_drop_diagonal_int) &
+         bind(c, name="remove_small_from_sparse_kokkos")
+         use iso_c_binding
+         integer(c_long_long) :: A_array
+         PetscReal, value :: tol
+         integer(c_long_long) :: B_array
+         integer(c_int), value :: relative_max_row_tolerance_int
+         integer(c_int), value :: lump_int
+         integer(c_int), value :: allow_drop_diagonal_int
+      end subroutine remove_small_from_sparse_kokkos         
+ 
+   end interface    
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 

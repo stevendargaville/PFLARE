@@ -24,6 +24,71 @@ module petsc_helper
    
    subroutine remove_small_from_sparse(input_mat, tol, output_mat, relative_max_row_tolerance, lump, allow_drop_diagonal)
 
+      ! Wrapper around remove_small_from_sparse_cpu and remove_small_from_sparse_kokkos
+   
+      ! ~~~~~~~~~~
+      ! Input 
+      type(tMat), intent(in) :: input_mat
+      type(tMat), intent(inout) :: output_mat
+      PetscReal, intent(in) :: tol
+      logical, intent(in), optional :: relative_max_row_tolerance, lump, allow_drop_diagonal
+      
+#if defined(PETSC_HAVE_KOKKOS)                     
+      integer(c_long_long) :: A_array, B_array
+      integer :: lump_int, allow_drop_diagonal_int, relative_max_row_tolerance_int, ierr
+      MatType :: mat_type
+#endif      
+      ! ~~~~~~~~~~
+
+#if defined(PETSC_HAVE_KOKKOS)    
+
+      call MatGetType(input_mat, mat_type, ierr)
+      if (mat_type == MATMPIAIJKOKKOS .OR. mat_type == MATSEQAIJKOKKOS .OR. &
+            mat_type == MATAIJKOKKOS) then
+
+         relative_max_row_tolerance_int = 0
+         if (present(relative_max_row_tolerance)) then
+            if (relative_max_row_tolerance) then
+               relative_max_row_tolerance_int = 1
+            end if
+         end if
+         lump_int = 0
+         if (present(lump)) then
+            if (lump) then
+               lump_int = 1
+            end if
+         end if   
+         allow_drop_diagonal_int = 0 
+         if (present(allow_drop_diagonal)) then
+            if (allow_drop_diagonal) then
+               allow_drop_diagonal_int = 1
+            end if
+         end if         
+
+         A_array = input_mat%v
+
+         call remove_small_from_sparse_kokkos(A_array, tol, &
+                  B_array, relative_max_row_tolerance_int, lump_int, allow_drop_diagonal_int) 
+         output_mat%v = B_array
+
+      else
+
+         call remove_small_from_sparse_cpu(input_mat, tol, output_mat, relative_max_row_tolerance, &
+                  lump, allow_drop_diagonal)          
+
+      end if
+#else
+      call remove_small_from_sparse_cpu(input_mat, tol, output_mat, relative_max_row_tolerance, &
+               lump, allow_drop_diagonal)  
+#endif  
+     
+         
+   end subroutine remove_small_from_sparse
+
+   !------------------------------------------------------------------------------------------------------------------------
+   
+   subroutine remove_small_from_sparse_cpu(input_mat, tol, output_mat, relative_max_row_tolerance, lump, allow_drop_diagonal)
+
       ! Returns a copy of a sparse matrix with entries below abs(val) < tol removed
       ! If relative_max_row_tolerance is true, then the tol is taken to be a relative scaling 
       ! of the max row val on each row
@@ -39,9 +104,8 @@ module petsc_helper
       PetscInt :: col, ncols, ifree, max_nnzs
       PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start
       PetscInt :: global_row_end_plus_one, max_nnzs_total
-      PetscInt :: global_col_start, global_col_end_plus_one, counter
+      PetscInt :: counter
       PetscErrorCode :: ierr
-      integer :: errorcode, comm_size
       PetscInt, dimension(:), allocatable :: cols
       PetscReal, dimension(:), allocatable :: vals
       PetscInt, allocatable, dimension(:) :: row_indices, col_indices
@@ -56,8 +120,6 @@ module petsc_helper
       ! If the tolerance is 0 we still want to go through this routine and drop the zeros
 
       call PetscObjectGetComm(input_mat, MPI_COMM_MATRIX, ierr)    
-      ! Get the comm size 
-      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)
 
       lump_entries = .FALSE.
       drop_diag = .FALSE.
@@ -77,7 +139,6 @@ module petsc_helper
       call MatGetSize(input_mat, global_rows, global_cols, ierr)
       ! This returns the global index of the local portion of the matrix
       call MatGetOwnershipRange(input_mat, global_row_start, global_row_end_plus_one, ierr)  
-      call MatGetOwnershipRangeColumn(input_mat, global_col_start, global_col_end_plus_one, ierr)  
       
       max_nnzs = 0
       max_nnzs_total = 0
@@ -156,7 +217,7 @@ module petsc_helper
       call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
       deallocate(v)        
          
-   end subroutine remove_small_from_sparse
+   end subroutine remove_small_from_sparse_cpu   
 
    !------------------------------------------------------------------------------------------------------------------------
    
@@ -646,16 +707,28 @@ module petsc_helper
 
 #if defined(PETSC_HAVE_KOKKOS)                     
       integer(c_long_long) :: A_array, index_array, B_array
+      integer :: ierr
+      MatType :: mat_type
 #endif
       ! ~~~~~~~~~~
 
 #if defined(PETSC_HAVE_KOKKOS)                     
-      A_array = input_mat%v
-      index_array = indices%v
 
-      call generate_identity_is_kokkos(A_array, index_array, &
-               B_array) 
-      output_mat%v = B_array
+      call MatGetType(input_mat, mat_type, ierr)
+      if (mat_type == MATMPIAIJKOKKOS .OR. mat_type == MATSEQAIJKOKKOS .OR. &
+            mat_type == MATAIJKOKKOS) then
+
+         A_array = input_mat%v
+         index_array = indices%v
+
+         call generate_identity_is_kokkos(A_array, index_array, &
+                  B_array) 
+         output_mat%v = B_array
+
+      else
+         call generate_identity_is_cpu(input_mat, indices, &
+               output_mat) 
+      end if
 #else
       call generate_identity_is_cpu(input_mat, indices, &
                output_mat)    
