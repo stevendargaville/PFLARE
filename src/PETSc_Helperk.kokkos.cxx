@@ -87,28 +87,23 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    PetscInt global_col_start, global_col_end_plus_one;
    PetscInt row_ao, col_ao;
    MatType mat_type;
-   PetscInt max_nnzs, max_nnzs_total, ncols;
-   PetscInt nnzs_local, nnzs_nonlocal;
+   PetscInt max_nnzs_total, nnzs_local, nnzs_nonlocal;
 
    MatGetType(*input_mat, &mat_type);
    // Are we in parallel?
    bool mpi = strcmp(mat_type, MATMPIAIJKOKKOS) == 0;
 
    Mat_MPIAIJ *mat_mpi;
-   Mat_SeqAIJ *mat_seq_local, *mat_seq_nonlocal;
    Mat mat_local, mat_nonlocal;
    if (mpi)
    {
       mat_mpi = (Mat_MPIAIJ *)(*input_mat)->data;
-      mat_seq_local = (Mat_SeqAIJ *)mat_mpi->A->data;
-      mat_seq_nonlocal = (Mat_SeqAIJ *)mat_mpi->B->data;
       mat_local = mat_mpi->A;
       mat_nonlocal = mat_mpi->B;
       MatGetSize(mat_nonlocal, &row_ao, &col_ao);
    }
    else
    {
-      mat_seq_local = (Mat_SeqAIJ *)(*input_mat)->data;
       mat_local = *input_mat;
    }
 
@@ -118,27 +113,40 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    MatGetSize(*input_mat, &global_rows, &global_cols);
    // This returns the global index of the local portion of the matrix
    MatGetOwnershipRange(*input_mat, &global_row_start, &global_row_end_plus_one);
-   MatGetOwnershipRangeColumn(*input_mat, &global_col_start, &global_col_end_plus_one);
+   MatGetOwnershipRangeColumn(*input_mat, &global_col_start, &global_col_end_plus_one);   
 
+   // ~~~~~~~~~~~~
+   // Get pointers to the i,j,vals on the device
+   // ~~~~~~~~~~~~
+   const PetscInt *device_local_i, *device_local_j, *device_nonlocal_i, *device_nonlocal_j;
+   PetscMemType mtype;
+   PetscScalar *device_local_vals, *device_nonlocal_vals;  
+   MatSeqAIJGetCSRAndMemType(mat_local, &device_local_i, &device_local_j, &device_local_vals, &mtype);  
+   if (mpi) MatSeqAIJGetCSRAndMemType(mat_nonlocal, &device_nonlocal_i, &device_nonlocal_j, &device_nonlocal_vals, &mtype);          
+
+   // ~~~~~~~~~~~~
    // Get the number of nnzs
-   max_nnzs = 0;
+   // ~~~~~~~~~~~~
    max_nnzs_total = 0;
    nnzs_local = 0;
    nnzs_nonlocal = 0;
-   for (int i = 0; i < local_rows; i++)   
-   {
-      ncols = mat_seq_local->i[i + 1] - mat_seq_local->i[i];
-      nnzs_local += ncols;
-      if (mpi)
-      {
-         ncols += mat_seq_nonlocal->i[i + 1] - mat_seq_nonlocal->i[i];
-         nnzs_nonlocal += mat_seq_nonlocal->i[i + 1] - mat_seq_nonlocal->i[i];
-      }
 
-      if (ncols > max_nnzs) max_nnzs = ncols;
-   }   
+   // Do a reduction to get the local nnzs
+   Kokkos::parallel_reduce ("ReductionLocal", local_rows, KOKKOS_LAMBDA (const PetscInt i, PetscInt& update) {
+      update += device_local_i[i + 1] - device_local_i[i];
+   }, nnzs_local);
+      // Do a reduction to get the nonlocal nnzs
+   if (mpi)
+   {
+      Kokkos::parallel_reduce ("ReductionNonLocal", local_rows, KOKKOS_LAMBDA (const PetscInt i, PetscInt& update) {
+         update += device_nonlocal_i[i + 1] - device_nonlocal_i[i];
+      }, nnzs_nonlocal);      
+   }
    max_nnzs_total = nnzs_local + nnzs_nonlocal;
 
+   // ~~~~~~~~~~~~
+   // Create the output mat
+   // ~~~~~~~~~~~~
    MatCreate(MPI_COMM_MATRIX, output_mat);
    MatSetSizes(*output_mat, local_rows, local_cols, global_rows, global_cols);
    // Match the output type
@@ -153,12 +161,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    // Row and column indices for our assembly
    // We know we never have more to do than the original nnzs
    PetscInt *row_indices, *col_indices;
-   PetscMalloc2(max_nnzs_total, &row_indices, max_nnzs_total, &col_indices);
-
-   // Pointers to the i,j,vals on the device
-   const PetscInt *device_local_i, *device_local_j, *device_nonlocal_i, *device_nonlocal_j;
-   PetscMemType mtype;
-   PetscScalar *device_local_vals, *device_nonlocal_vals;   
+   PetscMalloc2(max_nnzs_total, &row_indices, max_nnzs_total, &col_indices); 
 
    // Let's calculate the row and column indices on the device
    // then copy them back to the host for MatSetPreallocationCOO
@@ -179,11 +182,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       // Copy in the tolerance
       Kokkos::deep_copy(rel_row_tol_d, tol);   
       // By default drop everything
-      Kokkos::deep_copy(row_indices_d, -1);   
-
-      // Get the i, j and vals device pointers 
-      MatSeqAIJGetCSRAndMemType(mat_local, &device_local_i, &device_local_j, &device_local_vals, &mtype);  
-      if (mpi) MatSeqAIJGetCSRAndMemType(mat_nonlocal, &device_nonlocal_i, &device_nonlocal_j, &device_nonlocal_vals, &mtype);  
+      Kokkos::deep_copy(row_indices_d, -1);    
       
       // Compute the relative row tolerances if needed
       if (relative_max_row_tolerance_int) 
@@ -304,10 +303,8 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    }
    PetscFree2(row_indices, col_indices);   
 
-   // For the values, we can just directly get access to the device pointers
+   // MatSetValuesCOO all happens on the device
    {
-      MatSeqAIJGetCSRAndMemType(mat_local, &device_local_i, &device_local_j, &device_local_vals, &mtype);
-
       // Have to copy the local and then the nonlocal data into one array on the device
       if (mpi)
       {         
@@ -322,7 +319,6 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
                coo_v(i) = device_local_vals[i];
             });    
 
-         MatSeqAIJGetCSRAndMemType(mat_nonlocal, &device_nonlocal_i, &device_nonlocal_j, &device_nonlocal_vals, &mtype);
          // Copy the nonlocal values
          Kokkos::parallel_for(
             Kokkos::RangePolicy<>(0, nnzs_nonlocal), KOKKOS_LAMBDA(int i) {
