@@ -95,16 +95,20 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
 
    Mat_MPIAIJ *mat_mpi;
    Mat mat_local, mat_nonlocal;
+   Mat_SeqAIJKokkos *mat_localkok, *mat_nonlocalkok;
    if (mpi)
    {
       mat_mpi = (Mat_MPIAIJ *)(*input_mat)->data;
       mat_local = mat_mpi->A;
       mat_nonlocal = mat_mpi->B;
       MatGetSize(mat_nonlocal, &row_ao, &col_ao);
+      mat_localkok = static_cast<Mat_SeqAIJKokkos *>(mat_local->spptr);
+      mat_nonlocalkok = static_cast<Mat_SeqAIJKokkos *>(mat_nonlocal->spptr);      
    }
    else
    {
       mat_local = *input_mat;
+      mat_localkok = static_cast<Mat_SeqAIJKokkos *>(mat_local->spptr);
    }
 
    // Get the comm
@@ -127,21 +131,9 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    // ~~~~~~~~~~~~
    // Get the number of nnzs
    // ~~~~~~~~~~~~
-   max_nnzs_total = 0;
-   nnzs_local = 0;
+   nnzs_local = mat_localkok->csrmat.nnz();
    nnzs_nonlocal = 0;
-
-   // Do a reduction to get the local nnzs
-   Kokkos::parallel_reduce ("ReductionLocal", local_rows, KOKKOS_LAMBDA (const PetscInt i, PetscInt& update) {
-      update += device_local_i[i + 1] - device_local_i[i];
-   }, nnzs_local);
-      // Do a reduction to get the nonlocal nnzs
-   if (mpi)
-   {
-      Kokkos::parallel_reduce ("ReductionNonLocal", local_rows, KOKKOS_LAMBDA (const PetscInt i, PetscInt& update) {
-         update += device_nonlocal_i[i + 1] - device_nonlocal_i[i];
-      }, nnzs_nonlocal);      
-   }
+   if (mpi) nnzs_nonlocal = mat_nonlocalkok->csrmat.nnz();
    max_nnzs_total = nnzs_local + nnzs_nonlocal;
 
    // ~~~~~~~~~~~~
