@@ -270,11 +270,8 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
                   // garray is the colmap
                   col_indices_d(nnzs_local + device_nonlocal_i[i] + j) = colmap_d(device_nonlocal_j[device_nonlocal_i[i] + j]);
                }
-               // Be careful to use the colmap to get the off-diagonal global column index
-               else if (lump_int || \
-                     (!allow_drop_diagonal_int && \
-                        colmap_d(device_nonlocal_j[device_nonlocal_i[i] + j]) \
-                           == i + global_row_start))
+               // Don't need to test if we're the diagonal here as we're in the off-diagonal block
+               else if (lump_int)
                {
                   row_indices_d(nnzs_local + device_nonlocal_i[i] + j) = i + global_row_start;
                   col_indices_d(nnzs_local + device_nonlocal_i[i] + j) = i + global_row_start;
