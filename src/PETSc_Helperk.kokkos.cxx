@@ -89,7 +89,6 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    MatType mat_type;
    PetscInt max_nnzs, max_nnzs_total, ncols;
    PetscInt nnzs_local, nnzs_nonlocal;
-   const PetscScalar *local_data, *nonlocal_data;
 
    MatGetType(*input_mat, &mat_type);
    bool mpi = strcmp(mat_type, MATMPIAIJKOKKOS) == 0;
@@ -156,10 +155,6 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    MatSetOption(*output_mat, MAT_IGNORE_ZERO_ENTRIES, PETSC_TRUE);
    MatSetOption(*output_mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE);
    MatSetOption(*output_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE);     
-  
-   // Gets a pointer to the vals data
-   MatSeqAIJGetArrayRead(mat_local, &local_data);
-   if (mpi) MatSeqAIJGetArrayRead(mat_nonlocal, &nonlocal_data);
 
    // Row and column indices for our assembly
    // We know we never have more to do than the original nnzs
