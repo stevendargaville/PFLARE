@@ -169,118 +169,136 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
 
    // Relative dropping tolerance per row
    PetscMalloc1(local_rows, &rel_row_tol);   
-   // Let's work out what the row tolerance is in each row  
-   for (int i = 0; i < local_rows; i++)
-   {
-      rel_row_tol[i] = tol;
 
-      // If we want the row tolerance to be relative to the max value in the row
+   // Let's calculate the relative row tolerances on the device
+   {
+      // Let's create device memory with a dual view
+      auto &exec = PetscGetKokkosExecutionSpace();
+      MatScalarKokkosViewHost rel_row_tol_h(rel_row_tol, local_rows);
+      auto rel_row_tol_d = Kokkos::create_mirror_view(Kokkos::WithoutInitializing, exec, rel_row_tol_h);
+      auto rel_row_tol_dual = MatScalarKokkosDualView(rel_row_tol_d, rel_row_tol_h);
+
+      // Set device data to tol
+      Kokkos::deep_copy(rel_row_tol_d, tol);   
+
+      // Get the i, j and vals device pointers 
+      const PetscInt *device_local_i, *device_local_j, *device_nonlocal_i, *device_nonlocal_j;
+      PetscMemType mtype;
+      PetscScalar *device_local_vals, *device_nonlocal_vals;
+      MatSeqAIJGetCSRAndMemType(mat_local, &device_local_i, &device_local_j, &device_local_vals, &mtype);   
+      if (mpi) MatSeqAIJGetCSRAndMemType(mat_nonlocal, &device_nonlocal_i, &device_nonlocal_j, &device_nonlocal_vals, &mtype);  
+      
       if (relative_max_row_tolerance_int) 
       {       
-         ncols_seq_local = mat_seq_local->i[i + 1] - mat_seq_local->i[i];
-         if (mpi) ncols_seq_nonlocal = mat_seq_nonlocal->i[i + 1] - mat_seq_nonlocal->i[i];
+         Kokkos::parallel_for(
+            Kokkos::RangePolicy<>(0, local_rows), KOKKOS_LAMBDA(int i) {
 
-         // Let's get the max value in this row
-         PetscScalar max_val = -1.0;
+               PetscInt ncols_local = device_local_i[i + 1] - device_local_i[i];
+               PetscScalar max_val = -1.0;
+
+               for (int j = 0; j < ncols_local; j++)
+               {
+                  if (abs(device_local_vals[device_local_i[i] + j]) > max_val) max_val = abs(device_local_vals[device_local_i[i] + j]);
+               }
+
+               if (mpi)
+               {
+                  PetscInt ncols_nonlocal = device_nonlocal_i[i + 1] - device_nonlocal_i[i];               
+
+                  for (int j = 0; j < ncols_nonlocal; j++)
+                  {
+                     if (abs(device_nonlocal_vals[device_nonlocal_i[i] + j]) > max_val) max_val = abs(device_nonlocal_vals[device_nonlocal_i[i] + j]);
+                  }  
+               }              
+
+               rel_row_tol_d(i) *= max_val;
+            });
+      }
+
+      // We've modified the data on the device
+      rel_row_tol_dual.modify_device();
+      // Let's copy the data back to the host
+      rel_row_tol_dual.sync_host(exec);
+
+      // Now go and fill the new matrix
+      // These loops just set the row and col indices to not be -1
+      // if we are including it in the matrix
+      // Loop over global row indices
+      PetscInt counter = 0;
+
+      // Go and do the local part
+      for (int i = 0; i < local_rows; i++)
+      {
+         ncols_seq_local = mat_seq_local->i[i + 1] - mat_seq_local->i[i];
 
          // Do the local part
          for (int j = 0; j < ncols_seq_local; j++)
          {
-            if (abs(local_data[mat_seq_local->i[i] + j]) > max_val) max_val = abs(local_data[mat_seq_local->i[i] + j]);
-         }
-
-         // Do the non-local part
-         if (mpi)
-         {
-            for (int j = 0; j < ncols_seq_nonlocal; j++)
-            {
-               if (abs(nonlocal_data[mat_seq_nonlocal->i[i] + j]) > max_val) max_val = abs(nonlocal_data[mat_seq_nonlocal->i[i] + j]);
-            }  
-         }       
-
-         rel_row_tol[i] *= max_val;
-      }
-   }
-
-   // Now go and fill the new matrix
-   // These loops just set the row and col indices to not be -1
-   // if we are including it in the matrix
-   // Loop over global row indices
-   PetscInt counter = 0;
-
-   // Go and do the local part
-   for (int i = 0; i < local_rows; i++)
-   {
-      ncols_seq_local = mat_seq_local->i[i + 1] - mat_seq_local->i[i];
-
-      // Do the local part
-      for (int j = 0; j < ncols_seq_local; j++)
-      {
-         // Set the row/col to be included (ie not -1) 
-         // if it is bigger than the tolerance
-         if (abs(local_data[mat_seq_local->i[i] + j]) >= rel_row_tol[i])
-         {
-            row_indices[counter + j] = i + global_row_start;
-            // Careful here to use global_col_start in case we are rectangular
-            col_indices[counter + j] = mat_seq_local->j[mat_seq_local->i[i] + j] + global_col_start;
-         }
-         // If the entry is small and we are lumping, then add it to the diagonal
-         // or if this is the diagonal and it's small but we are not dropping it 
-         else if (lump_int || \
-               (!allow_drop_diagonal_int && \
-                  mat_seq_local->j[mat_seq_local->i[i] + j] + global_col_start == i + global_row_start))
-         {
-            row_indices[counter + j] = i + global_row_start;
-            col_indices[counter + j] = i + global_row_start;
-         }
-      }     
-      counter = counter + ncols_seq_local;
-   }
-   MatSeqAIJRestoreArrayRead(mat_local, &local_data);
-
-   // Do the non-local part
-   if (mpi)
-   {
-      for (int i = 0; i < local_rows; i++)
-      {
-         ncols_seq_nonlocal = mat_seq_nonlocal->i[i + 1] - mat_seq_nonlocal->i[i];
-
-         for (int j = 0; j < ncols_seq_nonlocal; j++)
-         {
             // Set the row/col to be included (ie not -1) 
             // if it is bigger than the tolerance
-            if (abs(nonlocal_data[mat_seq_nonlocal->i[i] + j]) >= rel_row_tol[i])
+            if (abs(local_data[mat_seq_local->i[i] + j]) >= rel_row_tol[i])
             {
                row_indices[counter + j] = i + global_row_start;
-               // garray is the colmap
-               col_indices[counter + j] = mat_mpi->garray[mat_seq_nonlocal->j[mat_seq_nonlocal->i[i] + j]];
-            }                 
-            // Be careful to use the colmap to get the off-diagonal global column index
+               // Careful here to use global_col_start in case we are rectangular
+               col_indices[counter + j] = mat_seq_local->j[mat_seq_local->i[i] + j] + global_col_start;
+            }
+            // If the entry is small and we are lumping, then add it to the diagonal
+            // or if this is the diagonal and it's small but we are not dropping it 
             else if (lump_int || \
                   (!allow_drop_diagonal_int && \
-                     mat_mpi->garray[mat_seq_nonlocal->j[mat_seq_nonlocal->i[i] + j]] \
-                        == i + global_row_start))
+                     mat_seq_local->j[mat_seq_local->i[i] + j] + global_col_start == i + global_row_start))
             {
                row_indices[counter + j] = i + global_row_start;
                col_indices[counter + j] = i + global_row_start;
-            }     
-         }
-         counter = counter + ncols_seq_nonlocal;
-      } 
-      MatSeqAIJRestoreArrayRead(mat_nonlocal, &nonlocal_data);         
-   }
+            }
+         }     
+         counter = counter + ncols_seq_local;
+      }
+      MatSeqAIJRestoreArrayRead(mat_local, &local_data);
 
-   // Now set the sparsity
-   MatSetPreallocationCOO(*output_mat, counter, row_indices, col_indices);
-   PetscFree2(row_indices, col_indices);   
+      // Do the non-local part
+      if (mpi)
+      {
+         for (int i = 0; i < local_rows; i++)
+         {
+            ncols_seq_nonlocal = mat_seq_nonlocal->i[i + 1] - mat_seq_nonlocal->i[i];
+
+            for (int j = 0; j < ncols_seq_nonlocal; j++)
+            {
+               // Set the row/col to be included (ie not -1) 
+               // if it is bigger than the tolerance
+               if (abs(nonlocal_data[mat_seq_nonlocal->i[i] + j]) >= rel_row_tol[i])
+               {
+                  row_indices[counter + j] = i + global_row_start;
+                  // garray is the colmap
+                  col_indices[counter + j] = mat_mpi->garray[mat_seq_nonlocal->j[mat_seq_nonlocal->i[i] + j]];
+               }                 
+               // Be careful to use the colmap to get the off-diagonal global column index
+               else if (lump_int || \
+                     (!allow_drop_diagonal_int && \
+                        mat_mpi->garray[mat_seq_nonlocal->j[mat_seq_nonlocal->i[i] + j]] \
+                           == i + global_row_start))
+               {
+                  row_indices[counter + j] = i + global_row_start;
+                  col_indices[counter + j] = i + global_row_start;
+               }     
+            }
+            counter = counter + ncols_seq_nonlocal;
+         } 
+         MatSeqAIJRestoreArrayRead(mat_nonlocal, &nonlocal_data);         
+      }
+
+      // Now set the sparsity
+      MatSetPreallocationCOO(*output_mat, counter, row_indices, col_indices);
+      PetscFree2(row_indices, col_indices);   
+   }
    PetscFree(rel_row_tol);
 
    // For the values, we can just directly get access to the device pointers
    {
-      PetscScalar *device_vals;
-
       const PetscInt *i, *j;
       PetscMemType mtype;
+      PetscScalar *device_vals;
       MatSeqAIJGetCSRAndMemType(mat_local, &i, &j, &device_vals, &mtype);
 
       // Have to copy the local and then the nonlocal data into one array on the device
