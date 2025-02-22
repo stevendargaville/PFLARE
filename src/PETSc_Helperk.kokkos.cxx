@@ -84,8 +84,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    PetscInt global_row_start, global_row_end_plus_one;
    PetscInt global_col_start, global_col_end_plus_one;
    MatType mat_type;
-   PetscReal *rel_row_tol;
-   PetscInt max_nnzs, max_nnzs_total, ncols, ncols_seq_local, ncols_seq_nonlocal;
+   PetscInt max_nnzs, max_nnzs_total, ncols;
    PetscInt nnzs_local, nnzs_nonlocal;
    const PetscScalar *local_data, *nonlocal_data;
 
@@ -143,15 +142,6 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    }   
    max_nnzs_total = nnzs_local + nnzs_nonlocal;
 
-   // We know we never have more to do than the original nnzs
-   PetscInt *row_indices, *col_indices;
-   PetscMalloc2(max_nnzs_total, &row_indices, max_nnzs_total, &col_indices);
-   // By default drop everything
-   for (int i = 0; i < max_nnzs_total; i++)
-   {
-      row_indices[i] = -1;
-   }
-
    MatCreate(MPI_COMM_MATRIX, output_mat);
    MatSetSizes(*output_mat, local_rows, local_cols, global_rows, global_cols);
    // Match the output type
@@ -167,19 +157,31 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    MatSeqAIJGetArrayRead(mat_local, &local_data);
    if (mpi) MatSeqAIJGetArrayRead(mat_nonlocal, &nonlocal_data);
 
-   // Relative dropping tolerance per row
-   PetscMalloc1(local_rows, &rel_row_tol);   
+   // Row and column indices for our assembly
+   // We know we never have more to do than the original nnzs
+   PetscInt *row_indices, *col_indices;
+   PetscMalloc2(max_nnzs_total, &row_indices, max_nnzs_total, &col_indices);
 
-   // Let's calculate the relative row tolerances on the device
+   // Let's calculate the row and column indices on the device
+   // then copy them back to the host for MatSetPreallocationCOO
    {
       // Let's create device memory with a dual view
       auto &exec = PetscGetKokkosExecutionSpace();
-      MatScalarKokkosViewHost rel_row_tol_h(rel_row_tol, local_rows);
-      auto rel_row_tol_d = Kokkos::create_mirror_view(Kokkos::WithoutInitializing, exec, rel_row_tol_h);
-      auto rel_row_tol_dual = MatScalarKokkosDualView(rel_row_tol_d, rel_row_tol_h);
 
-      // Set device data to tol
-      Kokkos::deep_copy(rel_row_tol_d, tol);   
+      MatRowMapKokkosViewHost row_indices_h(row_indices, max_nnzs_total);
+      auto row_indices_d = Kokkos::create_mirror_view(Kokkos::WithoutInitializing, exec, row_indices_h);
+      auto row_indices_dual = MatRowMapKokkosDualView(row_indices_d, row_indices_h); 
+
+      MatColIdxKokkosViewHost col_indices_h(col_indices, max_nnzs_total);
+      auto col_indices_d = Kokkos::create_mirror_view(Kokkos::WithoutInitializing, exec, col_indices_h);
+      auto col_indices_dual = MatColIdxKokkosDualView(col_indices_d, col_indices_h);             
+
+      // We need the relative row tolerance, let's create some device memory to store it
+      PetscScalarKokkosView rel_row_tol("rel_row_tol", local_rows);        
+      // Copy in the tolerance
+      Kokkos::deep_copy(rel_row_tol, tol);   
+      // By default drop everything
+      Kokkos::deep_copy(row_indices_d, -1);   
 
       // Get the i, j and vals device pointers 
       const PetscInt *device_local_i, *device_local_j, *device_nonlocal_i, *device_nonlocal_j;
@@ -188,6 +190,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       MatSeqAIJGetCSRAndMemType(mat_local, &device_local_i, &device_local_j, &device_local_vals, &mtype);   
       if (mpi) MatSeqAIJGetCSRAndMemType(mat_nonlocal, &device_nonlocal_i, &device_nonlocal_j, &device_nonlocal_vals, &mtype);  
       
+      // Compute the relative row tolerances if needed
       if (relative_max_row_tolerance_int) 
       {       
          Kokkos::parallel_for(
@@ -196,6 +199,8 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
                PetscInt ncols_local = device_local_i[i + 1] - device_local_i[i];
                PetscScalar max_val = -1.0;
 
+               // Should really make these parallel reductions, but the number of cols
+               // should be small
                for (int j = 0; j < ncols_local; j++)
                {
                   if (abs(device_local_vals[device_local_i[i] + j]) > max_val) max_val = abs(device_local_vals[device_local_i[i] + j]);
@@ -211,88 +216,88 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
                   }  
                }              
 
-               rel_row_tol_d(i) *= max_val;
+               rel_row_tol(i) *= max_val;
             });
       }
 
-      // We've modified the data on the device
-      rel_row_tol_dual.modify_device();
-      // Let's copy the data back to the host
-      rel_row_tol_dual.sync_host(exec);
-
-      // Now go and fill the new matrix
       // These loops just set the row and col indices to not be -1
       // if we are including it in the matrix
-      // Loop over global row indices
-      PetscInt counter = 0;
+      Kokkos::parallel_for( // for each row
+         Kokkos::TeamPolicy<>(PetscGetKokkosExecutionSpace(), local_rows, Kokkos::AUTO()), KOKKOS_LAMBDA(const KokkosTeamMemberType &t) {
 
-      // Go and do the local part
-      for (int i = 0; i < local_rows; i++)
-      {
-         ncols_seq_local = mat_seq_local->i[i + 1] - mat_seq_local->i[i];
+         PetscInt i   = t.league_rank(); // row i
+         PetscInt ncols_local = device_local_i[i + 1] - device_local_i[i];
+         
+         // scale entries on the row
+         Kokkos::parallel_for(
+            Kokkos::TeamThreadRange(t, ncols_local), [&](PetscInt j) { 
 
-         // Do the local part
-         for (int j = 0; j < ncols_seq_local; j++)
-         {
             // Set the row/col to be included (ie not -1) 
             // if it is bigger than the tolerance
-            if (abs(local_data[mat_seq_local->i[i] + j]) >= rel_row_tol[i])
+            if (abs(device_local_vals[device_local_i[i] + j]) >= rel_row_tol(i))
             {
-               row_indices[counter + j] = i + global_row_start;
+               row_indices_d(device_local_i[i] + j) = i + global_row_start;
                // Careful here to use global_col_start in case we are rectangular
-               col_indices[counter + j] = mat_seq_local->j[mat_seq_local->i[i] + j] + global_col_start;
+               col_indices_d(device_local_i[i] + j) = device_local_j[device_local_i[i] + j] + global_col_start;
             }
             // If the entry is small and we are lumping, then add it to the diagonal
             // or if this is the diagonal and it's small but we are not dropping it 
             else if (lump_int || \
                   (!allow_drop_diagonal_int && \
-                     mat_seq_local->j[mat_seq_local->i[i] + j] + global_col_start == i + global_row_start))
+                     device_local_j[device_local_i[i] + j] + global_col_start == i + global_row_start))
             {
-               row_indices[counter + j] = i + global_row_start;
-               col_indices[counter + j] = i + global_row_start;
-            }
-         }     
-         counter = counter + ncols_seq_local;
-      }
-      MatSeqAIJRestoreArrayRead(mat_local, &local_data);
+               row_indices_d(device_local_i[i] + j) = i + global_row_start;
+               col_indices_d(device_local_i[i] + j) = i + global_row_start;
+            }            
+         });
+      });
 
-      // Do the non-local part
-      if (mpi)
+      if (mpi) 
       {
-         for (int i = 0; i < local_rows; i++)
-         {
-            ncols_seq_nonlocal = mat_seq_nonlocal->i[i + 1] - mat_seq_nonlocal->i[i];
+         // These loops just set the row and col indices to not be -1
+         // if we are including it in the matrix
+         Kokkos::parallel_for( // for each row
+            Kokkos::TeamPolicy<>(PetscGetKokkosExecutionSpace(), local_rows, Kokkos::AUTO()), KOKKOS_LAMBDA(const KokkosTeamMemberType &t) {
 
-            for (int j = 0; j < ncols_seq_nonlocal; j++)
-            {
+            PetscInt i   = t.league_rank(); // row i
+            PetscInt ncols_nonlocal = device_nonlocal_i[i + 1] - device_nonlocal_i[i];
+            
+            // scale entries on the row
+            Kokkos::parallel_for(
+               Kokkos::TeamThreadRange(t, ncols_nonlocal), [&](PetscInt j) { 
+
                // Set the row/col to be included (ie not -1) 
                // if it is bigger than the tolerance
-               if (abs(nonlocal_data[mat_seq_nonlocal->i[i] + j]) >= rel_row_tol[i])
+               if (abs(device_nonlocal_vals[device_nonlocal_i[i] + j]) >= rel_row_tol(i))
                {
-                  row_indices[counter + j] = i + global_row_start;
+                  row_indices_d(nnzs_local + device_nonlocal_i[i] + j) = i + global_row_start;
                   // garray is the colmap
-                  col_indices[counter + j] = mat_mpi->garray[mat_seq_nonlocal->j[mat_seq_nonlocal->i[i] + j]];
-               }                 
+                  col_indices_d(nnzs_local + device_nonlocal_i[i] + j) = mat_mpi->garray[device_nonlocal_j[device_nonlocal_i[i] + j]];
+               }
                // Be careful to use the colmap to get the off-diagonal global column index
                else if (lump_int || \
                      (!allow_drop_diagonal_int && \
-                        mat_mpi->garray[mat_seq_nonlocal->j[mat_seq_nonlocal->i[i] + j]] \
+                        mat_mpi->garray[device_nonlocal_j[device_nonlocal_i[i] + j]] \
                            == i + global_row_start))
                {
-                  row_indices[counter + j] = i + global_row_start;
-                  col_indices[counter + j] = i + global_row_start;
-               }     
-            }
-            counter = counter + ncols_seq_nonlocal;
-         } 
-         MatSeqAIJRestoreArrayRead(mat_nonlocal, &nonlocal_data);         
-      }
+                  row_indices_d(nnzs_local + device_nonlocal_i[i] + j) = i + global_row_start;
+                  col_indices_d(nnzs_local + device_nonlocal_i[i] + j) = i + global_row_start;
+               }            
+            });
+         }); 
+      }     
 
-      // Now set the sparsity
-      MatSetPreallocationCOO(*output_mat, counter, row_indices, col_indices);
-      PetscFree2(row_indices, col_indices);   
+      // We've modified the data on the device
+      row_indices_dual.modify_device();
+      col_indices_dual.modify_device();
+      // Let's copy the data back to the host
+      row_indices_dual.sync_host(exec);      
+      col_indices_dual.sync_host(exec);
+
+      // Now set the sparsity on the host
+      MatSetPreallocationCOO(*output_mat, max_nnzs_total, row_indices, col_indices);
    }
-   PetscFree(rel_row_tol);
+   PetscFree2(row_indices, col_indices);   
 
    // For the values, we can just directly get access to the device pointers
    {
