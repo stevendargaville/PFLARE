@@ -8,6 +8,8 @@
 using DefaultExecutionSpace = Kokkos::DefaultExecutionSpace;
 using DefaultMemorySpace    = Kokkos::DefaultExecutionSpace::memory_space;
 using PetscScalarKokkosView = Kokkos::View<PetscScalar *, DefaultMemorySpace>;
+using PetscIntKokkosViewHost    = Kokkos::View<PetscInt *, Kokkos::HostSpace>;
+using PetscIntKokkosDualView = Kokkos::DualView<PetscInt *>;
 
 // Generate identity but with kokkos - trying to keep everything on the device where possible
 PETSC_INTERN void generate_identity_is_kokkos(Mat *input_mat, IS *indices, Mat *output_mat)
@@ -83,6 +85,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    PetscInt local_rows, local_cols, global_rows, global_cols;
    PetscInt global_row_start, global_row_end_plus_one;
    PetscInt global_col_start, global_col_end_plus_one;
+   PetscInt row_ao, col_ao;
    MatType mat_type;
    PetscInt max_nnzs, max_nnzs_total, ncols;
    PetscInt nnzs_local, nnzs_nonlocal;
@@ -108,6 +111,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       mat_seq_nonlocal = (Mat_SeqAIJ *)mat_mpi->B->data;
       mat_local = mat_mpi->A;
       mat_nonlocal = mat_mpi->B;
+      MatGetSize(mat_nonlocal, &row_ao, &col_ao);
    }
    else
    {
@@ -177,9 +181,9 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       auto col_indices_dual = MatColIdxKokkosDualView(col_indices_d, col_indices_h);             
 
       // We need the relative row tolerance, let's create some device memory to store it
-      PetscScalarKokkosView rel_row_tol("rel_row_tol", local_rows);        
+      PetscScalarKokkosView rel_row_tol_d("rel_row_tol_d", local_rows);        
       // Copy in the tolerance
-      Kokkos::deep_copy(rel_row_tol, tol);   
+      Kokkos::deep_copy(rel_row_tol_d, tol);   
       // By default drop everything
       Kokkos::deep_copy(row_indices_d, -1);   
 
@@ -187,7 +191,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       const PetscInt *device_local_i, *device_local_j, *device_nonlocal_i, *device_nonlocal_j;
       PetscMemType mtype;
       PetscScalar *device_local_vals, *device_nonlocal_vals;
-      MatSeqAIJGetCSRAndMemType(mat_local, &device_local_i, &device_local_j, &device_local_vals, &mtype);   
+      MatSeqAIJGetCSRAndMemType(mat_local, &device_local_i, &device_local_j, &device_local_vals, &mtype);  
       if (mpi) MatSeqAIJGetCSRAndMemType(mat_nonlocal, &device_nonlocal_i, &device_nonlocal_j, &device_nonlocal_vals, &mtype);  
       
       // Compute the relative row tolerances if needed
@@ -216,7 +220,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
                   }  
                }              
 
-               rel_row_tol(i) *= max_val;
+               rel_row_tol_d(i) *= max_val;
             });
       }
 
@@ -234,7 +238,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
 
             // Set the row/col to be included (ie not -1) 
             // if it is bigger than the tolerance
-            if (abs(device_local_vals[device_local_i[i] + j]) >= rel_row_tol(i))
+            if (abs(device_local_vals[device_local_i[i] + j]) >= rel_row_tol_d(i))
             {
                row_indices_d(device_local_i[i] + j) = i + global_row_start;
                // Careful here to use global_col_start in case we are rectangular
@@ -254,6 +258,16 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
 
       if (mpi) 
       {
+         // We also copy the colmap over to the device as we need it below
+         PetscIntKokkosViewHost colmap_h(mat_mpi->garray, col_ao);
+         auto colmap_d = Kokkos::create_mirror_view(Kokkos::WithoutInitializing, exec, colmap_h);
+         auto colmap_dual = PetscIntKokkosDualView(colmap_d, colmap_h);
+
+         // We've modified the data on the host
+         colmap_dual.modify_host();
+         // Let's copy the data back to the device
+         colmap_dual.sync_device(exec);  
+
          // These loops just set the row and col indices to not be -1
          // if we are including it in the matrix
          Kokkos::parallel_for( // for each row
@@ -268,16 +282,16 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
 
                // Set the row/col to be included (ie not -1) 
                // if it is bigger than the tolerance
-               if (abs(device_nonlocal_vals[device_nonlocal_i[i] + j]) >= rel_row_tol(i))
+               if (abs(device_nonlocal_vals[device_nonlocal_i[i] + j]) >= rel_row_tol_d(i))
                {
                   row_indices_d(nnzs_local + device_nonlocal_i[i] + j) = i + global_row_start;
                   // garray is the colmap
-                  col_indices_d(nnzs_local + device_nonlocal_i[i] + j) = mat_mpi->garray[device_nonlocal_j[device_nonlocal_i[i] + j]];
+                  col_indices_d(nnzs_local + device_nonlocal_i[i] + j) = colmap_d(device_nonlocal_j[device_nonlocal_i[i] + j]);
                }
                // Be careful to use the colmap to get the off-diagonal global column index
                else if (lump_int || \
                      (!allow_drop_diagonal_int && \
-                        mat_mpi->garray[device_nonlocal_j[device_nonlocal_i[i] + j]] \
+                        colmap_d(device_nonlocal_j[device_nonlocal_i[i] + j]) \
                            == i + global_row_start))
                {
                   row_indices_d(nnzs_local + device_nonlocal_i[i] + j) = i + global_row_start;
