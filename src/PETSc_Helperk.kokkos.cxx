@@ -91,15 +91,9 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    PetscInt nnzs_local, nnzs_nonlocal;
 
    MatGetType(*input_mat, &mat_type);
+   // Are we in parallel?
    bool mpi = strcmp(mat_type, MATMPIAIJKOKKOS) == 0;
 
-   // ~~~~~~~~~~~
-   // This gets a little messy, as kokkos seems to be *very very* slow 
-   // when we call matgetrow
-   // So we try and avoid that in this routine
-   // When we have a kokkos matrix, the ->A and ->B are of type AIJMat
-   // as that is the copy on the host that is kept in sync with the device mat
-   // ~~~~~~~~~~~
    Mat_MPIAIJ *mat_mpi;
    Mat_SeqAIJ *mat_seq_local, *mat_seq_nonlocal;
    Mat mat_local, mat_nonlocal;
@@ -161,6 +155,11 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    PetscInt *row_indices, *col_indices;
    PetscMalloc2(max_nnzs_total, &row_indices, max_nnzs_total, &col_indices);
 
+   // Pointers to the i,j,vals on the device
+   const PetscInt *device_local_i, *device_local_j, *device_nonlocal_i, *device_nonlocal_j;
+   PetscMemType mtype;
+   PetscScalar *device_local_vals, *device_nonlocal_vals;   
+
    // Let's calculate the row and column indices on the device
    // then copy them back to the host for MatSetPreallocationCOO
    {
@@ -183,9 +182,6 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       Kokkos::deep_copy(row_indices_d, -1);   
 
       // Get the i, j and vals device pointers 
-      const PetscInt *device_local_i, *device_local_j, *device_nonlocal_i, *device_nonlocal_j;
-      PetscMemType mtype;
-      PetscScalar *device_local_vals, *device_nonlocal_vals;
       MatSeqAIJGetCSRAndMemType(mat_local, &device_local_i, &device_local_j, &device_local_vals, &mtype);  
       if (mpi) MatSeqAIJGetCSRAndMemType(mat_nonlocal, &device_nonlocal_i, &device_nonlocal_j, &device_nonlocal_vals, &mtype);  
       
@@ -310,10 +306,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
 
    // For the values, we can just directly get access to the device pointers
    {
-      const PetscInt *i, *j;
-      PetscMemType mtype;
-      PetscScalar *device_vals;
-      MatSeqAIJGetCSRAndMemType(mat_local, &i, &j, &device_vals, &mtype);
+      MatSeqAIJGetCSRAndMemType(mat_local, &device_local_i, &device_local_j, &device_local_vals, &mtype);
 
       // Have to copy the local and then the nonlocal data into one array on the device
       if (mpi)
@@ -322,18 +315,18 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
          PetscScalarKokkosView coo_v("coo_v", max_nnzs_total);    
 
          // Copy the local values - could also do this with views, subviews
-         // and calling MatSeqAIJGetKokkosView, but we know our device_vals 
+         // and calling MatSeqAIJGetKokkosView, but we know our device_local_vals 
          // and coo_v share the same execution space
          Kokkos::parallel_for(
             Kokkos::RangePolicy<>(0, nnzs_local), KOKKOS_LAMBDA(int i) {
-               coo_v(i) = device_vals[i];
+               coo_v(i) = device_local_vals[i];
             });    
 
-         MatSeqAIJGetCSRAndMemType(mat_nonlocal, &i, &j, &device_vals, &mtype);
+         MatSeqAIJGetCSRAndMemType(mat_nonlocal, &device_nonlocal_i, &device_nonlocal_j, &device_nonlocal_vals, &mtype);
          // Copy the nonlocal values
          Kokkos::parallel_for(
             Kokkos::RangePolicy<>(0, nnzs_nonlocal), KOKKOS_LAMBDA(int i) {
-               coo_v(nnzs_local + i) = device_vals[i];
+               coo_v(nnzs_local + i) = device_nonlocal_vals[i];
             });           
 
          // This should all happen on the gpu
@@ -343,7 +336,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       else
       {
          // This should all happen on the gpu
-         MatSetValuesCOO(*output_mat, device_vals, INSERT_VALUES);           
+         MatSetValuesCOO(*output_mat, device_local_vals, INSERT_VALUES);           
       }
    }  
 
