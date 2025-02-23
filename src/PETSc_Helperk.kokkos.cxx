@@ -424,10 +424,8 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       // Only want one thread in the team to write the result
       Kokkos::single(Kokkos::PerTeam(t), [&]() {      
          nnz_match_local_row_d(i) = row_result.count;
+         thread_total += row_result.count;
       });
-      // thread_total is automatically only updated once per team
-      // because it is managed by the kokkos reduction      
-      thread_total += row_result.count;
       },
       nnzs_match_local
    );
@@ -474,8 +472,8 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
             // (all threads in the team share the same result)
             Kokkos::single(Kokkos::PerTeam(t), [&]() {             
                nnz_match_nonlocal_row_d(i) = row_result.count;
+               thread_total += row_result.count;
             });
-            thread_total += row_result.count;
          },
          nnzs_match_nonlocal
       );
