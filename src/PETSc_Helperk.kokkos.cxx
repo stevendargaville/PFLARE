@@ -328,12 +328,8 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    // Copy in the tolerance
    Kokkos::deep_copy(rel_row_tol_d, tol);     
    // We need to know how many entries are in each row after our dropping  
-   PetscIntKokkosView nnz_match_local_row_d("nnz_match_local_row_d", local_rows);            
-   // Initialize to zero
-   Kokkos::deep_copy(nnz_match_local_row_d, 0);   
-   PetscIntKokkosView nnz_match_nonlocal_row_d("nnz_match_nonlocal_row_d", local_rows);            
-   // Initialize to zero
-   Kokkos::deep_copy(nnz_match_nonlocal_row_d, 0);         
+   PetscIntKokkosView nnz_match_local_row_d("nnz_match_local_row_d", local_rows);             
+   PetscIntKokkosView nnz_match_nonlocal_row_d("nnz_match_nonlocal_row_d", local_rows);                  
    
    // Compute the relative row tolerances if needed
    if (relative_max_row_tolerance_int) 
