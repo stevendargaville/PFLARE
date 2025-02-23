@@ -372,6 +372,9 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       PetscInt ncols_local = device_local_i[i + 1] - device_local_i[i];
 
       // Need to do a reduction over each row i
+      // We have a custom reduction type defined - ReduceData
+      // Which has both a nnz count for this row, but also tracks whether we 
+      // found the diagonal
       ReduceData result;
       Kokkos::parallel_reduce(
          Kokkos::TeamThreadRange(t, ncols_local),
@@ -396,6 +399,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
          }, result
       );
 
+      // We're finished our parallel reduction for this row
       // If we're lumping but there was no diagonal in this row
       // we'll have to add in a diagonal
       if (lump_int && !result.found_diagonal) result.count++;
@@ -429,27 +433,28 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       // Let's copy the data back to the device
       colmap_dual.sync_device(exec);  
 
-      // These loops just set the row and col indices to not be -1
-      // if we are including it in the matrix
+      // Need to count the number of nnzs we end up with
       Kokkos::parallel_for( // for each row
          Kokkos::TeamPolicy<>(PetscGetKokkosExecutionSpace(), local_rows, Kokkos::AUTO()), KOKKOS_LAMBDA(const KokkosTeamMemberType &t) {
 
          PetscInt i   = t.league_rank(); // row i
          PetscInt ncols_nonlocal = device_nonlocal_i[i + 1] - device_nonlocal_i[i];
-         
-         // Should be a reduction so we can remove the atomic
-         Kokkos::parallel_for(
-            Kokkos::TeamThreadRange(t, ncols_nonlocal), [&](PetscInt j) { 
 
-            // Set the row/col to be included (ie not -1) 
-            // if it is bigger than the tolerance
-            if (abs(device_nonlocal_vals[device_nonlocal_i[i] + j]) >= rel_row_tol_d(i))
-            {
-               // Has to be atomic as we could have many threads operating over this row
-               Kokkos::atomic_increment(&nnz_match_nonlocal_row_d(i));
-            }          
-         });
-      }); 
+         // Need to do a reduction over each row i
+         ReduceData result;
+         Kokkos::parallel_reduce(
+            Kokkos::TeamThreadRange(t, ncols_nonlocal),
+            [&](const PetscInt j, ReduceData& thread_data) {
+               
+               // If the value is bigger than the tolerance, we keep it
+               if (abs(device_nonlocal_vals[device_nonlocal_i[i] + j]) >= rel_row_tol_d(i)) {
+                  thread_data.count++;
+               }
+            }, result
+         );
+         // We're finished our parallel reduction for this row
+         nnz_match_nonlocal_row_d(i) = result.count;      
+      });
 
       // Do a reduction to get the nonlocal nnzs we end up with
       Kokkos::parallel_reduce ("ReductionLocal", local_rows, KOKKOS_LAMBDA (const PetscInt i, PetscInt& update) {
