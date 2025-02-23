@@ -420,8 +420,15 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       // We're finished our parallel reduction for this row
       // If we're lumping but there was no diagonal in this row
       // we'll have to add in a diagonal
+      // This will add one for every thread in this team, but all 
+      // the threads in this team share the same result after the reduction
       if (lump_int && !row_result.found_diagonal) row_result.count++;
-      nnz_match_local_row_d(i) = row_result.count;
+      // Only want one thread in the team to write the result
+      Kokkos::single(Kokkos::PerTeam(t), [&]() {      
+         nnz_match_local_row_d(i) = row_result.count;
+      });
+      // thread_total is automatically only updated once per team
+      // because it is managed by the kokkos reduction      
       thread_total += row_result.count;
       },
       nnzs_match_local
@@ -480,7 +487,11 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
             );
             
             // Store row count and update total
-            nnz_match_nonlocal_row_d(i) = row_result.count;
+            // Only want one thread in the team to write the result
+            // (all threads in the team share the same result)
+            Kokkos::single(Kokkos::PerTeam(t), [&]() {             
+               nnz_match_nonlocal_row_d(i) = row_result.count;
+            });
             thread_total += row_result.count;
          },
          nnzs_match_nonlocal
