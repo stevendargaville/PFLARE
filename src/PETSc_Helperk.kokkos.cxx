@@ -483,53 +483,50 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    // Have to use rangepolicy here rather than teampolicy, as we don't want
    // threads in each team to get their own copies of things like counter
    // Desperately need to rewrite this whole loop to exploit more parallelism!
-   Kokkos::parallel_for( // for each row
+   Kokkos::parallel_for(
       Kokkos::RangePolicy<>(0, local_rows), KOKKOS_LAMBDA(int i) {
-
+         
       PetscInt ncols_local = device_local_i[i + 1] - device_local_i[i];
-
       // The start of our row index comes from the scan
       i_local(i + 1) = nnz_match_local_row_d(i);
+      PetscInt pos = (i == 0) ? 0 : nnz_match_local_row_d(i-1);
 
-      PetscInt counter = 0;
+      // Keep track of the lumping
       PetscScalar lump_val = 0;
-      for (int j = 0; j < ncols_local; j++)
-      {
-         // Set the row/col to be included (ie not -1) 
-         // if it is bigger than the tolerance
-         if (abs(device_local_vals[device_local_i[i] + j]) >= rel_row_tol_d(i))
-         {
-            // Have to give it the local column indices
-            j_local(i_local(i) + counter) = device_local_j[device_local_i[i] + j];
-            a_local(i_local(i) + counter) = device_local_vals[device_local_i[i] + j];             
-            counter++;
-            // Diagonal to lump if we need
-            if (device_local_j[device_local_i[i] + j] + global_col_start == i + global_row_start) lump_val+= device_local_vals[device_local_i[i] + j];
+      
+      // Single sequential pass through columns
+      for (int j = 0; j < ncols_local; j++) {
+         bool keep_col = false;
+         bool is_diagonal = (device_local_j[device_local_i[i] + j] + global_col_start == i + global_row_start);
+
+         // If we hit a diagonal put it in the lump'd value
+         if (is_diagonal && lump_int) lump_val+= device_local_vals[device_local_i[i] + j];            
+         
+         // Check if we keep this column because of size
+         if (abs(device_local_vals[device_local_i[i] + j]) >= rel_row_tol_d(i)) {
+            keep_col = true;
          }
-         // If the entry is small and we are lumping, then add it to the diagonal
-         // or if this is the diagonal and it's small but we are not dropping it 
-         else if (lump_int || \
-               (!allow_drop_diagonal_int && \
-                  device_local_j[device_local_i[i] + j] + global_col_start == i + global_row_start))
-         {
-            // If we have an existing diagonal and we're either lumping or not getting rid of it
-            // then we need to ensure it stays in, but it's value will be replaced after this loop 
-            // with that of lump_val
-            if (device_local_j[device_local_i[i] + j] + global_col_start == i + global_row_start)
-            {
-               // Have to give it the local column indices
-               j_local(i_local(i) + counter) = device_local_j[device_local_i[i] + j];
-               a_local(i_local(i) + counter) = device_local_vals[device_local_i[i] + j];                  
-               counter++;                  
-            }
-            lump_val+= device_local_vals[device_local_i[i] + j];             
-         }   
-      }
+         // Or if we keep it because we're not dropping diagonals
+         else if (!allow_drop_diagonal_int && is_diagonal) {
+            keep_col = true;
+         }
+         
+         // Add in this column if we have to keep it
+         if (keep_col) {
+            j_local(pos) = device_local_j[device_local_i[i] + j];
+            a_local(pos) = device_local_vals[device_local_i[i] + j];
+            pos++;
+         }
+         // If we're not on the diagonal and we're small enough to lump
+         // add in
+         else if (lump_int && !is_diagonal) {
+            lump_val+= device_local_vals[device_local_i[i] + j];
+         }
+      }  
       // We have two cases here with lumping
       // One where we have an existing diagonal and one where we don't
       if (lump_int && ncols_local != 0)
       {
-
          // Find where the diagonal is - this has to happen after we've put in the existing entries
          // because the number of columns isn't necessary ncols_local, its i_local(i+1) - i_local(i)
          PetscInt diag_index = -1;
@@ -564,11 +561,10 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
             // Has to be the local column index
             j_local(i_local(i) + before_diag_index + 1) = i;
             a_local(i_local(i) + before_diag_index + 1) = lump_val;
-            counter++;
          }
-      }
-   });         
-   
+      }      
+   });
+
    a_local_dual.modify_device();
    i_local_dual.modify_device();
    j_local_dual.modify_device();
