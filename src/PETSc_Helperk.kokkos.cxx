@@ -337,18 +337,20 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       PetscInt ncols_local = device_local_i[i + 1] - device_local_i[i];
 
       // We also have to check if we have an existing diagonal if we are lumping
-      if (lump_int)
-      {
-         PetscInt diag_index = -1;
-         for (int j = 0; j < ncols_local; j++)
+      // Only update nnz_match_local_row_d for a single thread in the team
+      // (remembering all the threads in the team are working on row i)
+      Kokkos::single(Kokkos::PerTeam(t), [&]() {
+         if (lump_int)
          {
-            if (device_local_j[device_local_i[i] + j] + global_col_start == i + global_row_start) diag_index = j;
-         }
-         // This is the case where we have no existing diagonal but lumping
-         // We have to add in a diagonal entry
-         // Not sure this needs to be atomic as we have only one thread per row here
-         if (diag_index == -1) Kokkos::atomic_increment(&nnz_match_local_row_d(i));
-      }
+            PetscInt diag_index = -1;
+            for (int j = 0; j < ncols_local; j++)
+            {
+               if (device_local_j[device_local_i[i] + j] + global_col_start == i + global_row_start)
+                  diag_index = j;
+            }
+            // Doesn't need to be atomic given the Kokkos::single
+            if (diag_index == -1) &nnz_match_local_row_d(i);
+      });
       
       // Should make this a reduction now so we could remove the atomic
       Kokkos::parallel_for(
@@ -358,10 +360,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
          // if it is bigger than the tolerance
          if (abs(device_local_vals[device_local_i[i] + j]) >= rel_row_tol_d(i))
          {
-            // if (i == 38)
-            // {
-            //    std::cout << "incrementing current value " << nnz_match_local_row_d(i) << std::endl;
-            // }
+            // Has to be atomic as we could have many threads operating over this row
             Kokkos::atomic_increment(&nnz_match_local_row_d(i));
          }
          // If the entry is small and we are lumping, then add it to the diagonal
@@ -374,13 +373,12 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
             // is too small and would be dropped if we weren't doing lumping
             // Need this guard here as we're not adding new entries if we're doing lumping
             if (device_local_j[device_local_i[i] + j] + global_col_start == i + global_row_start) {
+               // Has to be atomic as we could have many threads operating over this row
                Kokkos::atomic_increment(&nnz_match_local_row_d(i));
             }
          }            
       });
    });
-
-   //std::cout << "nnz_match_local_row_d(i) on 38 " << nnz_match_local_row_d(38) << std::endl;
 
    // Do a reduction to get the local nnzs we end up with
    Kokkos::parallel_reduce ("ReductionLocal", local_rows, KOKKOS_LAMBDA (const PetscInt i, PetscInt& update) {
@@ -424,6 +422,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
             // if it is bigger than the tolerance
             if (abs(device_nonlocal_vals[device_nonlocal_i[i] + j]) >= rel_row_tol_d(i))
             {
+               // Has to be atomic as we could have many threads operating over this row
                Kokkos::atomic_increment(&nnz_match_nonlocal_row_d(i));
             }          
          });
