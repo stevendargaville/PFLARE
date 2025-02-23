@@ -12,6 +12,42 @@ using PetscIntKokkosView     = Kokkos::View<PetscInt *, DefaultMemorySpace>;
 using PetscIntKokkosViewHost = Kokkos::View<PetscInt *, Kokkos::HostSpace>;
 using PetscIntKokkosDualView = Kokkos::DualView<PetscInt *>;
 
+struct ReduceData {
+   PetscInt count;
+   bool found_diagonal;
+   
+   // Set count to zero and found_diagonal to false
+   KOKKOS_INLINE_FUNCTION
+   ReduceData() : count(0), found_diagonal(false) {}
+   
+   // We use this in our parallel reduction
+   KOKKOS_INLINE_FUNCTION
+   void operator+=(const ReduceData& src) {
+      // Add all the counts
+      count += src.count;
+      // If we have found a diagonal entry at any point in this row
+      // found_diagonal becomes true      
+      found_diagonal |= src.found_diagonal;
+   }
+
+   // Required for Kokkos reduction
+   KOKKOS_INLINE_FUNCTION
+   static void join(volatile ReduceData& dest, const volatile ReduceData& src) {
+      dest.count += src.count;
+      dest.found_diagonal |= src.found_diagonal;
+   }   
+};
+
+namespace Kokkos {
+    template<>
+    struct reduction_identity<ReduceData> {
+        KOKKOS_INLINE_FUNCTION
+        static ReduceData sum() {
+            return ReduceData();  // Returns {count=0, found_diagonal=false}
+        }
+    };
+}
+
 // Horrid copy of this code and MatSetSeqAIJKokkosWithCSRMatrix_mine as they're declared PETSC_INTERN
 // so I can't get at them
 PetscErrorCode MatSeqAIJSetPreallocation_SeqAIJ_mine(Mat B, PetscInt nz, const PetscInt *nnz)
@@ -328,57 +364,43 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
          });
    }
 
-   // These loops just set the row and col indices to not be -1
-   // if we are including it in the matrix
+   // Need to count the number of nnzs we end up with
    Kokkos::parallel_for( // for each row
       Kokkos::TeamPolicy<>(PetscGetKokkosExecutionSpace(), local_rows, Kokkos::AUTO()), KOKKOS_LAMBDA(const KokkosTeamMemberType &t) {
 
       PetscInt i   = t.league_rank(); // row i
       PetscInt ncols_local = device_local_i[i + 1] - device_local_i[i];
 
-      // We also have to check if we have an existing diagonal if we are lumping
-      // Only update nnz_match_local_row_d for a single thread in the team
-      // (remembering all the threads in the team are working on row i)
-      Kokkos::single(Kokkos::PerTeam(t), [&]() {
-         if (lump_int)
-         {
-            PetscInt diag_index = -1;
-            for (int j = 0; j < ncols_local; j++)
-            {
-               if (device_local_j[device_local_i[i] + j] + global_col_start == i + global_row_start)
-                  diag_index = j;
-            }
-            // Doesn't need to be atomic given the Kokkos::single
-            if (diag_index == -1) nnz_match_local_row_d(i)++;
-         }
-      });
-      
-      // Should make this a reduction now so we could remove the atomic
-      Kokkos::parallel_for(
-         Kokkos::TeamThreadRange(t, ncols_local), [&](PetscInt j) { 
+      // Need to do a reduction over each row i
+      ReduceData result;
+      Kokkos::parallel_reduce(
+         Kokkos::TeamThreadRange(t, ncols_local),
+         [&](const PetscInt j, ReduceData& thread_data) {
 
-         // Set the row/col to be included (ie not -1) 
-         // if it is bigger than the tolerance
-         if (abs(device_local_vals[device_local_i[i] + j]) >= rel_row_tol_d(i))
-         {
-            // Has to be atomic as we could have many threads operating over this row
-            Kokkos::atomic_increment(&nnz_match_local_row_d(i));
-         }
-         // If the entry is small and we are lumping, then add it to the diagonal
-         // or if this is the diagonal and it's small but we are not dropping it 
-         else if (lump_int || \
-               (!allow_drop_diagonal_int && \
-                  device_local_j[device_local_i[i] + j] + global_col_start == i + global_row_start))
-         {             
-            // Essential to add in a diagonal in the case where the diagonal is present, but it 
-            // is too small and would be dropped if we weren't doing lumping
-            // Need this guard here as we're not adding new entries if we're doing lumping
-            if (device_local_j[device_local_i[i] + j] + global_col_start == i + global_row_start) {
-               // Has to be atomic as we could have many threads operating over this row
-               Kokkos::atomic_increment(&nnz_match_local_row_d(i));
+            // Is this column the diagonal
+            bool is_diagonal = (device_local_j[device_local_i[i] + j] + global_col_start == i + global_row_start);
+            
+            // We have found a diagonal in this row
+            if (is_diagonal) {
+               thread_data.found_diagonal = true;
             }
-         }            
-      });
+            
+            // If the value is bigger than the tolerance, we keep it
+            if (abs(device_local_vals[device_local_i[i] + j]) >= rel_row_tol_d(i)) {
+               thread_data.count++;
+            }
+            // Or if it's small but its the diagonal and we're keeping diagonals
+            else if (!allow_drop_diagonal_int && is_diagonal) {
+               thread_data.count++;
+            }
+         }, result
+      );
+
+      // If we're lumping but there was no diagonal in this row
+      // we'll have to add in a diagonal
+      if (lump_int && !result.found_diagonal) result.count++;
+      nnz_match_local_row_d(i) = result.count;      
+
    });
 
    // Do a reduction to get the local nnzs we end up with
