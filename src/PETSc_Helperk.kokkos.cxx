@@ -339,29 +339,43 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    if (relative_max_row_tolerance_int) 
    {       
       Kokkos::parallel_for(
-         Kokkos::RangePolicy<>(0, local_rows), KOKKOS_LAMBDA(int i) {
+         Kokkos::TeamPolicy<>(PetscGetKokkosExecutionSpace(), local_rows, Kokkos::AUTO()),
+         KOKKOS_LAMBDA(const KokkosTeamMemberType &t) {
 
+            PetscInt i = t.league_rank();
             PetscInt ncols_local = device_local_i[i + 1] - device_local_i[i];
             PetscScalar max_val = -1.0;
 
-            // Should make this a parallel reduction
-            for (int j = 0; j < ncols_local; j++)
-            {
-               if (abs(device_local_vals[device_local_i[i] + j]) > max_val) max_val = abs(device_local_vals[device_local_i[i] + j]);
+            // Reduce over local columns
+            Kokkos::parallel_reduce(
+               Kokkos::TeamThreadRange(t, ncols_local),
+               [&](const PetscInt j, PetscScalar& thread_max) {
+                  // If our current tolerance is bigger than the max value we've seen so far
+                  PetscScalar val = abs(device_local_vals[device_local_i[i] + j]);
+                  if (val > thread_max) thread_max = val;
+               },
+               Kokkos::Max<PetscScalar>(max_val)
+            );
+
+            if (mpi) {
+               PetscInt ncols_nonlocal = device_nonlocal_i[i + 1] - device_nonlocal_i[i];
+               
+               // Reduce over nonlocal columns
+               Kokkos::parallel_reduce(
+                  Kokkos::TeamThreadRange(t, ncols_nonlocal),
+                  [&](const PetscInt j, PetscScalar& thread_max) {
+                     // If our current tolerance is bigger than the max value we've seen so far
+                     PetscScalar val = abs(device_nonlocal_vals[device_nonlocal_i[i] + j]);
+                     if (val > thread_max) thread_max = val;
+                  },
+                  Kokkos::Max<PetscScalar>(max_val)
+               );
             }
 
-            if (mpi)
-            {
-               PetscInt ncols_nonlocal = device_nonlocal_i[i + 1] - device_nonlocal_i[i];               
-
-               for (int j = 0; j < ncols_nonlocal; j++)
-               {
-                  if (abs(device_nonlocal_vals[device_nonlocal_i[i] + j]) > max_val) max_val = abs(device_nonlocal_vals[device_nonlocal_i[i] + j]);
-               }  
-            }              
-
-            rel_row_tol_d(i) *= max_val;
-         });
+            Kokkos::single(Kokkos::PerTeam(t), [&]() {
+               rel_row_tol_d(i) *= max_val;
+            });
+      });
    }
 
    // ~~~~~~~~~~~~
