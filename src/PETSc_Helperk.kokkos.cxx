@@ -389,10 +389,6 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
             // if it is bigger than the tolerance
             if (abs(device_local_vals[device_local_i[i] + j]) >= rel_row_tol_d(i))
             {
-               // if (i == 89)
-               // {
-               //    std::cout << "correct " << i + global_row_start << " " << device_local_j[device_local_i[i] + j] + global_col_start << std::endl;
-               // }
                row_indices_d(device_local_i[i] + j) = i + global_row_start;
                // Careful here to use global_col_start in case we are rectangular
                col_indices_d(device_local_i[i] + j) = device_local_j[device_local_i[i] + j] + global_col_start;
@@ -403,11 +399,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
             else if (lump_int || \
                   (!allow_drop_diagonal_int && \
                      device_local_j[device_local_i[i] + j] + global_col_start == i + global_row_start))
-            {
-               // if (i == 89)
-               // {
-               //    std::cout << "correct LUMP/DIAG " << i + global_row_start << " " << device_local_j[device_local_i[i] + j] + global_col_start << "val " << device_local_vals[device_local_i[i] + j] << std::endl;
-               // }               
+            {             
                row_indices_d(device_local_i[i] + j) = i + global_row_start;
                col_indices_d(device_local_i[i] + j) = i + global_row_start;
                // Essential to add in a diagonal in the case where the diagonal is present, but it 
@@ -558,10 +550,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
             {
                // Have to give it the local column indices
                j_local(i_local(i) + counter) = device_local_j[device_local_i[i] + j];
-               a_local(i_local(i) + counter) = device_local_vals[device_local_i[i] + j];
-               // if (i_local(i) + counter == 759) {
-               //    std::cout << i << " " << device_local_j[device_local_i[i] + j] << "STRAIGHT IN existing a_local " << a_local(i_local(i) + counter) << std::endl;
-               // }               
+               a_local(i_local(i) + counter) = device_local_vals[device_local_i[i] + j];             
                counter++;
                // Diagonal to lump if we need
                if (device_local_j[device_local_i[i] + j] + global_col_start == i + global_row_start) lump_val+= device_local_vals[device_local_i[i] + j];
@@ -579,16 +568,10 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
                {
                   // Have to give it the local column indices
                   j_local(i_local(i) + counter) = device_local_j[device_local_i[i] + j];
-                  a_local(i_local(i) + counter) = device_local_vals[device_local_i[i] + j];
-                  // if (i_local(i) + counter == 759) {
-                  //    std::cout << "STRAIGHT IN EXISTING DIAG NOT DROP existing a_local " << a_local(i_local(i) + counter) << std::endl;
-                  // }                   
+                  a_local(i_local(i) + counter) = device_local_vals[device_local_i[i] + j];                  
                   counter++;                  
                }
-               lump_val+= device_local_vals[device_local_i[i] + j];
-               // if (i == 89) {
-               //    std::cout << "here is some lumping " << device_local_vals[device_local_i[i] + j] << " lump val " << lump_val << std::endl;
-               // }               
+               lump_val+= device_local_vals[device_local_i[i] + j];             
             }   
          }
          // We have two cases here with lumping
@@ -611,39 +594,21 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
                else if (j_local(i_local(i) + j) + global_col_start == i + global_row_start)
                {
                   diag_index = j;
-                  //if (i == 89) std::cout << "found diag" << " ncols_local " << ncols_local << std::endl;
                } 
             }
-
-         //if (i == 89) std::cout << "diag_index " << diag_index << " before_diag_index " << before_diag_index << std::endl;
-
-            //if (i == 89) std::cout << "GOT INTO LUMPING PART" << std::endl;
             // If we have an existing diagonal, replace the value with the lumped value
             if (diag_index != -1)
             {
-               //std::cout << i << " i_local(i) " << i_local(i) << " diag_index " << diag_index << " indx " << i_local(i) + diag_index << " nnzs_match_local " << nnzs_match_local << std::endl;
-               // if (i == 89) {
-               //    std::cout << "idx " << i_local(i) + diag_index << "existing a_local " << a_local(i_local(i) + diag_index) << " lump " << lump_val << std::endl;
-               // }
                a_local(i_local(i) + diag_index) = lump_val;
             }
             // If we don't have an existing diagonal, add it in where it would be
             else
             {  
-               if (before_diag_index == -1) exit(1);
                for (int j = ncols_local-1; j > before_diag_index; j--)
                {
                   j_local(i_local(i) + j + 1) = j_local(i_local(i) + j);
-                  a_local(i_local(i) + j + 1) = a_local(i_local(i) + j);
-
-               // if (i_local(i) + j + 1 == 759) {
-               //    std::cout << "MOVED existing a_local " << a_local(i_local(i) + j + 1) << std::endl;
-               // }                    
-               }
-
-               // if (i_local(i) + before_diag_index + 1 == 759) {
-               //    std::cout << "NOT EXISTING DIAG existing a_local " << a_local(i_local(i) + before_diag_index + 1) << " lump " << lump_val << std::endl;
-               // }               
+                  a_local(i_local(i) + j + 1) = a_local(i_local(i) + j);                 
+               }            
 
                // Has to be the local column index
                j_local(i_local(i) + before_diag_index + 1) = i;
@@ -651,13 +616,17 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
                counter++;
             }
          }
-      });     
+      });         
       
-    auto ckok = new Mat_SeqAIJKokkos(local_rows, local_cols, nnzs_match_local, i_local_dual, j_local_dual, a_local_dual);  
+    a_local_dual.modify_device();
+    i_local_dual.modify_device();
+    j_local_dual.modify_device();
+
+    // We can create our matrix directly on the device
+    auto akok = new Mat_SeqAIJKokkos(local_rows, local_cols, nnzs_match_local, i_local_dual, j_local_dual, a_local_dual);   
+
     MatCreate(PETSC_COMM_SELF, output_mat);
-    MatSetSeqAIJKokkosWithCSRMatrix_mine(*output_mat, ckok);
-
-
+    MatSetSeqAIJKokkosWithCSRMatrix_mine(*output_mat, akok);
 
    }
    PetscFree2(row_indices, col_indices);   
