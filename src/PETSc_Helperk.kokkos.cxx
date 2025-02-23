@@ -507,8 +507,8 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    // Get device views
    MatScalarKokkosView a_local_d = a_local_dual.view_device();
    MatRowMapKokkosView i_local_d = i_local_dual.view_device();
-   // Initialise to zero
-   Kokkos::deep_copy(i_local_d, 0);       
+   // Initialize first entry to zero - the rest get set below
+   Kokkos::deep_copy(Kokkos::subview(i_local_d, 0), 0);       
    MatColIdxKokkosView j_local_d = j_local_dual.view_device();                 
 
    // Have to use rangepolicy here rather than teampolicy, as we don't want
@@ -625,8 +625,8 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
 
       MatScalarKokkosView a_nonlocal_d = a_nonlocal_dual.view_device();
       MatRowMapKokkosView i_nonlocal_d = i_nonlocal_dual.view_device();
-      // Initialise to zero
-      Kokkos::deep_copy(i_nonlocal_d, 0);         
+      // Initialize first entry to zero - the rest get set below
+      Kokkos::deep_copy(Kokkos::subview(i_nonlocal_d, 0), 0);                
       MatColIdxKokkosView j_nonlocal_d = j_nonlocal_dual.view_device();              
 
       // @@@@ build aij here
