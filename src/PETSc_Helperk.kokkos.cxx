@@ -338,6 +338,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    // Compute the relative row tolerances if needed
    if (relative_max_row_tolerance_int) 
    {       
+      // Reduction over all rows
       Kokkos::parallel_for(
          Kokkos::TeamPolicy<>(PetscGetKokkosExecutionSpace(), local_rows, Kokkos::AUTO()),
          KOKKOS_LAMBDA(const KokkosTeamMemberType &t) {
@@ -372,6 +373,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
                );
             }
 
+            // Only want one thread in the team to write the result
             Kokkos::single(Kokkos::PerTeam(t), [&]() {
                rel_row_tol_d(i) *= max_val;
             });
@@ -435,11 +437,6 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    );
 
    // ~~~~~~~~~~~~
-
-   // Do a reduction to get the local nnzs we end up with
-   Kokkos::parallel_reduce ("ReductionLocal", local_rows, KOKKOS_LAMBDA (const PetscInt i, PetscInt& update) {
-      update += nnz_match_local_row_d(i);
-   }, nnzs_match_local);
 
    // Need to do a scan on nnz_match_local_row_d to get where each row starts
    Kokkos::parallel_scan (local_rows, KOKKOS_LAMBDA (const PetscInt i, PetscInt& update, const bool final) {
