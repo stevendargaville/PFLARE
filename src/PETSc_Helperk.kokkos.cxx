@@ -480,22 +480,17 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       j_nonlocal = j_nonlocal_dual.view_device();   
    }          
 
+   // Have to use rangepolicy here rather than teampolicy, as we don't want
+   // threads in each team to get their own copies of things like counter
+   // Desperately need to rewrite this whole loop to exploit more parallelism!
    Kokkos::parallel_for( // for each row
-      Kokkos::TeamPolicy<>(PetscGetKokkosExecutionSpace(), local_rows, Kokkos::AUTO()), KOKKOS_LAMBDA(const KokkosTeamMemberType &t) {
+      Kokkos::RangePolicy<>(0, local_rows), KOKKOS_LAMBDA(int i) {
 
-      PetscInt i   = t.league_rank(); // row i
       PetscInt ncols_local = device_local_i[i + 1] - device_local_i[i];
 
       // The start of our row index comes from the scan
       i_local(i + 1) = nnz_match_local_row_d(i);
 
-            // if (i == 38)
-            // {
-            //    std::cout << "cols in non dropped row " << ncols_local << std::endl;
-            //    std::cout << "cols in dropped row " << i_local(i + 1) - i_local(i) << std::endl;
-            // }      
-
-      // Really need some parallelism here! Should rewrite this!
       PetscInt counter = 0;
       PetscScalar lump_val = 0;
       for (int j = 0; j < ncols_local; j++)
@@ -504,11 +499,6 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
          // if it is bigger than the tolerance
          if (abs(device_local_vals[device_local_i[i] + j]) >= rel_row_tol_d(i))
          {
-            // if (i == 38)
-            // {
-            //    std::cout << "adding in row " << device_local_j[device_local_i[i] + j] << std::endl;
-            // }
-
             // Have to give it the local column indices
             j_local(i_local(i) + counter) = device_local_j[device_local_i[i] + j];
             a_local(i_local(i) + counter) = device_local_vals[device_local_i[i] + j];             
@@ -527,11 +517,6 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
             // with that of lump_val
             if (device_local_j[device_local_i[i] + j] + global_col_start == i + global_row_start)
             {
-               // if (i == 38)
-               // {
-               //    std::cout << "adding in row lump " << device_local_j[device_local_i[i] + j] << std::endl;
-               // }
-
                // Have to give it the local column indices
                j_local(i_local(i) + counter) = device_local_j[device_local_i[i] + j];
                a_local(i_local(i) + counter) = device_local_vals[device_local_i[i] + j];                  
@@ -576,11 +561,6 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
                a_local(i_local(i) + j + 1) = a_local(i_local(i) + j);                 
             }            
 
-            // if (i == 38)
-            // {
-            //    std::cout << "adding in row lump move " << i << std::endl;
-            // }
-
             // Has to be the local column index
             j_local(i_local(i) + before_diag_index + 1) = i;
             a_local(i_local(i) + before_diag_index + 1) = lump_val;
@@ -592,46 +572,6 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    a_local_dual.modify_device();
    i_local_dual.modify_device();
    j_local_dual.modify_device();
-
-   // @@@@@@@@@@@@@@@@
-      // Let's copy the data back to the host
-      i_local_dual.sync_host(exec);     
-      j_local_dual.sync_host(exec);     
-
-      for (int i = 0; i < local_rows; i++)
-      {
-
-         MatScalarKokkosViewHost a_local_h = a_local_dual.view_host();
-         MatRowMapKokkosViewHost i_local_h = i_local_dual.view_host();      
-         MatColIdxKokkosViewHost j_local_h = j_local_dual.view_host();          
-
-         PetscInt ncols_local = i_local_h(i + 1) - i_local_h(i);
-
-         std::cout << i << " i idx " <<  i_local_h[i] << " i + 1 " << i_local_h[i+1]  << std::endl;
-         if (i_local_h[i] > i_local_h[i+1])
-         {
-            std::cout << "error not sorted" << std::endl;
-            exit(1);
-         }
-
-         for (int j = 0; j < ncols_local-1; j++)
-         {
-            std::cout << j << " j indx " <<  j_local_h[i_local_h[i] + j] << " j + 1 " << j_local_h[i_local_h[i] + j + 1] << std::endl;
-            if (j_local_h[i_local_h[i] + j] >= j_local_h[i_local_h[i] + j + 1])
-            {
-               std::cout << "error j not sorted" << std::endl;
-               exit(1);               
-            }
-         }         
-
-         // // go one fewer
-         // for (int j = 0; j < ncols_local-1; j++)
-         // {         
-         //    if ((a_local_dual.view_host())[])
-         // }
-      }
-
-   // @@@@@@@@@@@@@@@@
 
    // We can create our matrix directly on the device
    // See MatSeqAIJKokkosMergeMats for example
