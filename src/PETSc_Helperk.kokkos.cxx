@@ -365,19 +365,21 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    }
 
    // ~~~~~~~~~~~~
-   // Need to count the number of nnzs we end up with
+   // Need to count the number of nnzs we end up with, on each row and in total
    // ~~~~~~~~~~~~
-   Kokkos::parallel_for( // for each row
-      Kokkos::TeamPolicy<>(PetscGetKokkosExecutionSpace(), local_rows, Kokkos::AUTO()), KOKKOS_LAMBDA(const KokkosTeamMemberType &t) {
+   // Reduce over all the rows
+   Kokkos::parallel_reduce(
+      Kokkos::TeamPolicy<>(PetscGetKokkosExecutionSpace(), local_rows, Kokkos::AUTO()),
+      KOKKOS_LAMBDA(const KokkosTeamMemberType &t, PetscInt& thread_total) {
 
       PetscInt i   = t.league_rank(); // row i
       PetscInt ncols_local = device_local_i[i + 1] - device_local_i[i];
-
-      // Need to do a reduction over each row i
       // We have a custom reduction type defined - ReduceData
       // Which has both a nnz count for this row, but also tracks whether we 
       // found the diagonal
-      ReduceData result;
+      ReduceData row_result;
+
+      // Reduce over all the columns
       Kokkos::parallel_reduce(
          Kokkos::TeamThreadRange(t, ncols_local),
          [&](const PetscInt j, ReduceData& thread_data) {
@@ -398,20 +400,18 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
             else if (!allow_drop_diagonal_int && is_diagonal) {
                thread_data.count++;
             }
-         }, result
+         }, row_result
       );
 
       // We're finished our parallel reduction for this row
       // If we're lumping but there was no diagonal in this row
       // we'll have to add in a diagonal
-      // Only want one thread in the team to write the result
-      // (all threads in the team share the same result)
-      Kokkos::single(Kokkos::PerTeam(t), [&]() {
-         if (lump_int && !result.found_diagonal) result.count++;
-         nnz_match_local_row_d(i) = result.count;
-      });
-
-   });
+      if (lump_int && !row_result.found_diagonal) row_result.count++;
+      nnz_match_local_row_d(i) = row_result.count;
+      thread_total += row_result.count;
+      },
+      nnzs_match_local
+   );
 
    // ~~~~~~~~~~~~
 
@@ -442,41 +442,37 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       colmap_dual.sync_device(exec);  
 
       // ~~~~~~~~~~~~
-      // Need to count the number of nnzs we end up with
+      // Need to count the number of nnzs we end up with, on each row and in total
       // ~~~~~~~~~~~~
-      Kokkos::parallel_for( // for each row
-         Kokkos::TeamPolicy<>(PetscGetKokkosExecutionSpace(), local_rows, Kokkos::AUTO()), KOKKOS_LAMBDA(const KokkosTeamMemberType &t) {
+      // Reduce over all the rows
+      Kokkos::parallel_reduce(
+         Kokkos::TeamPolicy<>(PetscGetKokkosExecutionSpace(), local_rows, Kokkos::AUTO()),
+         KOKKOS_LAMBDA(const KokkosTeamMemberType &t, PetscInt& thread_total) {
+            
+            PetscInt i = t.league_rank();
+            PetscInt ncols_nonlocal = device_nonlocal_i[i + 1] - device_nonlocal_i[i];
+            ReduceData row_result;
 
-         PetscInt i   = t.league_rank(); // row i
-         PetscInt ncols_nonlocal = device_nonlocal_i[i + 1] - device_nonlocal_i[i];
-
-         // Need to do a reduction over each row i
-         ReduceData result;
-         Kokkos::parallel_reduce(
-            Kokkos::TeamThreadRange(t, ncols_nonlocal),
-            [&](const PetscInt j, ReduceData& thread_data) {
-               
-               // If the value is bigger than the tolerance, we keep it
-               if (abs(device_nonlocal_vals[device_nonlocal_i[i] + j]) >= rel_row_tol_d(i)) {
-                  thread_data.count++;
-               }
-            }, result
-         );
-
-         // We're finished our parallel reduction for this row
-         // Only want one thread in the team to write the result
-         // (all threads in the team share the same result)
-         Kokkos::single(Kokkos::PerTeam(t), [&]() {
-            nnz_match_nonlocal_row_d(i) = result.count; 
-         });              
-      });
+            // Reduce over all the columns
+            Kokkos::parallel_reduce(
+               Kokkos::TeamThreadRange(t, ncols_nonlocal),
+               [&](const PetscInt j, ReduceData& thread_data) {
+                  // If the value is bigger than the tolerance, we keep it
+                  if (abs(device_nonlocal_vals[device_nonlocal_i[i] + j]) >= rel_row_tol_d(i)) {
+                     thread_data.count++;
+                  }
+               },
+               row_result
+            );
+            
+            // Store row count and update total
+            nnz_match_nonlocal_row_d(i) = row_result.count;
+            thread_total += row_result.count;
+         },
+         nnzs_match_nonlocal
+      );
 
       // ~~~~~~~~~~~~
-
-      // Do a reduction to get the nonlocal nnzs we end up with
-      Kokkos::parallel_reduce ("ReductionLocal", local_rows, KOKKOS_LAMBDA (const PetscInt i, PetscInt& update) {
-         update += nnz_match_nonlocal_row_d(i);
-      }, nnzs_match_nonlocal);     
 
       // Need to do a scan on nnz_match_nonlocal_row_d to get where each row starts
       Kokkos::parallel_scan (local_rows, KOKKOS_LAMBDA (const PetscInt i, PetscInt& update, const bool final) {
