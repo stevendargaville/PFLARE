@@ -600,12 +600,12 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
 
       for (int i = 0; i < local_rows; i++)
       {
-         PetscInt ncols_local = i_local(i + 1) - i_local(i);
 
          MatScalarKokkosViewHost a_local_h = a_local_dual.view_host();
          MatRowMapKokkosViewHost i_local_h = i_local_dual.view_host();      
          MatColIdxKokkosViewHost j_local_h = j_local_dual.view_host();          
 
+         PetscInt ncols_local = i_local_h(i + 1) - i_local_h(i);
 
          std::cout << i << " i idx " <<  i_local_h[i] << " i + 1 " << i_local_h[i+1]  << std::endl;
          if (i_local_h[i] > i_local_h[i+1])
