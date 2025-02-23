@@ -349,7 +349,8 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
                   diag_index = j;
             }
             // Doesn't need to be atomic given the Kokkos::single
-            if (diag_index == -1) &nnz_match_local_row_d(i);
+            if (diag_index == -1) nnz_match_local_row_d(i)++;
+         }
       });
       
       // Should make this a reduction now so we could remove the atomic
