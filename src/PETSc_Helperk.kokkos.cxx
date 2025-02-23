@@ -364,7 +364,9 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
          });
    }
 
+   // ~~~~~~~~~~~~
    // Need to count the number of nnzs we end up with
+   // ~~~~~~~~~~~~
    Kokkos::parallel_for( // for each row
       Kokkos::TeamPolicy<>(PetscGetKokkosExecutionSpace(), local_rows, Kokkos::AUTO()), KOKKOS_LAMBDA(const KokkosTeamMemberType &t) {
 
@@ -407,6 +409,8 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
 
    });
 
+   // ~~~~~~~~~~~~
+
    // Do a reduction to get the local nnzs we end up with
    Kokkos::parallel_reduce ("ReductionLocal", local_rows, KOKKOS_LAMBDA (const PetscInt i, PetscInt& update) {
       update += nnz_match_local_row_d(i);
@@ -433,7 +437,9 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       // Let's copy the data back to the device
       colmap_dual.sync_device(exec);  
 
+      // ~~~~~~~~~~~~
       // Need to count the number of nnzs we end up with
+      // ~~~~~~~~~~~~
       Kokkos::parallel_for( // for each row
          Kokkos::TeamPolicy<>(PetscGetKokkosExecutionSpace(), local_rows, Kokkos::AUTO()), KOKKOS_LAMBDA(const KokkosTeamMemberType &t) {
 
@@ -455,6 +461,8 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
          // We're finished our parallel reduction for this row
          nnz_match_nonlocal_row_d(i) = result.count;      
       });
+
+      // ~~~~~~~~~~~~
 
       // Do a reduction to get the nonlocal nnzs we end up with
       Kokkos::parallel_reduce ("ReductionLocal", local_rows, KOKKOS_LAMBDA (const PetscInt i, PetscInt& update) {
