@@ -515,8 +515,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
                Kokkos::TeamThreadRange(t, ncols_nonlocal),
                [&](const PetscInt j, ReduceData& thread_data) {
 
-                  // Is this column the diagonal - if our matrix is sufficiently rectangular
-                  // the diagonal can appear in the off-diagonal block
+                  // Is this column the diagonal
                   bool is_diagonal = (colmap_input_d(device_nonlocal_j[device_nonlocal_i[i] + j]) == i + global_row_start);
 
                   // We have found a diagonal in this row
