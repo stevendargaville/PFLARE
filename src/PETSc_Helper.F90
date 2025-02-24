@@ -37,6 +37,8 @@ module petsc_helper
       integer(c_long_long) :: A_array, B_array
       integer :: lump_int, allow_drop_diagonal_int, relative_max_row_tolerance_int, ierr
       MatType :: mat_type
+      Mat :: temp_mat
+      PetscScalar normy;
 #endif      
       ! ~~~~~~~~~~
 
@@ -70,6 +72,19 @@ module petsc_helper
          call remove_small_from_sparse_kokkos(A_array, tol, &
                   B_array, relative_max_row_tolerance_int, lump_int, allow_drop_diagonal_int) 
          output_mat%v = B_array
+
+         ! Compare the kokkos and cpu versions
+         call remove_small_from_sparse_cpu(input_mat, tol, temp_mat, relative_max_row_tolerance, &
+                  lump, allow_drop_diagonal)                        
+                 
+         call MatAXPY(temp_mat, -1d0, output_mat, DIFFERENT_NONZERO_PATTERN, ierr)
+         call MatNorm(temp_mat, NORM_FROBENIUS, normy, ierr)
+         if (normy .gt. 1d-14) then
+            call MatFilter(temp_mat, 1d-14, PETSC_TRUE, PETSC_FALSE, ierr)
+            call MatView(temp_mat, PETSC_VIEWER_STDOUT_WORLD, ierr)
+            print *, "Kokkos and CPU versions of remove_small_from_sparse do not match"
+            call exit(0)
+         end if
 
       else
 
