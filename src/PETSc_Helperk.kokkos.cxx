@@ -422,6 +422,12 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
 
       PetscInt i   = t.league_rank(); // row i
       PetscInt ncols_local = device_local_i[i + 1] - device_local_i[i];
+
+      // For this row, would we expect the diagonal to be in the local block or in the nonlocal?
+      // Trivially true in the local block for square matrices
+      bool expect_local_diagonal = i + global_row_start >= global_col_start && \
+                           i + global_row_start < global_col_end_plus_one;
+
       // We have a custom reduction type defined - ReduceData
       // Which has both a nnz count for this row, but also tracks whether we 
       // found the diagonal
@@ -452,11 +458,11 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       );
 
       // We're finished our parallel reduction for this row
-      // If we're lumping but there was no diagonal in this row
-      // we'll have to add in a diagonal
+      // If we're lumping but there was no diagonal in this row and there
+      // should be we'll have to add in a diagonal to the local block
       // This will add one for every thread in this team, but all 
       // the threads in this team share the same result after the reduction
-      if (lump_int && !row_result.found_diagonal) row_result.count++;
+      if (lump_int && expect_local_diagonal && !row_result.found_diagonal) row_result.count++;
       // Only want one thread in the team to write the result
       Kokkos::single(Kokkos::PerTeam(t), [&]() {      
          nnz_match_local_row_d(i) = row_result.count;
@@ -475,10 +481,18 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       if (final) {
          nnz_match_local_row_d(i) = update; // only update array on final pass
       }
-   });            
+   });    
+
+   PetscIntKokkosViewHost colmap_input_h;
+   PetscIntKokkosView colmap_input_d;             
 
    if (mpi) 
    {
+      // We also copy the input mat colmap over to the device as we need it below
+      colmap_input_h = PetscIntKokkosViewHost(mat_mpi->garray, cols_ao);
+      colmap_input_d = PetscIntKokkosView("colmap_input_d", cols_ao);
+      Kokkos::deep_copy(colmap_input_d, colmap_input_h);
+
       // ~~~~~~~~~~~~
       // Need to count the number of nnzs we end up with, on each row and in total
       // ~~~~~~~~~~~~
@@ -489,24 +503,48 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
             
             PetscInt i = t.league_rank();
             PetscInt ncols_nonlocal = device_nonlocal_i[i + 1] - device_nonlocal_i[i];
-            ReduceData row_result;
+
+            // For this row, would we expect the diagonal to be in the local block or in the nonlocal?
+            bool expect_local_diagonal = i + global_row_start >= global_col_start && \
+                                 i + global_row_start < global_col_end_plus_one;
+
+            ReduceData row_result;          
 
             // Reduce over all the columns
             Kokkos::parallel_reduce(
                Kokkos::TeamThreadRange(t, ncols_nonlocal),
                [&](const PetscInt j, ReduceData& thread_data) {
+
+                  // Is this column the diagonal - if our matrix is sufficiently rectangular
+                  // the diagonal can appear in the off-diagonal block
+                  bool is_diagonal = (colmap_input_d(device_nonlocal_j[device_nonlocal_i[i] + j]) == i + global_row_start);
+
+                  // We have found a diagonal in this row
+                  if (is_diagonal) {
+                     thread_data.found_diagonal = true;
+                  }                  
+
                   // If the value is bigger than the tolerance, we keep it
                   if (abs(device_nonlocal_vals[device_nonlocal_i[i] + j]) >= rel_row_tol_d(i)) {
                      thread_data.count++;
                   }
+                  // Or if it's small but its the diagonal and we're keeping diagonals
+                  else if (!allow_drop_diagonal_int && is_diagonal) {
+                     thread_data.count++;
+                  }                  
                },
                row_result
             );
             
-            // Store row count and update total
+            // We're finished our parallel reduction for this row
+            // If we're lumping but there was no diagonal in this row and 
+            // there should be (ie !expect_local_diagonal) we'll have to add in a diagonal
+            // to the nonlocal block
+            // This will add one for every thread in this team, but all 
+            // the threads in this team share the same result after the reduction         
+            if (lump_int && !expect_local_diagonal && !row_result.found_diagonal) row_result.count++;
             // Only want one thread in the team to write the result
-            // (all threads in the team share the same result)
-            Kokkos::single(Kokkos::PerTeam(t), [&]() {             
+            Kokkos::single(Kokkos::PerTeam(t), [&]() {      
                nnz_match_nonlocal_row_d(i) = row_result.count;
                thread_total += row_result.count;
             });
@@ -539,7 +577,30 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    MatRowMapKokkosView i_local_d = i_local_dual.view_device();
    // Initialize first entry to zero - the rest get set below
    Kokkos::deep_copy(Kokkos::subview(i_local_d, 0), 0);       
-   MatColIdxKokkosView j_local_d = j_local_dual.view_device();                 
+   MatColIdxKokkosView j_local_d = j_local_dual.view_device();  
+
+   // Nonlocal stuff 
+   MatScalarKokkosDualView a_nonlocal_dual;
+   MatRowMapKokkosDualView i_nonlocal_dual;
+   MatColIdxKokkosDualView j_nonlocal_dual;
+   MatScalarKokkosView a_nonlocal_d;
+   MatRowMapKokkosView i_nonlocal_d;          
+   MatColIdxKokkosView j_nonlocal_d;    
+
+   // we also have to go and build the a, i, j for the non-local off-diagonal block
+   if (mpi) 
+   {
+      // Non-local 
+      a_nonlocal_dual = MatScalarKokkosDualView("a_nonlocal_dual", nnzs_match_nonlocal);
+      i_nonlocal_dual = MatRowMapKokkosDualView("i_nonlocal_dual", local_rows+1);
+      j_nonlocal_dual = MatColIdxKokkosDualView("j_nonlocal_dual", nnzs_match_nonlocal);  
+
+      a_nonlocal_d = a_nonlocal_dual.view_device();
+      i_nonlocal_d = i_nonlocal_dual.view_device();
+      // Initialize first entry to zero - the rest get set below
+      Kokkos::deep_copy(Kokkos::subview(i_nonlocal_d, 0), 0);                
+      j_nonlocal_d = j_nonlocal_dual.view_device();   
+   }               
 
    // Have to use rangepolicy here rather than teampolicy, as we don't want
    // threads in each team to get their own copies of things like counter
@@ -548,6 +609,12 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       Kokkos::RangePolicy<>(0, local_rows), KOKKOS_LAMBDA(int i) {
          
       PetscInt ncols_local = device_local_i[i + 1] - device_local_i[i];
+      
+      // For this row, would we expect the diagonal to be in the local block or in the nonlocal?
+      // Trivially true in the local block for square matrices
+      bool expect_local_diagonal = i + global_row_start >= global_col_start && \
+                           i + global_row_start < global_col_end_plus_one;
+
       // The start of our row index comes from the scan
       i_local_d(i + 1) = nnz_match_local_row_d(i);
       PetscInt pos = (i == 0) ? 0 : nnz_match_local_row_d(i-1);
@@ -585,15 +652,41 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
          }
       }  
 
-      // If we're lumping we need to add in the off-diagonal entries
-      if (mpi && lump_int)
+      // Copy the off-diagonal entries
+      if (mpi)
       {
          PetscInt ncols_nonlocal = device_nonlocal_i[i + 1] - device_nonlocal_i[i];
+         // The start of our row index comes from the scan
+         i_nonlocal_d(i + 1) = nnz_match_nonlocal_row_d(i);         
+         PetscInt pos_nonlocal = (i == 0) ? 0 : nnz_match_nonlocal_row_d(i-1);
+
          // Single sequential pass through columns
          for (int j = 0; j < ncols_nonlocal; j++) {
+            bool keep_col = false;
+            // Remember we can have diagonals in the off-diagonal block if we're rectangular
+            bool is_diagonal = (colmap_input_d(device_nonlocal_j[device_nonlocal_i[i] + j]) == i + global_row_start);
+
+            // If we hit a diagonal put it in the lump'd value
+            if (is_diagonal && lump_int) lump_val+= device_nonlocal_vals[device_nonlocal_i[i] + j];            
             
-            // If the value is smaller than the tolerance
-            if (abs(device_nonlocal_vals[device_nonlocal_i[i] + j]) < rel_row_tol_d(i)) {
+            // Check if we keep this column because of size
+            if (abs(device_nonlocal_vals[device_nonlocal_i[i] + j]) >= rel_row_tol_d(i)) {
+               keep_col = true;
+            }
+            // Or if we keep it because we're not dropping diagonals
+            else if (!allow_drop_diagonal_int && is_diagonal) {
+               keep_col = true;
+            }
+            
+            // Let's not add in the column yet, let's do it below
+            if (keep_col) {
+               j_nonlocal_d(pos_nonlocal) = colmap_input_d(device_nonlocal_j[device_nonlocal_i[i] + j]);
+               a_nonlocal_d(pos_nonlocal) = device_nonlocal_vals[device_nonlocal_i[i] + j];
+               pos_nonlocal++;               
+            }
+            // If we're not on the diagonal and we're small enough to lump
+            // add in
+            else if (lump_int && !is_diagonal) {
                lump_val+= device_nonlocal_vals[device_nonlocal_i[i] + j];
             }
          }   
@@ -601,43 +694,93 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
 
       // We have two cases here with lumping
       // One where we have an existing diagonal and one where we don't
-      if (lump_int && ncols_local != 0)
+      if (lump_int)
       {
          // Find where the diagonal is - this has to happen after we've put in the existing entries
          // because the number of columns isn't necessary ncols_local, its i_local_d(i+1) - i_local_d(i)
          PetscInt diag_index = -1;
          PetscInt before_diag_index = -1;
-         for (int j = 0; j < i_local_d(i+1) - i_local_d(i); j++)
-         {
-            // Get the index one before where the diagonal would be
-            if (j_local_d(i_local_d(i) + j) + global_col_start < i + global_row_start) 
-            {
-               before_diag_index = j;
-            }
-            // Get the diagonal index (if it exists)
-            else if (j_local_d(i_local_d(i) + j) + global_col_start == i + global_row_start)
-            {
-               diag_index = j;
-            } 
-         }
-         // If we have an existing diagonal, replace the value with the lumped value
-         if (diag_index != -1)
-         {
-            a_local_d(i_local_d(i) + diag_index) = lump_val;
-         }
-         // If we don't have an existing diagonal, add it in where it would be
-         else
-         {  
-            for (int j = ncols_local-1; j > before_diag_index; j--)
-            {
-               j_local_d(i_local_d(i) + j + 1) = j_local_d(i_local_d(i) + j);
-               a_local_d(i_local_d(i) + j + 1) = a_local_d(i_local_d(i) + j);                 
-            }            
 
-            // Has to be the local column index
-            j_local_d(i_local_d(i) + before_diag_index + 1) = i;
-            a_local_d(i_local_d(i) + before_diag_index + 1) = lump_val;
+         // Should we have a diagonal in the local block
+         if (expect_local_diagonal) 
+         {
+            // This is the new ncols_local
+            if (i_local_d(i+1) - i_local_d(i) != 0)
+            {
+               for (int j = 0; j < i_local_d(i+1) - i_local_d(i); j++)
+               {
+                  // Get the index one before where the diagonal would be
+                  if (j_local_d(i_local_d(i) + j) + global_col_start < i + global_row_start) 
+                  {
+                     before_diag_index = j;
+                  }
+                  // Get the diagonal index (if it exists)
+                  else if (j_local_d(i_local_d(i) + j) + global_col_start == i + global_row_start)
+                  {
+                     diag_index = j;
+                  } 
+               }
+               // If we have an existing diagonal, replace the value with the lumped value
+               if (diag_index != -1)
+               {
+                  a_local_d(i_local_d(i) + diag_index) = lump_val;
+               }
+               // If we don't have an existing diagonal, add it in where it would be
+               else
+               {  
+                  for (int j = ncols_local-1; j > before_diag_index; j--)
+                  {
+                     j_local_d(i_local_d(i) + j + 1) = j_local_d(i_local_d(i) + j);
+                     a_local_d(i_local_d(i) + j + 1) = a_local_d(i_local_d(i) + j);                 
+                  }            
+
+                  // Has to be the local column index
+                  j_local_d(i_local_d(i) + before_diag_index + 1) = i;
+                  a_local_d(i_local_d(i) + before_diag_index + 1) = lump_val;
+               }
+            }
          }
+         // If we know the diagonal is in the nonlocal block
+         // Shouldn't need the else if (mpi) here
+         else if (mpi)
+         {
+            // This is the new ncols_nonlocal
+            if (i_nonlocal_d(i+1) - i_nonlocal_d(i) != 0)
+            {
+               for (int j = 0; j < i_nonlocal_d(i+1) - i_nonlocal_d(i); j++)
+               {
+                  // Get the index one before where the diagonal would be
+                  // j_nonlocal_d has the global indices in it already
+                  if (j_nonlocal_d(i_nonlocal_d(i) + j) < i + global_row_start) 
+                  {
+                     before_diag_index = j;
+                  }
+                  // Get the diagonal index (if it exists)
+                  else if (j_nonlocal_d(i_nonlocal_d(i) + j) == i + global_row_start)
+                  {
+                     diag_index = j;
+                  } 
+               }
+               // If we have an existing diagonal, replace the value with the lumped value
+               if (diag_index != -1)
+               {
+                  a_nonlocal_d(i_nonlocal_d(i) + diag_index) = lump_val;
+               }
+               // If we don't have an existing diagonal, add it in where it would be
+               else
+               {  
+                  for (int j = ncols_local-1; j > before_diag_index; j--)
+                  {
+                     j_nonlocal_d(i_nonlocal_d(i) + j + 1) = j_nonlocal_d(i_nonlocal_d(i) + j);
+                     a_nonlocal_d(i_nonlocal_d(i) + j + 1) = a_nonlocal_d(i_nonlocal_d(i) + j);                 
+                  }            
+
+                  // Has to be the global column index
+                  j_nonlocal_d(i_nonlocal_d(i) + before_diag_index + 1) = i + global_row_start;
+                  a_nonlocal_d(i_nonlocal_d(i) + before_diag_index + 1) = lump_val;
+               }
+            }
+         }            
       }      
    });
 
@@ -656,49 +799,6 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    // we also have to go and build the a, i, j for the non-local off-diagonal block
    if (mpi) 
    {
-      // We also copy the input mat colmap over to the device as we need it below
-      PetscIntKokkosViewHost colmap_input_h(mat_mpi->garray, cols_ao);
-      PetscIntKokkosView colmap_input_d("colmap_input_d", cols_ao);
-      Kokkos::deep_copy(colmap_input_d, colmap_input_h);
-
-      // Non-local 
-      MatScalarKokkosDualView a_nonlocal_dual = MatScalarKokkosDualView("a_nonlocal_dual", nnzs_match_nonlocal);
-      MatRowMapKokkosDualView i_nonlocal_dual = MatRowMapKokkosDualView("i_nonlocal_dual", local_rows+1);
-      MatColIdxKokkosDualView j_nonlocal_dual = MatColIdxKokkosDualView("j_nonlocal_dual", nnzs_match_nonlocal);  
-
-      MatScalarKokkosView a_nonlocal_d = a_nonlocal_dual.view_device();
-      MatRowMapKokkosView i_nonlocal_d = i_nonlocal_dual.view_device();
-      // Initialize first entry to zero - the rest get set below
-      Kokkos::deep_copy(Kokkos::subview(i_nonlocal_d, 0), 0);                
-      MatColIdxKokkosView j_nonlocal_d = j_nonlocal_dual.view_device();   
-
-      // We've already done the lumping above, so we just have to go through and
-      // copy in the a,i,j for the non-lumped values 
-      // Desperately need to rewrite this whole loop to exploit more parallelism!
-      Kokkos::parallel_for(
-         Kokkos::RangePolicy<>(0, local_rows), KOKKOS_LAMBDA(int i) {
-            
-         PetscInt ncols_nonlocal = device_nonlocal_i[i + 1] - device_nonlocal_i[i];
-         // The start of our row index comes from the scan
-         i_nonlocal_d(i + 1) = nnz_match_nonlocal_row_d(i);
-         PetscInt pos = (i == 0) ? 0 : nnz_match_nonlocal_row_d(i-1);
-         
-         // Single sequential pass through columns
-         for (int j = 0; j < ncols_nonlocal; j++) {
-
-            // Check if we keep this column because of size
-            if (abs(device_nonlocal_vals[device_nonlocal_i[i] + j]) >= rel_row_tol_d(i)) 
-            {
-               // The column indices here are the global indices
-               // These will be changed below when we work out 
-               // the the new local index into our new colmap_output
-               j_nonlocal_d(pos) = colmap_input_d(device_nonlocal_j[device_nonlocal_i[i] + j]);
-               a_nonlocal_d(pos) = device_nonlocal_vals[device_nonlocal_i[i] + j];
-               pos++;
-            }
-         }  
-      });      
-
       // Have to specify that we've modified the device data
       a_nonlocal_dual.modify_device();
       i_nonlocal_dual.modify_device();
