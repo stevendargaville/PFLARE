@@ -273,20 +273,6 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    nnzs_match_local = 0;
    nnzs_match_nonlocal = 0;
 
-   // ~~~~~~~~~~~~
-   // Create the output mat
-   // ~~~~~~~~~~~~
-   MatCreate(MPI_COMM_MATRIX, output_mat);
-   MatSetSizes(*output_mat, local_rows, local_cols, global_rows, global_cols);
-   // Match the output type
-   MatSetType(*output_mat, mat_type);
-   MatSetUp(*output_mat);
-
-   // Don't set any off processor entries so no need for a reduction when assembling
-   MatSetOption(*output_mat, MAT_IGNORE_ZERO_ENTRIES, PETSC_TRUE);
-   MatSetOption(*output_mat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE);
-   MatSetOption(*output_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE);     
-
    // ~~~~~~~~~~~~~~~~~~~~~~~
    // Let's build our i, j, and a on the device
    // ~~~~~~~~~~~~~~~~~~~~~~~
@@ -725,6 +711,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    // We can create our local diagonal block matrix directly on the device
    // See MatSeqAIJKokkosMergeMats for example
    auto akok_local = new Mat_SeqAIJKokkos(local_rows, local_cols, nnzs_match_local, i_local_dual, j_local_dual, a_local_dual);    
+   // The equivalent of calling the internal MatCreateSeqAIJKokkosWithCSRMatrix
    MatCreate(PETSC_COMM_SELF, &output_mat_local);
    // Why isn't this publically available??
    MatSetSeqAIJKokkosWithCSRMatrix_mine(output_mat_local, akok_local);   
@@ -829,6 +816,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       // We can create our nonlocal diagonal block matrix directly on the device
       auto akok_nonlocal = new Mat_SeqAIJKokkos(local_rows, col_ao_output, \
                nnzs_match_nonlocal, i_nonlocal_dual, j_nonlocal_dual, a_nonlocal_dual);  
+      // The equivalent of calling the internal MatCreateSeqAIJKokkosWithCSRMatrix
       MatCreate(PETSC_COMM_SELF, &output_mat_nonlocal);
       // Why isn't this publically available??
       MatSetSeqAIJKokkosWithCSRMatrix_mine(output_mat_nonlocal, akok_nonlocal);    
@@ -844,6 +832,8 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       // and looking at that it only goes and builds garray and compactifies (and turns indices to local)
       // in B if garray is null 
       MatCreate(MPI_COMM_MATRIX, output_mat);
+      // Only have to set the size * type in the mpi case, the serial case it gets set in 
+      // MatSetSeqAIJKokkosWithCSRMatrix
       MatSetSizes(*output_mat, local_rows, local_cols, global_rows, global_cols);
       PetscLayoutSetUp((*output_mat)->rmap);
       PetscLayoutSetUp((*output_mat)->cmap);
