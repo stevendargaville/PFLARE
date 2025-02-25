@@ -53,7 +53,7 @@ PFLARE can scalably solve:
 
 ## Building PFLARE
 
-This library depends on MPI, BLAS, LAPACK and PETSc (3.15 to 3.22) configured with a graph partitioner (e.g., ParMETIS). Please compile PETSc directly from the source code, as PFLARE requires access to some of the PETSc types only available in the source. PFLARE has been tested with GNU, Intel, LLVM, NVIDIA and Cray compilers. PFLARE uses the same compilers and flags used in the PETSc configure.
+This library depends on MPI, BLAS, LAPACK and PETSc (3.15 to 3.22) configured with a graph partitioner (e.g., ParMETIS). Please compile PETSc directly from the source code, as PFLARE requires access to some of the PETSc types only available in the source. PFLARE has been tested with GNU, Intel, LLVM, NVIDIA and Cray compilers. PFLARE uses the same compilers and flags defined in the PETSc configure.
 
 1) Set `PETSC_DIR` and `PETSC_ARCH` environmental variables.
 2) Call ``make`` in the top level directory to build the PFLARE library.
@@ -367,34 +367,23 @@ It is recommended that PFLARE be linked with unthreaded BLAS/LAPACK libraries, a
 
 ## GPU support           
 
-If PETSc has been configured with GPU support (e.g., CUDA, HIP, Kokkos) then PCPFLAREINV and PCAIR support GPUs. This relies on the matrix and vector types being set correctly by the user, which is typically done through command line options. By default the setup/solve occurs on the CPU. For example, if we solve the 1D advection problem ``tests/adv_1d`` using a 30th order GMRES polynomial applied matrix-free with the command line options:
+If PETSc has been configured with GPU support then PCPFLAREINV and PCAIR support GPUs. We recommend configuring PETSc with Kokkos and always specifying the matrix/vector types as Kokkos, rather than as the back-end GPU types (e.g., CUDA, HIP, etc). PFLARE contains Kokkos routines to speed-up the setup/solve on GPUs which are only used if the matrix/vector types are Kokkos. 
+
+For example, if we don't specify the matrix/vector types in the 1D advection problem ``tests/adv_1d`` it will run on the CPU. If we solve with a 30th order GMRES polynomial applied matrix-free:
 
 ``./adv_1d -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30``
 
-the setup/solve will occur on the CPU. If we want to run on GPUs, we must ensure the matrix/vector types match the appropriate GPU types. In both ``tests/adv_1d`` and ``tests/adv_diff_2d``, these types can be set through command line arguments. The types are specified with either ``-mat_type`` and ``-vec_type``, or if set by a DM directly (like in ``tests/adv_diff_2d``), use ``-dm_mat_type`` and ``-dm_vec_type``. 
+If we want to run on GPUs, we must ensure the matrix/vector types match. In both ``tests/adv_1d`` and ``tests/adv_diff_2d``, these types can be set through command line arguments. The types are specified with either ``-mat_type`` and ``-vec_type``, or if set by a DM directly (like in ``tests/adv_diff_2d``), use ``-dm_mat_type`` and ``-dm_vec_type``. 
 
-If using CUDA directly:
-
-``./adv_1d -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijcusparse -vec_type cuda``
-
-If using HIP directly:
-
-``./adv_1d -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijhipsparse -vec_type hip``
-
-If using KOKKOS (with either the CUDA or HIP back-end):
+For example, running on GPUs with KOKKOS:
 
 ``./adv_1d -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijkokkos -vec_type kokkos``
 
-For both PCPFLAREINV and PCAIR, the entirity of the solve happens on GPUs without any copies between the CPU/GPU if using either CUDA directly, or using KOKKOS with the CUDA or HIP back-end. Using HIP directly incurs copies during the solve so we would not recommend this currently. 
+For both PCPFLAREINV and PCAIR, the entirity of the solve happens on GPUs without any copies between the CPU/GPU. The setup however occurs on both the CPU and GPU depending on the options used, with copies occuring between the two where needed. The command line option  ``-log_view`` shows how many copies to/from the CPU/GPU occur.
 
-The setup however occurs on both the CPU and GPU depending on the options used, with copies occuring between the two where needed. The command line option  ``-log_view`` shows how many copies to/from the CPU/GPU occur.
+Development of the setup on GPUs is ongoing, please get in touch if you would like to contribute. The main areas requiring development are:
 
-Currently the setup can be quite slow, with substantial differences between the CUDA, HIP and KOKKOS setup performance. Development of the setup on the GPU is ongoing, please get in touch if you would like to contribute. The main areas requiring development are:
-
-1) CF splittings on the GPU - Porting PMISR DDC should only require a small modification of an existing GPU compatible PMIS method
-2) Aplying drop tolerances to matrices
-3) Copying a matrix but only for entries in a given sparsity - CUDA routines for this exist in the cusparse library
-4) Processor agglomeration - GPU libraries exist which could replace the CPU-based calls to ParMETIS
+1) Processor agglomeration - GPU libraries exist which could replace the CPU-based calls to ParMETIS
 
 ### Performance notes
 
@@ -406,13 +395,13 @@ Currently the setup can be quite slow, with substantial differences between the 
 
 This is based around using the high-order polynomials applied matrix free as a coarse solver. For many problems GMRES polynomials in the Newton basis are stable at high order and can therefore be combined with heavy truncation of the multigrid hierarchy. We now also have an automated way to determine at what level of the multigrid hierarchy to truncate. 
 
-For example, on a single NVIDIA GPU with a 2D structured grid advection problem we apply a high order (10th order) Newton polynomial matrix-free as a coarse grid solver:
+For example, on a single GPU with a 2D structured grid advection problem we apply a high order (10th order) Newton polynomial matrix-free as a coarse grid solver:
 
-``./adv_diff_2d -da_grid_x 1000 -da_grid_y 1000 -ksp_type richardson -pc_type air -pc_air_coarsest_inverse_type newton -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_poly_order 10 -dm_mat_type aijcusparse -dm_vec_type cuda``
+``./adv_diff_2d -da_grid_x 1000 -da_grid_y 1000 -ksp_type richardson -pc_type air -pc_air_coarsest_inverse_type newton -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_poly_order 10 -dm_mat_type aijkokkos -dm_vec_type kokkos``
 
 The hierarchy in this case has 29 levels. If we turn on the auto truncation and set a very large truncation tolerance  
 
-``./adv_diff_2d -da_grid_x 1000 -da_grid_y 1000 -ksp_type richardson -pc_type air -pc_air_coarsest_inverse_type newton -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_poly_order 10 -dm_mat_type aijcusparse -dm_vec_type cuda -pc_air_auto_truncate_start_level 1 -pc_air_auto_truncate_tol 1e-1``
+``./adv_diff_2d -da_grid_x 1000 -da_grid_y 1000 -ksp_type richardson -pc_type air -pc_air_coarsest_inverse_type newton -pc_air_coarsest_matrix_free_polys -pc_air_coarsest_poly_order 10 -dm_mat_type aijkokkos -dm_vec_type kokkos -pc_air_auto_truncate_start_level 1 -pc_air_auto_truncate_tol 1e-1``
 
 we find that the 10th order polynomials are good enough coarse solvers to enable truncation of the hierarchy at level 11. This gives the same iteration count as without truncation and we see an overall speedup of ~1.47x in the solve on GPUs with this approach.
 
