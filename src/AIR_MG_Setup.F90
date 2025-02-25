@@ -2137,12 +2137,7 @@ module air_mg_setup
                      call MatDestroy(air_data%restrictors(our_level), ierr)
                   end if                  
 
-                  if (air_data%gpu_mat) then
-                     call MatDestroy(air_data%i_fine_full(our_level), ierr)
-                     call MatDestroy(air_data%i_coarse_full(our_level), ierr)
-                     call MatDestroy(air_data%i_fine_full_full(our_level), ierr)
-                     call MatDestroy(air_data%i_coarse_full_full(our_level), ierr)
-                  end if
+                  call destroy_VecISCopyLocalWrapper(air_data, our_level)
 
                   air_data%allocated_matrices_A_ff(our_level) = .FALSE.
                   call reset_inverse_mat(air_data%inv_A_ff(our_level))

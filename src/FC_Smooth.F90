@@ -27,7 +27,8 @@ module fc_smooth
    
    subroutine create_VecISCopyLocalWrapper(air_data, our_level, input_mat)
 
-      ! Creates any data we might need in VecISCopyLocalWrapper
+      ! Creates any data we might need in VecISCopyLocalWrapper for a given level
+      ! air_data%gpu_mat must have been set before the first call to this routine
       
       ! ~~~~~~~~~~
       ! Input 
@@ -66,6 +67,34 @@ module fc_smooth
       end if
          
    end subroutine create_VecISCopyLocalWrapper     
+
+   !------------------------------------------------------------------------------------------------------------------------
+   
+   subroutine destroy_VecISCopyLocalWrapper(air_data, our_level)
+
+      ! Destroy any data we might need in VecISCopyLocalWrapper for a given level
+      
+      ! ~~~~~~~~~~
+      ! Input 
+      type(air_multigrid_data), intent(inout) :: air_data
+      integer, intent(in)                     :: our_level
+
+      integer :: ierr
+      ! ~~~~~~~~~~
+
+      ! Destroys the matrices       
+      if (air_data%gpu_mat) then
+
+         call MatDestroy(air_data%i_fine_full(our_level), ierr)
+         call MatDestroy(air_data%i_coarse_full(our_level), ierr)
+         call MatDestroy(air_data%i_fine_full_full(our_level), ierr)
+         if (air_data%options%one_c_smooth .AND. &
+                  .NOT. air_data%options%full_smoothing_up_and_down) then     
+            call MatDestroy(air_data%i_coarse_full_full(our_level), ierr)                       
+         end if 
+      end if
+         
+   end subroutine destroy_VecISCopyLocalWrapper    
 
    !------------------------------------------------------------------------------------------------------------------------
    
