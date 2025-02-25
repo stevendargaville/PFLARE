@@ -153,48 +153,39 @@ PETSC_INTERN void VecISCopyLocal_kokkos(int our_level, int fine_int, Vec *vfull,
    VecGetArrayAndMemType(*vfull, &vfull_d, &mtype);
    VecGetArrayAndMemType(*vreduced, &vreduced_d, &mtype);
 
-   // FINE variables
+   // @@@ think i have to make a shallow copy of the individual view in is_fine_views
+   // that is in scope here as kokkos on ese-peak is not compiling due to 
+   // error: identifier "IS_fine_views" is undefined in device code
+   // or it might actually be the shared pointers!
+
+   PetscIntKokkosView is_d;
    if (fine_int)
    {
-      // SCATTER_REVERSE=1
-      // vreduced[i] = vfull[is[i]]
-      if (mode_int == 1)
-      {
-         Kokkos::parallel_for(
-            Kokkos::RangePolicy<>(0, (*IS_fine_views[our_level]).extent(0)), KOKKOS_LAMBDA(int i) {           
-               vreduced_d[i] = vfull_d[(*IS_fine_views[our_level])(i)];
-         });
-      }        
-      // SCATTER_FORWARD=0
-      // vfull[is[i]] = vreduced[i]
-      else if (mode_int == 0)
-      {
-         Kokkos::parallel_for(
-            Kokkos::RangePolicy<>(0, (*IS_fine_views[our_level]).extent(0)), KOKKOS_LAMBDA(int i) {           
-               vfull_d[(*IS_fine_views[our_level])(i)] = vreduced_d[i];
-         });         
-      }
+      is_d = *IS_fine_views[our_level];
    }
-   // Coarse variables
    else
    {
-      // SCATTER_REVERSE=1
-      if (mode_int == 1)
-      {
-         Kokkos::parallel_for(
-            Kokkos::RangePolicy<>(0, (*IS_coarse_views[our_level]).extent(0)), KOKKOS_LAMBDA(int i) {           
-               vreduced_d[i] = vfull_d[(*IS_coarse_views[our_level])(i)];
-         });         
-      }        
-      // SCATTER_FORWARD=0
-      else if (mode_int == 0)
-      {
-         Kokkos::parallel_for(
-            Kokkos::RangePolicy<>(0, (*IS_coarse_views[our_level]).extent(0)), KOKKOS_LAMBDA(int i) {           
-               vfull_d[(*IS_coarse_views[our_level])(i)] = vreduced_d[i];
-         });           
-      }
-   }   
+      is_d = *IS_coarse_views[our_level];
+   } 
+
+   // SCATTER_REVERSE=1
+   // vreduced[i] = vfull[is[i]]
+   if (mode_int == 1)
+   {
+      Kokkos::parallel_for(
+         Kokkos::RangePolicy<>(0, is_d.extent(0)), KOKKOS_LAMBDA(int i) {           
+            vreduced_d[i] = vfull_d[is_d(i)];
+      });
+   }        
+   // SCATTER_FORWARD=0
+   // vfull[is[i]] = vreduced[i]
+   else if (mode_int == 0)
+   {
+      Kokkos::parallel_for(
+         Kokkos::RangePolicy<>(0, is_d.extent(0)), KOKKOS_LAMBDA(int i) {           
+            vfull_d[is_d(i)] = vreduced_d[i];
+      });         
+   }
 
    VecRestoreArrayAndMemType(*vfull, &vfull_d);
    VecRestoreArrayAndMemType(*vreduced, &vreduced_d);   
