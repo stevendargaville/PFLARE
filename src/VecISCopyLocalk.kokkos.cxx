@@ -2,7 +2,8 @@
 #include <petsc.h>
 #include <iostream>
 #include <../src/mat/impls/aij/seq/kokkos/aijkok.hpp>
-#include <memory>
+#include <Kokkos_DualView.hpp>
+#include <../src/vec/vec/impls/seq/kokkos/veckokkosimpl.hpp>
 
 using DefaultExecutionSpace = Kokkos::DefaultExecutionSpace;
 using DefaultMemorySpace    = Kokkos::DefaultExecutionSpace::memory_space;
@@ -107,51 +108,29 @@ PETSC_INTERN void set_VecISCopyLocal_kokkos_our_level(int our_level, IS *index_f
 // Do the equivalent of veciscopy on local data using the IS data on the device
 PETSC_INTERN void VecISCopyLocal_kokkos(int our_level, int fine_int, Vec *vfull, int mode_int, Vec *vreduced)
 {
-
-   //std::cout << "inside our one" << std::endl;
-   PetscInt vfull_lock_state, vreduced_lock_state;
-   PetscInt vfull_num_locks = 0, vreduced_num_locks = 0;
-
-   // If vfull_lock_state is greater than 0 vfull has been locked for reading!
-   // This happens on the top level as we are fed in ksp->vec_rhs
-   // We need to turn that off to get access to the pointers
-   // we will push a lock on at the end   
-   VecLockGet(*vfull, &vfull_lock_state);
-   if (vfull_lock_state > 0)
-   {
-      do 
-      {
-         vfull_num_locks++;
-         VecLockReadPop(*vfull);
-         VecLockGet(*vfull, &vfull_lock_state);
-      }
-      while (vfull_lock_state > 0);
-   }
-   //std::cout << "vfull_num_locks " << vfull_num_locks << std::endl;
-
-   VecLockGet(*vreduced, &vreduced_lock_state);
-   if (vreduced_lock_state > 0)
-   {
-      do 
-      {
-         vreduced_num_locks++;
-         VecLockReadPop(*vreduced);
-         VecLockGet(*vreduced, &vreduced_lock_state);
-      }
-      while (vreduced_lock_state > 0);
-   }
-   //std::cout << "vreduced_num_locks " << vreduced_num_locks << std::endl;   
-
    // Get the device pointers
    PetscScalar *vfull_d, *vreduced_d;
-   PetscMemType mtype;
-   // @@@ the restore we call after says we modified device memory
-   // and that isn't true for both pointers - lets modify to access the pointers directly
-   // so we can say when we have modified
-   // I think I could get rid of the locks then too because they are only checked in 
-   // VecGetArrayAndMemType
-   VecGetArrayAndMemType(*vfull, &vfull_d, &mtype);
-   VecGetArrayAndMemType(*vreduced, &vreduced_d, &mtype);
+
+   // ~~~~~~~~~~
+   // This is just copied from VecGetArrayAndMemType_SeqKokkos, the reason we don't call 
+   // the normal VecGetArrayAndMemType is that it checks if there is a read lock 
+   // first and for some reason petsc passes in ksp->vec_rhs in the mg which has a read lock on it
+   // ~~~~~~~~~~
+   Vec_Kokkos *veckok_full = static_cast<Vec_Kokkos *>((*vfull)->spptr);
+   Vec_Kokkos *veckok_reduced = static_cast<Vec_Kokkos *>((*vreduced)->spptr);
+
+   /* Always return up-to-date in the default memory space */
+#if (PETSC_VERSION_LT(3,22,2))
+   veckok_full->v_dual.sync_device(PetscGetKokkosExecutionSpace());
+   veckok_reduced->v_dual.sync_device(PetscGetKokkosExecutionSpace());
+#else
+   KokkosDualViewSync<DefaultMemorySpace>(veckok_full->v_dual, PetscGetKokkosExecutionSpace());
+   KokkosDualViewSync<DefaultMemorySpace>(veckok_reduced->v_dual, PetscGetKokkosExecutionSpace());
+#endif
+   // ~~~~~~~~~~
+
+   vfull_d = veckok_full->v_dual.view_device().data();
+   vreduced_d = veckok_reduced->v_dual.view_device().data();   
 
    // Get the start range in parallel
    PetscInt global_row_start, global_row_end_plus_one;
@@ -188,12 +167,11 @@ PETSC_INTERN void VecISCopyLocal_kokkos(int our_level, int fine_int, Vec *vfull,
       });         
    }
 
-   VecRestoreArrayAndMemType(*vfull, &vfull_d);
-   VecRestoreArrayAndMemType(*vreduced, &vreduced_d);   
-
-   // Push as many locks back on as we found when we started
-   for (int i = 0; i < vfull_num_locks; i++) VecLockReadPush(*vfull);
-   for (int i = 0; i < vreduced_num_locks; i++) VecLockReadPush(*vreduced);
+   // Restore doesn't actually do anything except call modify_host or modify_device
+   // Only want to do that for the vectors we know we've modified
+   // Don't have to have called the get before doing this
+   if (mode_int == 0) VecRestoreArrayAndMemType(*vfull, &vfull_d);
+   if (mode_int == 1) VecRestoreArrayAndMemType(*vreduced, &vreduced_d);   
 
    return;
 }
