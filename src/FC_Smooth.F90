@@ -28,7 +28,8 @@ module fc_smooth
    subroutine create_VecISCopyLocalWrapper(air_data, our_level, input_mat)
 
       ! Creates any data we might need in VecISCopyLocalWrapper for a given level
-      ! air_data%gpu_mat must have been set before the first call to this routine
+      ! air_data%fast_veciscopy_exists must have been set before the 
+      ! first call to this routine
       
       ! ~~~~~~~~~~
       ! Input 
@@ -40,7 +41,7 @@ module fc_smooth
       ! On cpus we use VecISCopy to pull out fine and coarse points
       ! That copies back to the cpu if doing gpu, so on the gpu we build
       ! identity restrictors/prolongators of various sizes and do matmults         
-      if (air_data%gpu_mat) then
+      if (.NOT. air_data%fast_veciscopy_exists) then
 
          ! Build fine to full injector
          call generate_identity_rect(input_mat, air_data%A_fc(our_level), &
@@ -83,7 +84,7 @@ module fc_smooth
       ! ~~~~~~~~~~
 
       ! Destroys the matrices       
-      if (air_data%gpu_mat) then
+      if (.NOT. air_data%fast_veciscopy_exists) then
 
          call MatDestroy(air_data%i_fine_full(our_level), ierr)
          call MatDestroy(air_data%i_coarse_full(our_level), ierr)
@@ -120,7 +121,7 @@ module fc_smooth
       if (fine) then
          if (mode == SCATTER_REVERSE) then
 
-            if (air_data%gpu_mat) then
+            if (.NOT. air_data%fast_veciscopy_exists) then
                call MatMult(air_data%i_fine_full(our_level), vfull, &
                         vreduced, ierr)                          
             else
@@ -130,7 +131,7 @@ module fc_smooth
 
          ! SCATTER FORWARD
          else
-            if (air_data%gpu_mat) then
+            if (.NOT. air_data%fast_veciscopy_exists) then
 
                ! Copy x but only the non-coarse points from x are non-zero
                ! ie get x_c but in a vec of full size 
@@ -156,7 +157,7 @@ module fc_smooth
       else
          if (mode == SCATTER_REVERSE) then
 
-            if (air_data%gpu_mat) then
+            if (.NOT. air_data%fast_veciscopy_exists) then
                call MatMult(air_data%i_coarse_full(our_level), vfull, &
                         vreduced, ierr)                          
             else
@@ -167,7 +168,7 @@ module fc_smooth
          ! SCATTER FORWARD
          else 
 
-            if (air_data%gpu_mat) then
+            if (.NOT. air_data%fast_veciscopy_exists) then
 
                ! Copy x but only the non-fine points from x are non-zero
                ! ie get x_f but in a vec of full size 

@@ -1077,13 +1077,12 @@ module air_mg_setup
       air_data%coarse_matrix(1) = pmat
       reusing_temp_mg_vecs = .TRUE.
 
-      ! Get the mat type to work out if the matrix could be on the gpu
-      ! All this does is works around the absence of veciscopy on the gpu
-      ! by creating some extra matrices to use during the smoothing
-      ! If veciscopy gets a gpu implementation on some of these types, we can remove them
-      ! and use less memory with a faster smooth
+      ! If on the cpu we have a veciscopy which is fast
+      ! If on the gpu with kokkos we have a veciscopy which is fast
+      ! If on the gpu without kokkos the veciscopy involves the host which is slow
+      ! For the slow ones we instead create some extra matrices to use during the smoothing
       call MatGetType(air_data%coarse_matrix(1), mat_type, ierr)
-      air_data%gpu_mat = .FALSE.
+      air_data%fast_veciscopy_exists = .TRUE.
       if (mat_type == MATSEQAIJKOKKOS .OR. mat_type == MATMPIAIJKOKKOS .OR. mat_type == MATAIJKOKKOS .OR. &
           mat_type == MATSEQAIJCUSPARSE .OR. mat_type == MATMPIAIJCUSPARSE .OR. mat_type == MATAIJCUSPARSE .OR. &  
           mat_type == MATSEQAIJHIPSPARSE .OR. mat_type == MATMPIAIJHIPSPARSE .OR. mat_type == MATAIJHIPSPARSE .OR. &
@@ -1092,7 +1091,7 @@ module air_mg_setup
           mat_type == MATSEQDENSECUDA .OR. mat_type == MATSEQDENSEHIP .OR. &
           mat_type == MATMPIDENSECUDA .OR. mat_type == MATMPIDENSEHIP) then
 
-         air_data%gpu_mat = .TRUE.
+         air_data%fast_veciscopy_exists = .FALSE.
       end if
 
       ! ~~~~~~~~~~~~~~~~~~~~~
