@@ -80,6 +80,7 @@ export OBJS := $(OBJS) $(SRCDIR)/PETSc_Helperk.o
 endif	
 
 OBJS := $(OBJS) $(SRCDIR)/PETSc_Helper.o \
+		  $(SRCDIR)/FC_Smooth.o \
 		  $(SRCDIR)/Gmres_Poly.o \
 		  $(SRCDIR)/Gmres_Poly_Newton.o \
 		  $(SRCDIR)/AIR_MG_Stats.o \
