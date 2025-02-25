@@ -743,7 +743,11 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
       // We trigger petsc doing it by passing in null as garray_host to MatSetMPIAIJKokkosWithSplitSeqAIJKokkosMatrices
       // If we have no off-diagonal entries (either we started with zero or we've dropped them all)
       // just skip all this and leave garray_host as null
-      if (cols_ao < 4294967295 && cols_ao > 0 && nnzs_match_nonlocal > 0)
+
+      // If we have 4 bit ints, we know cols_ao can never be bigger than the capacity of uint32_t
+      bool size_small_enough = sizeof(PetscInt) == 4 || \
+                  (sizeof(PetscInt) > 4 && cols_ao < 4294967295);
+      if (size_small_enough && cols_ao > 0 && nnzs_match_nonlocal > 0)
       {
          // Have to tell it the max capacity, we know we will have no more 
          // than the input off-diag columns
