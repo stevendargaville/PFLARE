@@ -35,7 +35,8 @@ module petsc_helper
       
 #if defined(PETSC_HAVE_KOKKOS)                     
       integer(c_long_long) :: A_array, B_array
-      integer :: lump_int, allow_drop_diagonal_int, relative_max_row_tolerance_int, ierr
+      integer :: lump_int, allow_drop_diagonal_int, relative_max_row_tolerance_int
+      PetscErrorCode :: ierr
       MatType :: mat_type
       !Mat :: temp_mat
       !PetscScalar normy;
@@ -726,7 +727,7 @@ module petsc_helper
 
 #if defined(PETSC_HAVE_KOKKOS)                     
       integer(c_long_long) :: A_array, index_array, B_array
-      integer :: ierr
+      PetscErrorCode :: ierr
       MatType :: mat_type
 #endif
       ! ~~~~~~~~~~

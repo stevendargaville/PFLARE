@@ -1083,8 +1083,7 @@ module air_mg_setup
       ! For the slow ones we instead create some extra matrices to use during the smoothing
       call MatGetType(air_data%coarse_matrix(1), mat_type, ierr)
       air_data%fast_veciscopy_exists = .TRUE.
-      if (mat_type == MATSEQAIJKOKKOS .OR. mat_type == MATMPIAIJKOKKOS .OR. mat_type == MATAIJKOKKOS .OR. &
-          mat_type == MATSEQAIJCUSPARSE .OR. mat_type == MATMPIAIJCUSPARSE .OR. mat_type == MATAIJCUSPARSE .OR. &  
+      if (mat_type == MATSEQAIJCUSPARSE .OR. mat_type == MATMPIAIJCUSPARSE .OR. mat_type == MATAIJCUSPARSE .OR. &  
           mat_type == MATSEQAIJHIPSPARSE .OR. mat_type == MATMPIAIJHIPSPARSE .OR. mat_type == MATAIJHIPSPARSE .OR. &
           mat_type == MATSEQAIJVIENNACL .OR. mat_type == MATMPIAIJVIENNACL .OR. mat_type == MATAIJVIENNACL .OR. &
           mat_type == MATDENSECUDA .OR. mat_type == MATDENSEHIP .OR. &
