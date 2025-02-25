@@ -208,27 +208,27 @@ module fc_smooth
 
             else
 
-! #if defined(PETSC_HAVE_KOKKOS)  
+#if defined(PETSC_HAVE_KOKKOS)  
 
-!                call VecGetType(vfull, vec_type, ierr)
-!                if (vec_type == "seqkokkos" .OR. vec_type == "mpikokkos" .OR. &
-!                         vec_type == "kokkos") then
+               call VecGetType(vfull, vec_type, ierr)
+               if (vec_type == "seqkokkos" .OR. vec_type == "mpikokkos" .OR. &
+                        vec_type == "kokkos") then
 
-!                   fine_int = 0
-!                   if (fine) fine_int = 1
-!                   vfull_array = vfull%v
-!                   vreduced_array = vreduced%v
-!                   call VecISCopyLocal_kokkos(our_level, fine_int, vfull_array, &
-!                            mode, vreduced_array)
+                  fine_int = 0
+                  if (fine) fine_int = 1
+                  vfull_array = vfull%v
+                  vreduced_array = vreduced%v
+                  call VecISCopyLocal_kokkos(our_level, fine_int, vfull_array, &
+                           mode, vreduced_array)
 
-!                else
-!                   call VecISCopy(vfull, air_data%is_fine_index(our_level), mode, &
-!                            vreduced, ierr)  
-!                end if
-! #else
+               else
+                  call VecISCopy(vfull, air_data%is_fine_index(our_level), mode, &
+                           vreduced, ierr)  
+               end if
+#else
                call VecISCopy(vfull, air_data%is_fine_index(our_level), mode, &
                         vreduced, ierr)                 
-!#endif                        
+#endif                        
             end if
          end if
 
@@ -241,27 +241,27 @@ module fc_smooth
                         vreduced, ierr)                          
             else
 
-! #if defined(PETSC_HAVE_KOKKOS)  
+#if defined(PETSC_HAVE_KOKKOS)  
 
-!                call VecGetType(vfull, vec_type, ierr)
-!                if (vec_type == "seqkokkos" .OR. vec_type == "mpikokkos" .OR. &
-!                         vec_type == "kokkos") then
+               call VecGetType(vfull, vec_type, ierr)
+               if (vec_type == "seqkokkos" .OR. vec_type == "mpikokkos" .OR. &
+                        vec_type == "kokkos") then
 
-!                   fine_int = 0
-!                   if (fine) fine_int = 1
-!                   vfull_array = vfull%v
-!                   vreduced_array = vreduced%v
-!                   call VecISCopyLocal_kokkos(our_level, fine_int, vfull_array, &
-!                            mode, vreduced_array)
+                  fine_int = 0
+                  if (fine) fine_int = 1
+                  vfull_array = vfull%v
+                  vreduced_array = vreduced%v
+                  call VecISCopyLocal_kokkos(our_level, fine_int, vfull_array, &
+                           mode, vreduced_array)
 
-!                else
-!                   call VecISCopy(vfull, air_data%is_coarse_index(our_level), mode, &
-!                            vreduced, ierr)
-!                end if
-! #else               
+               else
+                  call VecISCopy(vfull, air_data%is_coarse_index(our_level), mode, &
+                           vreduced, ierr)
+               end if
+#else               
                call VecISCopy(vfull, air_data%is_coarse_index(our_level), mode, &
                         vreduced, ierr)
-!#endif                        
+#endif                        
             end if
 
          ! SCATTER FORWARD
@@ -284,27 +284,27 @@ module fc_smooth
 
             else      
                
-! #if defined(PETSC_HAVE_KOKKOS)  
+#if defined(PETSC_HAVE_KOKKOS)  
 
-!                call VecGetType(vfull, vec_type, ierr)
-!                if (vec_type == "seqkokkos" .OR. vec_type == "mpikokkos" .OR. &
-!                         vec_type == "kokkos") then
+               call VecGetType(vfull, vec_type, ierr)
+               if (vec_type == "seqkokkos" .OR. vec_type == "mpikokkos" .OR. &
+                        vec_type == "kokkos") then
 
-!                   fine_int = 0
-!                   if (fine) fine_int = 1
-!                   vfull_array = vfull%v
-!                   vreduced_array = vreduced%v
-!                   call VecISCopyLocal_kokkos(our_level, fine_int, vfull_array, &
-!                            mode, vreduced_array)
+                  fine_int = 0
+                  if (fine) fine_int = 1
+                  vfull_array = vfull%v
+                  vreduced_array = vreduced%v
+                  call VecISCopyLocal_kokkos(our_level, fine_int, vfull_array, &
+                           mode, vreduced_array)
 
-!                else
-!                   call VecISCopy(vfull, air_data%is_coarse_index(our_level), mode, &
-!                         vreduced, ierr)
-!                end if
-! #else                 
+               else
+                  call VecISCopy(vfull, air_data%is_coarse_index(our_level), mode, &
+                        vreduced, ierr)
+               end if
+#else                 
                call VecISCopy(vfull, air_data%is_coarse_index(our_level), mode, &
                         vreduced, ierr)
-!#endif                        
+#endif                        
             end if            
          end if
       end if     
