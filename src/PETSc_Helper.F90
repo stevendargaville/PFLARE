@@ -23,6 +23,50 @@ module petsc_helper
 
    !------------------------------------------------------------------------------------------------------------------------
    
+   subroutine create_VecISCopyLocalWrapper(air_data, our_level, input_mat)
+
+      ! Creates any data we might need in VecISCopyLocalWrapper
+      
+      ! ~~~~~~~~~~
+      ! Input 
+      type(air_multigrid_data), intent(inout) :: air_data
+      integer, intent(in)                     :: our_level
+      type(tMat), intent(in)                  :: input_mat     
+      ! ~~~~~~~~~~
+
+      ! On cpus we use VecISCopy to pull out fine and coarse points
+      ! That copies back to the cpu if doing gpu, so on the gpu we build
+      ! identity restrictors/prolongators of various sizes and do matmults         
+      if (air_data%gpu_mat) then
+
+         ! Build fine to full injector
+         call generate_identity_rect(input_mat, air_data%A_fc(our_level), &
+                  air_data%IS_fine_index(our_level), &
+                  air_data%i_fine_full(our_level))
+
+         ! Build coarse to full injector
+         call generate_identity_rect(input_mat, air_data%A_cf(our_level), &
+                  air_data%IS_coarse_index(our_level), &
+                  air_data%i_coarse_full(our_level))
+                  
+         ! Build identity that sets fine in full to zero
+         call generate_identity_is(input_mat, air_data%IS_coarse_index(our_level), &
+                  air_data%i_coarse_full_full(our_level))               
+
+         ! If we're C point smoothing as well
+         if (air_data%options%one_c_smooth .AND. &
+                  .NOT. air_data%options%full_smoothing_up_and_down) then     
+            
+            ! Build identity that sets coarse in full to zero
+            call generate_identity_is(input_mat, air_data%IS_fine_index(our_level), &
+                  air_data%i_fine_full_full(our_level))                         
+         end if 
+      end if
+         
+   end subroutine create_VecISCopyLocalWrapper     
+
+   !------------------------------------------------------------------------------------------------------------------------
+   
    subroutine VecISCopyLocalWrapper(air_data, our_level, fine, vfull, mode, vreduced, v_temp_mat)
 
       ! Wrapper around VecISCopy (currently cpu only), a kokkos version of that and 
@@ -31,12 +75,12 @@ module petsc_helper
       
       ! ~~~~~~~~~~
       ! Input 
-      type(air_multigrid_data), target, intent(in) :: air_data
-      integer, intent(in)                          :: our_level
-      logical, intent(in)                          :: fine
-      type(tVec), intent(inout)                    :: vfull, vreduced
-      type(tVec), optional, intent(inout)          :: v_temp_mat
-      ScatterMode, intent(in)                      :: mode  
+      type(air_multigrid_data), intent(in) :: air_data
+      integer, intent(in)                  :: our_level
+      logical, intent(in)                  :: fine
+      type(tVec), intent(inout)            :: vfull, vreduced
+      type(tVec), optional, intent(inout)  :: v_temp_mat
+      ScatterMode, intent(in)              :: mode  
       
       integer :: ierr
       ! ~~~~~~~~~~

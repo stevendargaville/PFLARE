@@ -825,34 +825,10 @@ module air_mg_setup
 
       call timer_start(TIMER_ID_AIR_IDENTITY)            
            
+      ! We need to calculate any data we need during the fc smooth which 
+      ! uses (something like) a VecISCopy
       if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then
-
-         ! On cpus we use VecISCopy to pull out fine and coarse points
-         ! That copies back to the cpu if doing gpu, so on the gpu we build
-         ! identity restrictors/prolongators of various sizes and do matmults         
-         if (air_data%gpu_mat) then
-
-            ! Build fine to full injector
-            call generate_identity_rect(A, air_data%A_fc(our_level), air_data%IS_fine_index(our_level), &
-                     air_data%i_fine_full(our_level))
-
-            ! Build coarse to full injector
-            call generate_identity_rect(A, air_data%A_cf(our_level), air_data%IS_coarse_index(our_level), &
-                     air_data%i_coarse_full(our_level))
-                     
-            ! Build identity that sets fine in full to zero
-            call generate_identity_is(A, air_data%IS_coarse_index(our_level), &
-                     air_data%i_coarse_full_full(our_level))               
-
-            ! If we're C point smoothing as well
-            if (air_data%options%one_c_smooth .AND. &
-                     .NOT. air_data%options%full_smoothing_up_and_down) then     
-               
-               ! Build identity that sets coarse in full to zero
-               call generate_identity_is(A, air_data%IS_fine_index(our_level), &
-                     air_data%i_fine_full_full(our_level))                         
-            end if 
-         end if
+         call create_VecISCopyLocalWrapper(air_data, our_level, A)
       end if       
       
       call timer_finish(TIMER_ID_AIR_IDENTITY)            
