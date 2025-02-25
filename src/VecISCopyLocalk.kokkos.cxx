@@ -153,11 +153,12 @@ PETSC_INTERN void VecISCopyLocal_kokkos(int our_level, int fine_int, Vec *vfull,
    VecGetArrayAndMemType(*vfull, &vfull_d, &mtype);
    VecGetArrayAndMemType(*vreduced, &vreduced_d, &mtype);
 
-   // @@@ think i have to make a shallow copy of the individual view in is_fine_views
-   // that is in scope here as kokkos on ese-peak is not compiling due to 
-   // error: identifier "IS_fine_views" is undefined in device code
-   // or it might actually be the shared pointers!
+   // Get the start range in parallel
+   PetscInt global_row_start, global_row_end_plus_one;
+   VecGetOwnershipRange(*vfull, &global_row_start, &global_row_end_plus_one);
 
+   // Can't use the shared pointer directly within the parallel 
+   // regions on the device
    PetscIntKokkosView is_d;
    if (fine_int)
    {
@@ -174,7 +175,7 @@ PETSC_INTERN void VecISCopyLocal_kokkos(int our_level, int fine_int, Vec *vfull,
    {
       Kokkos::parallel_for(
          Kokkos::RangePolicy<>(0, is_d.extent(0)), KOKKOS_LAMBDA(int i) {           
-            vreduced_d[i] = vfull_d[is_d(i)];
+            vreduced_d[i] = vfull_d[is_d(i) - global_row_start];
       });
    }        
    // SCATTER_FORWARD=0
@@ -183,7 +184,7 @@ PETSC_INTERN void VecISCopyLocal_kokkos(int our_level, int fine_int, Vec *vfull,
    {
       Kokkos::parallel_for(
          Kokkos::RangePolicy<>(0, is_d.extent(0)), KOKKOS_LAMBDA(int i) {           
-            vfull_d[is_d(i)] = vreduced_d[i];
+            vfull_d[is_d(i) - global_row_start] = vreduced_d[i];
       });         
    }
 
