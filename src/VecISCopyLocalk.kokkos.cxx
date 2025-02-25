@@ -7,7 +7,6 @@
 
 using DefaultExecutionSpace = Kokkos::DefaultExecutionSpace;
 using DefaultMemorySpace    = Kokkos::DefaultExecutionSpace::memory_space;
-using PetscIntKokkosView    = Kokkos::View<PetscInt *, DefaultMemorySpace>;
 using PetscIntConstKokkosViewHost = Kokkos::View<const PetscInt *, Kokkos::HostSpace>;
 
 using ViewPtr = std::shared_ptr<PetscIntKokkosView>;
@@ -17,37 +16,6 @@ using ViewPtr = std::shared_ptr<PetscIntKokkosView>;
 ViewPtr* IS_fine_views = nullptr;
 ViewPtr* IS_coarse_views = nullptr;
 int max_levels = -1;
-
-//------------------------------------------------------------------------------------------------------------------------
-
- // Copied from veckok_kokkos.cxx
- // Sync a Kokkos::DualView to  in execution space 
- // If  is HostSpace, fence the exec so that the data on host is immediately available.
- template <class MemorySpace, typename Type>
- static PetscErrorCode KokkosDualViewSync_mine(Kokkos::DualView<Type *> &v_dual, const Kokkos::DefaultExecutionSpace &exec)
- {
-   size_t bytes = v_dual.extent(0) * sizeof(Type);
-
-   PetscFunctionBegin;
-   PetscCall(PetscLogGpuTimeBegin());
-   if (std::is_same_v<MemorySpace, HostMirrorMemorySpace>) {
-     if (v_dual.need_sync_host()) {
-       PetscCallCXX(v_dual.sync_host(exec));
-       PetscCall(PetscLogGpuToCpu(bytes));
-     }
-     // even if v_d and v_h share the same memory (as on AMD MI300A) and thus we don't need to sync_host,
-     // we still need to fence the execution space as v_d might being populated by some async kernel,
-     // and we need to finish it.
-     PetscCallCXX(exec.fence());
-   } else {
-     if (v_dual.need_sync_device()) {
-       PetscCallCXX(v_dual.sync_device(exec));
-       PetscCall(PetscLogCpuToGpu(bytes));
-     }
-   }
-   PetscCall(PetscLogGpuTimeEnd());
-   PetscFunctionReturn(PETSC_SUCCESS);
- }
 
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -139,30 +107,6 @@ PETSC_INTERN void set_VecISCopyLocal_kokkos_our_level(int our_level, IS *index_f
 // Do the equivalent of veciscopy on local data using the IS data on the device
 PETSC_INTERN void VecISCopyLocal_kokkos(int our_level, int fine_int, Vec *vfull, int mode_int, Vec *vreduced)
 {
-   // Get the device pointers
-   PetscScalar *vfull_d, *vreduced_d;
-
-   // ~~~~~~~~~~
-   // This is just copied from VecGetArrayAndMemType_SeqKokkos, the reason we don't call 
-   // the normal VecGetArrayAndMemType is that it checks if there is a read lock 
-   // first and for some reason petsc passes in ksp->vec_rhs in the mg which has a read lock on it
-   // ~~~~~~~~~~
-   Vec_Kokkos *veckok_full = static_cast<Vec_Kokkos *>((*vfull)->spptr);
-   Vec_Kokkos *veckok_reduced = static_cast<Vec_Kokkos *>((*vreduced)->spptr);
-
-   /* Always return up-to-date in the default memory space */
-#if (PETSC_VERSION_LT(3,22,2))
-   veckok_full->v_dual.sync_device(PetscGetKokkosExecutionSpace());
-   veckok_reduced->v_dual.sync_device(PetscGetKokkosExecutionSpace());
-#else
-   KokkosDualViewSync_mine<DefaultMemorySpace>(veckok_full->v_dual, PetscGetKokkosExecutionSpace());
-   KokkosDualViewSync_mine<DefaultMemorySpace>(veckok_reduced->v_dual, PetscGetKokkosExecutionSpace());
-#endif
-   // ~~~~~~~~~~
-
-   vfull_d = veckok_full->v_dual.view_device().data();
-   vreduced_d = veckok_reduced->v_dual.view_device().data();   
-
    // Get the start range in parallel
    PetscInt global_row_start, global_row_end_plus_one;
    VecGetOwnershipRange(*vfull, &global_row_start, &global_row_end_plus_one);
@@ -183,26 +127,37 @@ PETSC_INTERN void VecISCopyLocal_kokkos(int our_level, int fine_int, Vec *vfull,
    // vreduced[i] = vfull[is[i]]
    if (mode_int == 1)
    {
+      PetscScalarKokkosView vreduced_d;
+      VecGetKokkosViewWrite(*vreduced, &vreduced_d);
+      ConstPetscScalarKokkosView vfull_d;
+      VecGetKokkosView(*vfull, &vfull_d);      
+
       Kokkos::parallel_for(
          Kokkos::RangePolicy<>(0, is_d.extent(0)), KOKKOS_LAMBDA(int i) {           
             vreduced_d[i] = vfull_d[is_d(i) - global_row_start];
       });
+
+      VecRestoreKokkosViewWrite(*vreduced, &vreduced_d);
+      VecRestoreKokkosView(*vfull, &vfull_d);      
+
    }        
    // SCATTER_FORWARD=0
    // vfull[is[i]] = vreduced[i]
    else if (mode_int == 0)
    {
+      ConstPetscScalarKokkosView vreduced_d;
+      VecGetKokkosView(*vreduced, &vreduced_d);
+      PetscScalarKokkosView vfull_d;
+      VecGetKokkosViewWrite(*vfull, &vfull_d);
+
       Kokkos::parallel_for(
          Kokkos::RangePolicy<>(0, is_d.extent(0)), KOKKOS_LAMBDA(int i) {           
             vfull_d[is_d(i) - global_row_start] = vreduced_d[i];
-      });         
-   }
+      });     
 
-   // Restore doesn't actually do anything except call modify_host or modify_device
-   // Only want to do that for the vectors we know we've modified
-   // Don't have to have called the get before doing this
-   if (mode_int == 0) VecRestoreArrayAndMemType(*vfull, &vfull_d);
-   if (mode_int == 1) VecRestoreArrayAndMemType(*vreduced, &vreduced_d);   
+      VecRestoreKokkosView(*vreduced, &vreduced_d);
+      VecRestoreKokkosViewWrite(*vfull, &vfull_d);           
+   }
 
    return;
 }

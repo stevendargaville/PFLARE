@@ -6,13 +6,10 @@
 #include <../src/mat/impls/aij/seq/kokkos/aijkok.hpp>
 #include "Kokkos_UnorderedMap.hpp"
 #include <Kokkos_StdAlgorithms.hpp>
+#include <../src/vec/vec/impls/seq/kokkos/veckokkosimpl.hpp>
 
 using DefaultExecutionSpace = Kokkos::DefaultExecutionSpace;
 using DefaultMemorySpace    = Kokkos::DefaultExecutionSpace::memory_space;
-using PetscScalarKokkosView = Kokkos::View<PetscScalar *, DefaultMemorySpace>;
-using PetscIntKokkosView     = Kokkos::View<PetscInt *, DefaultMemorySpace>;
-using PetscIntKokkosViewHost = Kokkos::View<PetscInt *, Kokkos::HostSpace>;
-using PetscIntKokkosDualView = Kokkos::DualView<PetscInt *>;
 
 struct ReduceData {
    PetscInt count;
