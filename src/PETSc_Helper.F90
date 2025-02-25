@@ -2,6 +2,7 @@ module petsc_helper
 
    use petsc
    use c_petsc_interfaces
+   use air_data_type
 
 #include "petsc/finclude/petsc.h"
 #include "petscconf.h"
@@ -19,6 +20,101 @@ module petsc_helper
    ! -------------------------------------------------------------------------------------------------------------------------------      
 
    contains 
+
+   !------------------------------------------------------------------------------------------------------------------------
+   
+   subroutine VecISCopyLocalWrapper(air_data, our_level, fine, vfull, mode, vreduced, v_temp_mat)
+
+      ! Wrapper around VecISCopy (currently cpu only), a kokkos version of that and 
+      ! the matmult used on gpus when petsc isn't configured with kokkos 
+      ! Relies on having pre-built some things with the routine 
+      
+      ! ~~~~~~~~~~
+      ! Input 
+      type(air_multigrid_data), target, intent(in) :: air_data
+      integer, intent(in)                          :: our_level
+      logical, intent(in)                          :: fine
+      type(tVec), intent(inout)                    :: vfull, vreduced
+      type(tVec), optional, intent(inout)          :: v_temp_mat
+      ScatterMode, intent(in)                      :: mode  
+      
+      integer :: ierr
+      ! ~~~~~~~~~~
+
+      ! FINE variables
+      if (fine) then
+         if (mode == SCATTER_REVERSE) then
+
+            if (air_data%gpu_mat) then
+               call MatMult(air_data%i_fine_full(our_level), vfull, &
+                        vreduced, ierr)                          
+            else
+               call VecISCopy(vfull, air_data%is_fine_index(our_level), mode, &
+                        vreduced, ierr)
+            end if
+
+         ! SCATTER FORWARD
+         else
+            if (air_data%gpu_mat) then
+
+               ! Copy x but only the non-coarse points from x are non-zero
+               ! ie get x_c but in a vec of full size 
+               call MatMult(air_data%i_coarse_full_full(our_level), vfull, &
+                                 v_temp_mat, ierr)        
+
+               ! If we're just doing F point smoothing, don't change the coarse points 
+               ! Not sure why we need the vecset, but on the gpu x is twice the size it should be if we don't
+               ! x should be overwritten by the MatMultTransposeAdd
+               call VecSet(vfull, 0d0, ierr)
+               call MatMultTransposeAdd(air_data%i_fine_full(our_level), &
+                     vreduced, &
+                     v_temp_mat, &
+                     vfull, ierr)               
+
+            else
+               call VecISCopy(vfull, air_data%is_fine_index(our_level), mode, &
+                        vreduced, ierr)                 
+            end if
+         end if
+
+      ! COARSE variables
+      else
+         if (mode == SCATTER_REVERSE) then
+
+            if (air_data%gpu_mat) then
+               call MatMult(air_data%i_coarse_full(our_level), vfull, &
+                        vreduced, ierr)                          
+            else
+               call VecISCopy(vfull, air_data%is_coarse_index(our_level), mode, &
+                        vreduced, ierr)
+            end if
+
+         ! SCATTER FORWARD
+         else 
+
+            if (air_data%gpu_mat) then
+
+               ! Copy x but only the non-fine points from x are non-zero
+               ! ie get x_f but in a vec of full size 
+               call MatMult(air_data%i_fine_full_full(our_level), vfull, &
+                                 v_temp_mat, ierr)        
+
+               ! Not sure why we need the vecset, but on the gpu x is twice the size it should be if we don't
+               ! x should be overwritten by the MatMultTransposeAdd
+               call VecSet(vfull, 0d0, ierr)
+               call MatMultTransposeAdd(air_data%i_coarse_full(our_level), &
+                     vreduced, &
+                     v_temp_mat, &
+                     vfull, ierr)    
+
+            else              
+               call VecISCopy(vfull, air_data%is_coarse_index(our_level), mode, &
+                        vreduced, ierr)
+            end if            
+         end if
+      end if     
+         
+   end subroutine VecISCopyLocalWrapper   
  
    !------------------------------------------------------------------------------------------------------------------------
    

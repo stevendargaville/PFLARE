@@ -7,6 +7,7 @@ module air_mg_setup
    use approx_inverse_setup
    use timers
    use air_mg_stats
+   use petsc_helper
 
 #include "petsc/finclude/petsc.h"
       
@@ -1078,37 +1079,18 @@ module air_mg_setup
       air_data => mat_ctx%air_data  
 
       ! Get out just the fine points from b - this is b_f
-      if (air_data%gpu_mat) then
-         call MatMult(air_data%i_fine_full(our_level), b, &
-                        air_data%temp_vecs_fine(4)%array(our_level), ierr)                          
-      else
-         call VecISCopy(b, air_data%is_fine_index(our_level), SCATTER_REVERSE, &
-                  air_data%temp_vecs_fine(4)%array(our_level), ierr)
-      end if
+      call VecISCopyLocalWrapper(air_data, our_level, .TRUE., b, &
+               SCATTER_REVERSE, air_data%temp_vecs_fine(4)%array(our_level))
 
       if (.NOT. guess_zero) then 
 
-         ! Get out x_f and x_c
-         if (air_data%gpu_mat) then
+         ! Get out just the fine points from x - this is x_f^0
+         call VecISCopyLocalWrapper(air_data, our_level, .TRUE., x, &
+                  SCATTER_REVERSE, air_data%temp_vecs_fine(1)%array(our_level))           
 
-            ! Get out just the fine points from x - this is x_f^0
-            call MatMult(air_data%i_fine_full(our_level), x, &
-                              air_data%temp_vecs_fine(1)%array(our_level), ierr)       
-                              
-            ! Get the coarse points from x - this is x_c^0
-            call MatMult(air_data%i_coarse_full(our_level), x, &
-                     air_data%temp_vecs_coarse(1)%array(our_level), ierr) 
-
-         else
-                  
-            ! Get out just the fine points from x - this is x_f^0
-            call VecISCopy(x, air_data%is_fine_index(our_level), SCATTER_REVERSE, &
-                     air_data%temp_vecs_fine(1)%array(our_level), ierr)
-            ! ! Get the coarse points from x - this is x_c^0
-            call VecISCopy(x, air_data%is_coarse_index(our_level), SCATTER_REVERSE, &
-                     air_data%temp_vecs_coarse(1)%array(our_level), ierr)                   
-
-         end if
+         ! Get the coarse points from x - this is x_c^0
+         call VecISCopyLocalWrapper(air_data, our_level, .FALSE., x, &
+                  SCATTER_REVERSE, air_data%temp_vecs_coarse(1)%array(our_level))                    
 
          ! Compute Afc * x_c^0 - this never changes
          call MatMult(air_data%A_fc(our_level), air_data%temp_vecs_coarse(1)%array(our_level), &
@@ -1154,27 +1136,9 @@ module air_mg_setup
       ! ~~~~~~~~
       ! Reverse put fine x_f back into x
       ! ~~~~~~~~
-
-      if (air_data%gpu_mat) then
-
-         ! Copy x but only the non-coarse points from x are non-zero
-         ! ie get x_c but in a vec of full size 
-         call MatMult(air_data%i_coarse_full_full(our_level), x, &
-                           air_data%temp_vecs(1)%array(our_level), ierr)        
-
-         ! If we're just doing F point smoothing, don't change the coarse points 
-         ! Not sure why we need the vecset, but on the gpu x is twice the size it should be if we don't
-         ! x should be overwritten by the MatMultTransposeAdd
-         call VecSet(x, 0d0, ierr)
-         call MatMultTransposeAdd(air_data%i_fine_full(our_level), &
-               air_data%temp_vecs_fine(1)%array(our_level), &
-               air_data%temp_vecs(1)%array(our_level), &
-               x, ierr)
-
-      else   
-         call VecISCopy(x, air_data%is_fine_index(our_level), SCATTER_FORWARD, &
-                  air_data%temp_vecs_fine(1)%array(our_level), ierr)         
-      end if
+      call VecISCopyLocalWrapper(air_data, our_level, .TRUE., x, &
+               SCATTER_FORWARD, air_data%temp_vecs_fine(1)%array(our_level), &
+               air_data%temp_vecs(1)%array(our_level))
 
       ! ~~~~~~~~~~~~~~~~
       ! If we want to let's do a single C-point smooth
@@ -1182,13 +1146,8 @@ module air_mg_setup
       if (air_data%options%one_c_smooth) then        
 
          ! Get out just the coarse points from b - this is b_c
-         if (air_data%gpu_mat) then
-            call MatMult(air_data%i_coarse_full(our_level), b, &
-                     air_data%temp_vecs_coarse(4)%array(our_level), ierr)           
-         else
-            call VecISCopy(b, air_data%is_coarse_index(our_level), SCATTER_REVERSE, &
-                  air_data%temp_vecs_coarse(4)%array(our_level), ierr) 
-         end if
+         call VecISCopyLocalWrapper(air_data, our_level, .FALSE., b, &
+                  SCATTER_REVERSE, air_data%temp_vecs_coarse(4)%array(our_level))
 
          ! Compute Acf * x_f^0 - this never changes
          call MatMult(air_data%A_cf(our_level), air_data%temp_vecs_fine(1)%array(our_level), &
@@ -1216,26 +1175,9 @@ module air_mg_setup
          ! ~~~~~~~~
          ! Reverse put coarse x_c back into x
          ! ~~~~~~~~
-
-         if (air_data%gpu_mat) then
-
-            ! Copy x but only the non-fine points from x are non-zero
-            ! ie get x_f but in a vec of full size 
-            call MatMult(air_data%i_fine_full_full(our_level), x, &
-                              air_data%temp_vecs(1)%array(our_level), ierr)        
-
-            ! Not sure why we need the vecset, but on the gpu x is twice the size it should be if we don't
-            ! x should be overwritten by the MatMultTransposeAdd
-            call VecSet(x, 0d0, ierr)
-            call MatMultTransposeAdd(air_data%i_coarse_full(our_level), &
-                  air_data%temp_vecs_coarse(1)%array(our_level), &
-                  air_data%temp_vecs(1)%array(our_level), &
-                  x, ierr)  
-
-         else
-            call VecISCopy(x, air_data%is_coarse_index(our_level), SCATTER_FORWARD, &
-                  air_data%temp_vecs_coarse(1)%array(our_level), ierr) 
-         end if
+         call VecISCopyLocalWrapper(air_data, our_level, .FALSE., x, &
+                  SCATTER_FORWARD, air_data%temp_vecs_coarse(1)%array(our_level), &
+                  air_data%temp_vecs(1)%array(our_level))                     
 
       end if 
       
