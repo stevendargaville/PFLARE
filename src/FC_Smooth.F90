@@ -102,7 +102,7 @@ module fc_smooth
 
       ! Wrapper around VecISCopy (currently cpu only), a kokkos version of that and 
       ! the matmult used on gpus when petsc isn't configured with kokkos 
-      ! Relies on having pre-built some things with the routine 
+      ! Relies on having pre-built some things with the routine create_VecISCopyLocalWrapper
       
       ! ~~~~~~~~~~
       ! Input 
