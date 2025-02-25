@@ -170,6 +170,77 @@ module c_petsc_interfaces
  
    end interface
 
+   interface   
+      
+      subroutine generate_identity_is_kokkos(A_array, index, B_array) &
+         bind(c, name="generate_identity_is_kokkos")
+         use iso_c_binding
+         integer(c_long_long) :: A_array
+         integer(c_long_long) :: index
+         integer(c_long_long) :: B_array
+      end subroutine generate_identity_is_kokkos         
+ 
+   end interface 
+   
+   interface   
+      
+      subroutine remove_small_from_sparse_kokkos(A_array, tol, B_array, &
+                     relative_max_row_tolerance_int, lump_int, allow_drop_diagonal_int) &
+         bind(c, name="remove_small_from_sparse_kokkos")
+         use iso_c_binding
+         integer(c_long_long) :: A_array
+         PetscReal, value :: tol
+         integer(c_long_long) :: B_array
+         integer(c_int), value :: relative_max_row_tolerance_int
+         integer(c_int), value :: lump_int
+         integer(c_int), value :: allow_drop_diagonal_int
+      end subroutine remove_small_from_sparse_kokkos         
+ 
+   end interface
+   
+   interface   
+      
+      subroutine create_VecISCopyLocal_kokkos(max_levels_input) &
+         bind(c, name="create_VecISCopyLocal_kokkos")
+         use iso_c_binding
+         PetscInt, value :: max_levels_input
+      end subroutine create_VecISCopyLocal_kokkos         
+ 
+   end interface  
+   
+   interface   
+      
+      subroutine destroy_VecISCopyLocal_kokkos() &
+         bind(c, name="destroy_VecISCopyLocal_kokkos")
+         use iso_c_binding
+      end subroutine destroy_VecISCopyLocal_kokkos         
+ 
+   end interface    
+   
+   interface   
+      
+      subroutine set_VecISCopyLocal_kokkos_our_level(our_level, index_fine, index_coarse) &
+         bind(c, name="set_VecISCopyLocal_kokkos_our_level")
+         use iso_c_binding
+         PetscInt, value :: our_level
+         integer(c_long_long) :: index_fine
+         integer(c_long_long) :: index_coarse
+      end subroutine set_VecISCopyLocal_kokkos_our_level         
+ 
+   end interface
+   
+   interface   
+      
+      subroutine VecISCopyLocal_kokkos(our_level, fine_int, vfull, mode_int, vreduced) &
+         bind(c, name="VecISCopyLocal_kokkos")
+         use iso_c_binding
+         PetscInt, value :: our_level, fine_int, mode_int
+         integer(c_long_long) :: vfull
+         integer(c_long_long) :: vreduced
+      end subroutine VecISCopyLocal_kokkos         
+ 
+   end interface    
+
 ! -------------------------------------------------------------------------------------------------------------------------------
 
 end module c_petsc_interfaces

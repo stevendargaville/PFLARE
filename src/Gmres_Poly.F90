@@ -785,6 +785,8 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
       end if      
 
+      call MatGetType(matrix, mat_type, ierr)
+
       call PetscObjectGetComm(matrix, MPI_COMM_MATRIX, ierr)    
       ! Get the comm size 
       call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)
@@ -835,7 +837,6 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
             call MatSetSizes(cmat, local_rows, local_cols, &
                              global_rows, global_cols, ierr)
             ! Match the output type
-            call MatGetType(matrix, mat_type, ierr)
             call MatSetType(cmat, mat_type, ierr)
             call MatSetUp(cmat, ierr)
 
@@ -929,7 +930,6 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
          ! ~~~~
          ! Get the cols
          ! ~~~~
-         call MatGetType(matrix, mat_type, ierr)
          if (mat_type == "mpiaij") then
             ! Much more annoying in older petsc
             call MatMPIAIJGetSeqAIJ(mat_sparsity_match, Ad, Ao, icol, iicol, ierr)            

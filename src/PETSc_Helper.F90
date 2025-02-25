@@ -4,6 +4,7 @@ module petsc_helper
    use c_petsc_interfaces
 
 #include "petsc/finclude/petsc.h"
+#include "petscconf.h"
                 
    implicit none
 
@@ -23,6 +24,87 @@ module petsc_helper
    
    subroutine remove_small_from_sparse(input_mat, tol, output_mat, relative_max_row_tolerance, lump, allow_drop_diagonal)
 
+      ! Wrapper around remove_small_from_sparse_cpu and remove_small_from_sparse_kokkos
+   
+      ! ~~~~~~~~~~
+      ! Input 
+      type(tMat), intent(in) :: input_mat
+      type(tMat), intent(inout) :: output_mat
+      PetscReal, intent(in) :: tol
+      logical, intent(in), optional :: relative_max_row_tolerance, lump, allow_drop_diagonal
+      
+#if defined(PETSC_HAVE_KOKKOS)                     
+      integer(c_long_long) :: A_array, B_array
+      integer :: lump_int, allow_drop_diagonal_int, relative_max_row_tolerance_int
+      PetscErrorCode :: ierr
+      MatType :: mat_type
+      !Mat :: temp_mat
+      !PetscScalar normy;
+#endif      
+      ! ~~~~~~~~~~
+
+#if defined(PETSC_HAVE_KOKKOS)    
+
+      call MatGetType(input_mat, mat_type, ierr)
+      if (mat_type == MATMPIAIJKOKKOS .OR. mat_type == MATSEQAIJKOKKOS .OR. &
+            mat_type == MATAIJKOKKOS) then
+
+         relative_max_row_tolerance_int = 0
+         if (present(relative_max_row_tolerance)) then
+            if (relative_max_row_tolerance) then
+               relative_max_row_tolerance_int = 1
+            end if
+         end if
+         lump_int = 0
+         if (present(lump)) then
+            if (lump) then
+               lump_int = 1
+            end if
+         end if   
+         allow_drop_diagonal_int = 0 
+         if (present(allow_drop_diagonal)) then
+            if (allow_drop_diagonal) then
+               allow_drop_diagonal_int = 1
+            end if
+         end if         
+
+         A_array = input_mat%v             
+         call remove_small_from_sparse_kokkos(A_array, tol, &
+                  B_array, relative_max_row_tolerance_int, lump_int, allow_drop_diagonal_int) 
+         output_mat%v = B_array
+
+         ! Debug check if the CPU and Kokkos versions are the same
+         ! call remove_small_from_sparse_cpu(input_mat, tol, temp_mat, relative_max_row_tolerance, &
+         !          lump, allow_drop_diagonal)       
+
+         ! call MatAXPY(temp_mat, -1d0, output_mat, DIFFERENT_NONZERO_PATTERN, ierr)
+         ! call MatNorm(temp_mat, NORM_FROBENIUS, normy, ierr)
+         ! if (normy .gt. 1d-14) then
+         !    print *, "diff"
+         !    call MatFilter(temp_mat, 1d-14, PETSC_TRUE, PETSC_FALSE, ierr)
+         !    !call MatView(temp_mat, PETSC_VIEWER_STDOUT_WORLD, ierr)
+         !    print *, "Kokkos and CPU versions of remove_small_from_sparse do not match"
+         !    call exit(0)
+         ! end if
+
+      else
+
+         call remove_small_from_sparse_cpu(input_mat, tol, output_mat, relative_max_row_tolerance, &
+                  lump, allow_drop_diagonal)          
+
+      end if
+#else
+      call remove_small_from_sparse_cpu(input_mat, tol, output_mat, relative_max_row_tolerance, &
+               lump, allow_drop_diagonal)  
+#endif  
+     
+         
+   end subroutine remove_small_from_sparse
+
+   !------------------------------------------------------------------------------------------------------------------------
+   
+   subroutine remove_small_from_sparse_cpu(input_mat, tol, output_mat, relative_max_row_tolerance, lump, allow_drop_diagonal)
+
       ! Returns a copy of a sparse matrix with entries below abs(val) < tol removed
       ! If relative_max_row_tolerance is true, then the tol is taken to be a relative scaling 
       ! of the max row val on each row
@@ -38,9 +120,8 @@ module petsc_helper
       PetscInt :: col, ncols, ifree, max_nnzs
       PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start
       PetscInt :: global_row_end_plus_one, max_nnzs_total
-      PetscInt :: global_col_start, global_col_end_plus_one, counter
+      PetscInt :: counter
       PetscErrorCode :: ierr
-      integer :: errorcode, comm_size
       PetscInt, dimension(:), allocatable :: cols
       PetscReal, dimension(:), allocatable :: vals
       PetscInt, allocatable, dimension(:) :: row_indices, col_indices
@@ -55,8 +136,6 @@ module petsc_helper
       ! If the tolerance is 0 we still want to go through this routine and drop the zeros
 
       call PetscObjectGetComm(input_mat, MPI_COMM_MATRIX, ierr)    
-      ! Get the comm size 
-      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)
 
       lump_entries = .FALSE.
       drop_diag = .FALSE.
@@ -76,7 +155,6 @@ module petsc_helper
       call MatGetSize(input_mat, global_rows, global_cols, ierr)
       ! This returns the global index of the local portion of the matrix
       call MatGetOwnershipRange(input_mat, global_row_start, global_row_end_plus_one, ierr)  
-      call MatGetOwnershipRangeColumn(input_mat, global_col_start, global_col_end_plus_one, ierr)  
       
       max_nnzs = 0
       max_nnzs_total = 0
@@ -91,10 +169,12 @@ module petsc_helper
       allocate(cols(max_nnzs))
       allocate(vals(max_nnzs)) 
 
-      ! Times 2 here in case we are lumping
-      allocate(row_indices(max_nnzs_total * 2))
-      allocate(col_indices(max_nnzs_total * 2))
-      allocate(v(max_nnzs_total * 2))      
+      ! We know we never have more to do than the original nnzs
+      allocate(row_indices(max_nnzs_total))
+      ! By default drop everything
+      row_indices = -1
+      allocate(col_indices(max_nnzs_total))
+      allocate(v(max_nnzs_total))      
 
       call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
       call MatSetSizes(output_mat, local_rows, local_cols, &
@@ -111,12 +191,16 @@ module petsc_helper
       call MatSetOption(output_mat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)     
       
       ! Now go and fill the new matrix
+      ! These loops just set the row and col indices to not be -1
+      ! if we are including it in the matrix
       ! Loop over global row indices
       counter = 1
       do ifree = global_row_start, global_row_end_plus_one-1                  
       
          ! Get the row
-         call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)            
+         call MatGetRow(input_mat, ifree, ncols, cols, vals, ierr)     
+         ! Copy in all the values
+         v(counter:counter + ncols - 1) = vals(1:ncols)
 
          if (rel_row_tol_logical) then
             rel_row_tol = tol * maxval(abs(vals(1:ncols)))
@@ -124,25 +208,23 @@ module petsc_helper
                   
          do col = 1, ncols
 
-            ! Copy the value in if it is bigger than the tolerance
+            ! Set the row/col to be included (ie not -1) 
+            ! if it is bigger than the tolerance
             if (abs(vals(col)) .ge. rel_row_tol ) then
 
-               row_indices(counter) = ifree
-               col_indices(counter) = cols(col)
-               v(counter) = vals(col)    
-               counter = counter + 1 
+               row_indices(counter + col - 1) = ifree
+               col_indices(counter + col - 1) = cols(col)
 
             ! If the entry is small and we are lumping, then add it to the diagonal
             ! or if this is the diagonal and it's small but we are not dropping it
             else if (lump_entries .OR. (.NOT. drop_diag .AND. cols(col) == ifree)) then
 
-               row_indices(counter) = ifree
-               col_indices(counter) = ifree
-               v(counter) = vals(col)    
-               counter = counter + 1                   
+               row_indices(counter + col - 1) = ifree
+               col_indices(counter + col - 1) = ifree
 
             end if
          end do                       
+         counter = counter + ncols
 
          ! Must call otherwise petsc leaks memory
          call MatRestoreRow(input_mat, ifree, ncols, cols, vals, ierr)   
@@ -155,7 +237,7 @@ module petsc_helper
       call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
       deallocate(v)        
          
-   end subroutine remove_small_from_sparse
+   end subroutine remove_small_from_sparse_cpu   
 
    !------------------------------------------------------------------------------------------------------------------------
    
@@ -570,7 +652,7 @@ module petsc_helper
       PetscInt :: local_rows_rect, local_cols_rect, global_rows_rect, global_cols_rect
       PetscInt :: global_row_start_rect, global_row_end_plus_one_rect
       PetscInt :: local_indices_size
-      PetscInt, allocatable, dimension(:) :: indices
+      PetscInt, allocatable, dimension(:) :: row_indices, col_indices
       PetscReal, allocatable, dimension(:) :: v      
       PetscErrorCode :: ierr
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
@@ -612,15 +694,18 @@ module petsc_helper
       ! Get the indices we need
       call ISGetIndicesF90(rect_indices, is_pointer, ierr)
 
-      allocate(indices(local_indices_size))
+      allocate(row_indices(local_indices_size))
+      allocate(col_indices(local_indices_size))
       allocate(v(local_indices_size))
       do i_loc = 1, local_indices_size
-         indices(i_loc) = global_row_start_rect + i_loc-1
+         row_indices(i_loc) = global_row_start_rect + i_loc-1
       end do
       v = 1d0
+      ! MatSetPreallocationCOO could modify the values in is_pointer
+      col_indices = is_pointer
       ! Set the diagonal
-      call MatSetPreallocationCOO(output_mat, local_indices_size, indices, is_pointer, ierr)
-      deallocate(indices)
+      call MatSetPreallocationCOO(output_mat, local_indices_size, row_indices, col_indices, ierr)
+      deallocate(row_indices, col_indices)
       call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
       deallocate(v)      
 
@@ -629,7 +714,7 @@ module petsc_helper
    end subroutine generate_identity_rect   
 
    !------------------------------------------------------------------------------------------------------------------------
-   
+
    subroutine generate_identity_is(input_mat, indices, output_mat)
 
       ! Returns an assembled identity of matching dimension/type to the input
@@ -652,6 +737,7 @@ module petsc_helper
       MPI_Comm :: MPI_COMM_MATRIX
       MatType:: mat_type
       PetscInt, dimension(:), pointer :: is_pointer
+      PetscInt, allocatable, dimension(:) :: row_indices, col_indices
       
       ! ~~~~~~~~~~
 
@@ -681,15 +767,21 @@ module petsc_helper
       call ISGetIndicesF90(indices, is_pointer, ierr)
 
       allocate(v(local_indices_size))
+      allocate(row_indices(local_indices_size))
+      allocate(col_indices(local_indices_size))
+      ! MatSetPreallocationCOO could modify the values in is_pointer
+      row_indices = is_pointer
+      col_indices = row_indices
       v = 1d0
       ! Set the diagonal
-      call MatSetPreallocationCOO(output_mat, local_indices_size, is_pointer, is_pointer, ierr)
+      call MatSetPreallocationCOO(output_mat, local_indices_size, row_indices, col_indices, ierr)
+      deallocate(row_indices, col_indices)
       call MatSetValuesCOO(output_mat, v, INSERT_VALUES, ierr)    
       deallocate(v)  
 
       call ISRestoreIndicesF90(indices, is_pointer, ierr)       
          
-   end subroutine generate_identity_is      
+   end subroutine generate_identity_is   
 
    !------------------------------------------------------------------------------------------------------------------------
    
