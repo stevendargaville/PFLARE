@@ -714,51 +714,8 @@ module petsc_helper
    end subroutine generate_identity_rect   
 
    !------------------------------------------------------------------------------------------------------------------------
-   
+
    subroutine generate_identity_is(input_mat, indices, output_mat)
-
-      ! Wrapper around generate_identity_is_cpu and generate_identity_is_kokkos
-   
-      ! ~~~~~~~~~~
-      ! Input 
-      type(tMat), intent(in)     :: input_mat
-      type(tIS), intent(in)      :: indices
-      type(tMat), intent(inout)  :: output_mat
-
-#if defined(PETSC_HAVE_KOKKOS)                     
-      integer(c_long_long) :: A_array, index_array, B_array
-      PetscErrorCode :: ierr
-      MatType :: mat_type
-#endif
-      ! ~~~~~~~~~~
-
-#if defined(PETSC_HAVE_KOKKOS)                     
-
-      call MatGetType(input_mat, mat_type, ierr)
-      if (mat_type == MATMPIAIJKOKKOS .OR. mat_type == MATSEQAIJKOKKOS .OR. &
-            mat_type == MATAIJKOKKOS) then
-
-         A_array = input_mat%v
-         index_array = indices%v
-
-         call generate_identity_is_kokkos(A_array, index_array, &
-                  B_array) 
-         output_mat%v = B_array
-
-      else
-         call generate_identity_is_cpu(input_mat, indices, &
-               output_mat) 
-      end if
-#else
-      call generate_identity_is_cpu(input_mat, indices, &
-               output_mat)    
-#endif   
-         
-   end subroutine generate_identity_is     
-   
-!------------------------------------------------------------------------------------------------------------------------
-   
-   subroutine generate_identity_is_cpu(input_mat, indices, output_mat)
 
       ! Returns an assembled identity of matching dimension/type to the input
       ! but with ones only in the diagonals of the input IS
@@ -824,7 +781,7 @@ module petsc_helper
 
       call ISRestoreIndicesF90(indices, is_pointer, ierr)       
          
-   end subroutine generate_identity_is_cpu   
+   end subroutine generate_identity_is   
 
    !------------------------------------------------------------------------------------------------------------------------
    
