@@ -91,13 +91,13 @@ jobs:
             BRANCH=${{ env.BRANCH }}
             ARCH=arch-linux-c-opt
 
-  build_kokkos_opt:
+  build_gnu_opt_kokkos:
     runs-on: ubuntu-22.04
     needs: setup
     env:
       BRANCH: ${{ needs.setup.outputs.branch }}
     steps:
-      - name: Build Docker image with PETSc and KOKKOS
+      - name: Build Docker image with KOKKOS and PETSc
         uses: docker/build-push-action@v2
         with:
           platforms: linux/amd64
@@ -105,7 +105,23 @@ jobs:
           file: ./dockerfiles/Dockerfile_kokkos
           build-args: |
             BRANCH=${{ env.BRANCH }}
-            ARCH=arch-linux-c-opt          
+            ARCH=arch-linux-c-opt      
+            
+  build_gnu_opt_64_bit_kokkos:
+    runs-on: ubuntu-22.04
+    needs: setup
+    env:
+      BRANCH: ${{ needs.setup.outputs.branch }}
+    steps:
+      - name: Build Docker image with KOKKOS and 64-bit PETSc
+        uses: docker/build-push-action@v2
+        with:
+          platforms: linux/amd64
+          push: false
+          file: ./dockerfiles/Dockerfile_kokkos
+          build-args: |
+            BRANCH=${{ env.BRANCH }}
+            ARCH=arch-linux-c-opt-64bit           
 
   build_nvidia_opt:
     runs-on: ubuntu-22.04

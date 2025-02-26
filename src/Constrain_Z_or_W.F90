@@ -27,12 +27,12 @@ module constrain_z_or_w
       logical, intent(in)                                   :: left, right
       type(tVec), dimension(:), allocatable, intent(inout)  :: left_null_vecs, right_null_vecs
 
-      integer :: comm_size, errorcode, i_loc, no_nullspace_vecs
+      integer :: comm_size, errorcode
       MatNullSpace :: nullspace
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX
       PetscBool :: has_constant
-      PetscInt :: no_nullspace
+      PetscInt :: no_nullspace, no_nullspace_vecs, i_loc
       ! Has to be big enough to hold all nullspace vectors, but there is no way to check 
       ! how many have been set
       type(tVec), dimension(20) :: null_vecs      
@@ -238,7 +238,7 @@ module constrain_z_or_w
       PetscReal, dimension(:), pointer :: b_f_vals
       type(c_ptr) :: colmap_c_ptr, b_c_nonlocal_c_ptr
       integer(c_long_long) :: A_array, vec_long
-      PetscInt, pointer :: colmap_c(:)
+      PetscInt, pointer :: colmap_c(:) => null()
       type(tMat) :: Ad, Ao
       PetscOffset :: iicol
       PetscInt :: icol(1)

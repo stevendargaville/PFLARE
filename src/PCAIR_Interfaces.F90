@@ -246,7 +246,7 @@ module pcair_interfaces
       call PCAIRGetNumLevels(pc, num_levels, ierr) 
 
       ! We order our levels from 1 to num_levels
-      our_level = num_levels - int(petsc_level)
+      our_level = int(num_levels - petsc_level)
 
       ! Inverse Aff
       if (which_inverse == COEFFS_INV_AFF) then
@@ -364,7 +364,7 @@ module pcair_interfaces
       call PCAIRGetNumLevels(pc, num_levels, ierr) 
 
       ! We order our levels from 1 to num_levels
-      our_level = num_levels - int(petsc_level)
+      our_level = int(num_levels - petsc_level)
 
       ! Inverse Aff
       if (which_inverse == COEFFS_INV_AFF) then
@@ -1284,7 +1284,7 @@ module pcair_interfaces
 
       ! Set the options
       call PCAIRGetOptions(pc, options)    
-      options%processor_agglom_factor = factor
+      options%processor_agglom_factor = int(factor)
       ierr = 0
 
    end subroutine PCAIRSetProcessorAgglomFactor

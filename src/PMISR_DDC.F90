@@ -58,7 +58,7 @@ module pmisr_ddc
       PetscReal, dimension(:), allocatable :: cf_markers_local_real
       logical, dimension(:), allocatable :: mark
       type(c_ptr) :: cf_markers_nonlocal_ptr
-      real(c_double), pointer :: cf_markers_nonlocal(:)
+      real(c_double), pointer :: cf_markers_nonlocal(:) => null()
       type(tMat) :: Ad, Ao
       type(tVec) :: cf_markers_vec
       PetscOffset :: iicol

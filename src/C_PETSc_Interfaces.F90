@@ -203,7 +203,7 @@ module c_petsc_interfaces
       subroutine create_VecISCopyLocal_kokkos(max_levels_input) &
          bind(c, name="create_VecISCopyLocal_kokkos")
          use iso_c_binding
-         PetscInt, value :: max_levels_input
+         integer, value :: max_levels_input
       end subroutine create_VecISCopyLocal_kokkos         
  
    end interface  
@@ -222,7 +222,7 @@ module c_petsc_interfaces
       subroutine set_VecISCopyLocal_kokkos_our_level(our_level, index_fine, index_coarse) &
          bind(c, name="set_VecISCopyLocal_kokkos_our_level")
          use iso_c_binding
-         PetscInt, value :: our_level
+         integer, value :: our_level
          integer(c_long_long) :: index_fine
          integer(c_long_long) :: index_coarse
       end subroutine set_VecISCopyLocal_kokkos_our_level         
@@ -234,7 +234,7 @@ module c_petsc_interfaces
       subroutine VecISCopyLocal_kokkos(our_level, fine_int, vfull, mode_int, vreduced) &
          bind(c, name="VecISCopyLocal_kokkos")
          use iso_c_binding
-         PetscInt, value :: our_level, fine_int, mode_int
+         integer, value :: our_level, fine_int, mode_int
          integer(c_long_long) :: vfull
          integer(c_long_long) :: vreduced
       end subroutine VecISCopyLocal_kokkos         
