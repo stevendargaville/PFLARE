@@ -91,7 +91,7 @@ jobs:
             BRANCH=${{ env.BRANCH }}
             ARCH=arch-linux-c-opt
 
-  build_kokkos_opt:
+  build_gnu_opt_kokkos:
     runs-on: ubuntu-22.04
     needs: setup
     env:
@@ -107,7 +107,7 @@ jobs:
             BRANCH=${{ env.BRANCH }}
             ARCH=arch-linux-c-opt      
             
-  build_kokkos_opt_64_bit:
+  build_gnu_opt_64_bit_kokkos:
     runs-on: ubuntu-22.04
     needs: setup
     env:
