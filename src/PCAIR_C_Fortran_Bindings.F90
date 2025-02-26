@@ -770,7 +770,7 @@ module pcair_c_fortran_bindings
       call PCAIRGetNumLevels(pc, num_levels, ierr) 
 
       ! We order our levels from 1 to num_levels
-      our_level = num_levels - int(petsc_level)
+      our_level = int(num_levels - petsc_level)
       
       ! Inverse Aff
       if (which_inverse == COEFFS_INV_AFF) then
@@ -1529,8 +1529,8 @@ module pcair_c_fortran_bindings
 
       type(tPC)                              :: pc
       PetscErrorCode                         :: ierr
-      integer                                :: our_level, errorcode, i_loc, j_loc
-      PetscInt                               :: num_levels
+      integer                                :: our_level, errorcode
+      PetscInt                               :: num_levels, i_loc, j_loc
       type(tPC)                              :: pc_shell
       type(pc_air_multigrid_data), pointer   :: pc_air_data   
       PetscReal, pointer :: coeffs_c(:,:)   
@@ -1549,7 +1549,7 @@ module pcair_c_fortran_bindings
       call PCAIRGetNumLevels(pc, num_levels, ierr) 
 
       ! We order our levels from 1 to num_levels
-      our_level = num_levels - int(petsc_level)
+      our_level = int(num_levels) - int(petsc_level)
 
       call c_f_pointer(coeffs_ptr, coeffs_c, shape=[row_size, col_size])
       

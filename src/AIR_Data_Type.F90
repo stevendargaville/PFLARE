@@ -66,7 +66,7 @@ module air_data_type
       ! If on average there are fewer than this number of equations per rank
       ! processor agglomeration will be triggered
       ! -pc_air_process_eq_limit
-      integer :: process_eq_limit = 50  
+      PetscInt :: process_eq_limit = 50  
       ! If we are doing processor agglomeration, then we have 
       ! some ranks with no rows
       ! If computing a gmres polynomial inverse 

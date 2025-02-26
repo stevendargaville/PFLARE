@@ -28,8 +28,8 @@ module aggregation
       ! Local
       PetscInt :: local_rows, local_cols, global_rows, global_cols
       PetscInt :: a_global_row_start, a_global_row_end_plus_one, ifree, ncols, kfree
-      PetscInt :: max_nnzs, aggregate, max_neighbour_index, max_neighbour_value
-      integer :: errorcode, jfree, comm_size
+      PetscInt :: max_nnzs, aggregate, max_neighbour_index, max_neighbour_value, jfree
+      integer :: errorcode, comm_size
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX      
       PetscInt, dimension(:), allocatable :: indices, cols

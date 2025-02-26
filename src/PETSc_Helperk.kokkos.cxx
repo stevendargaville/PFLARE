@@ -236,7 +236,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
    // Are we in parallel?
    bool mpi = strcmp(mat_type, MATMPIAIJKOKKOS) == 0;
 
-   Mat_MPIAIJ *mat_mpi;
+   Mat_MPIAIJ *mat_mpi = nullptr;
    Mat mat_local, mat_nonlocal;
    if (mpi)
    {
