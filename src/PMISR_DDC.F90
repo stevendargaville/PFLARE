@@ -573,7 +573,7 @@ module pmisr_ddc
       PetscInt :: local_rows, local_cols
       PetscInt :: a_global_row_start, a_global_row_end_plus_one, ifree, ncols
       PetscInt :: input_row_start, input_row_end_plus_one
-      PetscInt :: max_nnzs, jfree, idx, search_size
+      PetscInt :: max_nnzs, jfree, idx, search_size, diag_index
       integer :: bin_sum, bin_boundary, bin
       PetscErrorCode :: ierr
       PetscInt, dimension(:), allocatable :: cols
@@ -638,15 +638,29 @@ module pmisr_ddc
          do ifree = a_global_row_start, a_global_row_end_plus_one-1                  
             call MatGetRow(Aff, ifree, ncols, cols, vals, ierr)
 
+            ! Index of the diagonal
+            diag_index = -1
+            diag_val = 1.0d0
+
             do jfree = 1, ncols
                ! Store the diagonal
                if (cols(jfree) == ifree) then
                   diag_val = abs(vals(jfree))
+                  diag_index = jfree
                else
                   ! Row sum of off-diagonals
                   diag_dom_ratio(ifree - a_global_row_start + 1) = diag_dom_ratio(ifree - a_global_row_start + 1) + abs(vals(jfree))
                end if
             end do
+
+            ! If we don't have a diagonal entry in this row there is no point trying to 
+            ! compute a diagonal dominance ratio
+            ! We set diag_dom_ratio to zero and that means this row will stay as an F point
+            if (diag_index == -1) then
+               diag_dom_ratio(ifree - a_global_row_start + 1) = 0.0
+               call MatRestoreRow(Aff, ifree, ncols, cols, vals, ierr)    
+               cycle
+            end if 
 
             ! If we have non-diagonal entries
             if (diag_dom_ratio(ifree - a_global_row_start + 1) /= 0d0) then
