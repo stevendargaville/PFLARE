@@ -22,7 +22,7 @@ module petsc_helper
  
    !------------------------------------------------------------------------------------------------------------------------
    
-   subroutine remove_small_from_sparse(input_mat, tol, output_mat, relative_max_row_tolerance, lump, allow_drop_diagonal)
+   subroutine remove_small_from_sparse(input_mat, tol, output_mat, relative_max_row_tol_int, lump, drop_diagonal_int)
 
       ! Wrapper around remove_small_from_sparse_cpu and remove_small_from_sparse_kokkos
    
@@ -31,11 +31,12 @@ module petsc_helper
       type(tMat), intent(in) :: input_mat
       type(tMat), intent(inout) :: output_mat
       PetscReal, intent(in) :: tol
-      logical, intent(in), optional :: relative_max_row_tolerance, lump, allow_drop_diagonal
+      logical, intent(in), optional :: lump
+      integer, intent(in), optional :: relative_max_row_tol_int, drop_diagonal_int
       
 #if defined(PETSC_HAVE_KOKKOS)                     
       integer(c_long_long) :: A_array, B_array
-      integer :: lump_int, allow_drop_diagonal_int, relative_max_row_tolerance_int
+      integer :: lump_int, allow_drop_diagonal_int, rel_max_row_tol_int
       PetscErrorCode :: ierr
       MatType :: mat_type
       !Mat :: temp_mat
@@ -49,11 +50,10 @@ module petsc_helper
       if (mat_type == MATMPIAIJKOKKOS .OR. mat_type == MATSEQAIJKOKKOS .OR. &
             mat_type == MATAIJKOKKOS) then
 
-         relative_max_row_tolerance_int = 0
-         if (present(relative_max_row_tolerance)) then
-            if (relative_max_row_tolerance) then
-               relative_max_row_tolerance_int = 1
-            end if
+         ! Absolute tolerance by default   
+         rel_max_row_tol_int = 0
+         if (present(relative_max_row_tol_int)) then
+            rel_max_row_tol_int = relative_max_row_tol_int
          end if
          lump_int = 0
          if (present(lump)) then
@@ -61,21 +61,20 @@ module petsc_helper
                lump_int = 1
             end if
          end if   
-         allow_drop_diagonal_int = 0 
-         if (present(allow_drop_diagonal)) then
-            if (allow_drop_diagonal) then
-               allow_drop_diagonal_int = 1
-            end if
+         ! Never drop the diagonal by default
+         allow_drop_diagonal_int = 0
+         if (present(drop_diagonal_int)) then
+            allow_drop_diagonal_int = drop_diagonal_int
          end if         
 
          A_array = input_mat%v             
          call remove_small_from_sparse_kokkos(A_array, tol, &
-                  B_array, relative_max_row_tolerance_int, lump_int, allow_drop_diagonal_int) 
+                  B_array, rel_max_row_tol_int, lump_int, allow_drop_diagonal_int) 
          output_mat%v = B_array
 
          ! Debug check if the CPU and Kokkos versions are the same
-         ! call remove_small_from_sparse_cpu(input_mat, tol, temp_mat, relative_max_row_tolerance, &
-         !          lump, allow_drop_diagonal)       
+         ! call remove_small_from_sparse_cpu(input_mat, tol, temp_mat, relative_max_row_tol_int, &
+         !          lump, drop_diagonal_int)       
 
          ! call MatAXPY(temp_mat, -1d0, output_mat, DIFFERENT_NONZERO_PATTERN, ierr)
          ! call MatNorm(temp_mat, NORM_FROBENIUS, normy, ierr)
@@ -89,13 +88,13 @@ module petsc_helper
 
       else
 
-         call remove_small_from_sparse_cpu(input_mat, tol, output_mat, relative_max_row_tolerance, &
-                  lump, allow_drop_diagonal)          
+         call remove_small_from_sparse_cpu(input_mat, tol, output_mat, relative_max_row_tol_int, &
+                  lump, drop_diagonal_int)          
 
       end if
 #else
-      call remove_small_from_sparse_cpu(input_mat, tol, output_mat, relative_max_row_tolerance, &
-               lump, allow_drop_diagonal)  
+      call remove_small_from_sparse_cpu(input_mat, tol, output_mat, relative_max_row_tol_int, &
+               lump, drop_diagonal_int)  
 #endif  
      
          
@@ -103,11 +102,11 @@ module petsc_helper
 
    !------------------------------------------------------------------------------------------------------------------------
    
-   subroutine remove_small_from_sparse_cpu(input_mat, tol, output_mat, relative_max_row_tolerance, lump, allow_drop_diagonal)
+   subroutine remove_small_from_sparse_cpu(input_mat, tol, output_mat, relative_max_row_tol_int, lump, drop_diagonal_int)
 
       ! Returns a copy of a sparse matrix with entries below abs(val) < tol removed
-      ! If relative_max_row_tolerance is true, then the tol is taken to be a relative scaling 
-      ! of the max row val on each row
+      ! If rel_max_row_tol_int is 1, then the tol is taken to be a relative scaling 
+      ! of the max row val on each row including the diagonal. If it's -1, it doesn't include the diagonal
       ! If lumped is true the removed entries are added to the diagonal
    
       ! ~~~~~~~~~~
@@ -115,7 +114,8 @@ module petsc_helper
       type(tMat), intent(in) :: input_mat
       type(tMat), intent(inout) :: output_mat
       PetscReal, intent(in) :: tol
-      logical, intent(in), optional :: relative_max_row_tolerance, lump, allow_drop_diagonal
+      logical, intent(in), optional :: lump
+      integer, intent(in), optional :: drop_diagonal_int, relative_max_row_tol_int
 
       PetscInt :: col, ncols, ifree, max_nnzs
       PetscInt :: local_rows, local_cols, global_rows, global_cols, global_row_start
@@ -127,10 +127,12 @@ module petsc_helper
       PetscInt, allocatable, dimension(:) :: row_indices, col_indices
       PetscReal, allocatable, dimension(:) :: v          
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
-      logical :: rel_row_tol_logical, lump_entries, drop_diag
+      logical :: lump_entries
+      integer :: drop_diag_int, errorcode, rel_max_row_tol_int
       PetscReal :: rel_row_tol
       MPI_Comm :: MPI_COMM_MATRIX
       MatType:: mat_type
+      PetscScalar :: abs_biggest_entry
       
       ! ~~~~~~~~~~
       ! If the tolerance is 0 we still want to go through this routine and drop the zeros
@@ -138,16 +140,26 @@ module petsc_helper
       call PetscObjectGetComm(input_mat, MPI_COMM_MATRIX, ierr)    
 
       lump_entries = .FALSE.
-      drop_diag = .FALSE.
+      ! 1  - Allow drop diagonal
+      ! 0  - Never drop diagonal
+      ! -1 - Always drop diagonal
+      ! Never drop the diagonal by default
+      drop_diag_int = 0
       if (present(lump)) lump_entries = lump
-      if (present(allow_drop_diagonal)) drop_diag = allow_drop_diagonal
-      rel_row_tol_logical = .FALSE.
+      if (present(drop_diagonal_int)) drop_diag_int = drop_diagonal_int
       rel_row_tol = tol
-      if (present(relative_max_row_tolerance)) then
-         if (relative_max_row_tolerance) then
-            rel_row_tol_logical = .TRUE.
-            rel_row_tol = 1d0
-         end if
+      ! 1  - Relative row tolerance (including diagonal)
+      ! 0  - Absolute tolerance
+      ! -1 - Relative row tolerance (not including diagonal)
+      ! Absolute tolerance by default    
+      rel_max_row_tol_int = 0
+      if (present(relative_max_row_tol_int)) then
+         rel_max_row_tol_int = relative_max_row_tol_int
+      end if
+
+      if (lump_entries .AND. drop_diag_int == 1) then
+         print *, "Error: Cannot lump and drop the diagonal"
+         call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)         
       end if
 
       ! Get the local sizes
@@ -202,22 +214,42 @@ module petsc_helper
          ! Copy in all the values
          v(counter:counter + ncols - 1) = vals(1:ncols)
 
-         if (rel_row_tol_logical) then
-            rel_row_tol = tol * maxval(abs(vals(1:ncols)))
+         ! If we want a relative row tolerance
+         if (rel_max_row_tol_int /= 0) then
+            ! Include the diagonal in the relative row tolerance
+            if (rel_max_row_tol_int == 1) then
+               rel_row_tol = tol * maxval(abs(vals(1:ncols)))
+
+            ! Don't include the diagonal in the relative row tolerance
+            else if (rel_max_row_tol_int == -1) then
+               
+               ! Be careful here to use huge(0d0) rather than huge(0)!
+               abs_biggest_entry = -huge(0d0)
+               ! Find the biggest entry in the row thats not the diagonal
+               do col = 1, ncols
+                  if (cols(col) /= ifree .AND. abs(vals(col)) > abs_biggest_entry) then
+                     abs_biggest_entry = abs(vals(col))
+                  end if 
+               end do  
+               rel_row_tol = tol * abs_biggest_entry
+            end if
          end if 
                   
          do col = 1, ncols
 
             ! Set the row/col to be included (ie not -1) 
             ! if it is bigger than the tolerance
-            if (abs(vals(col)) .ge. rel_row_tol ) then
+            if (abs(vals(col)) .ge. rel_row_tol) then
 
+               ! If this is the diagonal and we are always dropping it, then don't add it
+               if (drop_diag_int == -1 .AND. cols(col) == ifree) cycle
+                                 
                row_indices(counter + col - 1) = ifree
                col_indices(counter + col - 1) = cols(col)
 
             ! If the entry is small and we are lumping, then add it to the diagonal
             ! or if this is the diagonal and it's small but we are not dropping it
-            else if (lump_entries .OR. (.NOT. drop_diag .AND. cols(col) == ifree)) then
+            else if (lump_entries .OR. (drop_diag_int == 0 .AND. cols(col) == ifree)) then
 
                row_indices(counter + col - 1) = ifree
                col_indices(counter + col - 1) = ifree
