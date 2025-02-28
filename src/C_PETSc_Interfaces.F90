@@ -252,6 +252,19 @@ module c_petsc_interfaces
  
    end interface    
 
+   interface   
+      
+      subroutine pmisr_kokkos(A_array, max_luby_steps, pmis_int, measure_local, cf_markers_local, zero_meaure_c_point_int) &
+         bind(c, name="pmisr_kokkos")
+         use iso_c_binding
+         integer(c_long_long) :: A_array
+         type(c_ptr), value :: measure_local
+         integer, value :: max_luby_steps, pmis_int, zero_meaure_c_point_int
+         type(c_ptr), value :: cf_markers_local
+      end subroutine pmisr_kokkos         
+ 
+   end interface     
+
 ! -------------------------------------------------------------------------------------------------------------------------------
 
 end module c_petsc_interfaces

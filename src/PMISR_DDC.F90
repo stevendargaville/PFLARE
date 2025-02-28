@@ -18,10 +18,100 @@ module pmisr_ddc
    public   
    
    contains
-   
+
+
 ! -------------------------------------------------------------------------------------------------------------------------------
 
    subroutine pmisr(strength_mat, max_luby_steps, pmis, cf_markers_local, zero_measure_c_point)
+
+      ! Wrapper
+
+      ! ~~~~~~
+
+      type(tMat), target, intent(in)      :: strength_mat
+      integer, intent(in)                 :: max_luby_steps
+      logical, intent(in)                 :: pmis
+      integer, dimension(:), allocatable, target, intent(inout) :: cf_markers_local
+      logical, optional, intent(in)       :: zero_measure_c_point
+
+#if defined(PETSC_HAVE_KOKKOS)                     
+      integer(c_long_long) :: A_array
+      PetscErrorCode :: ierr
+      MatType :: mat_type
+      integer :: pmis_int, zero_measure_c_point_int, seed_size, kfree, comm_rank, errorcode
+      integer, dimension(:), allocatable :: seed
+      PetscReal, dimension(:), allocatable, target :: measure_local
+      PetscInt :: local_rows, local_cols
+      MPI_Comm :: MPI_COMM_MATRIX    
+      type(c_ptr)  :: measure_local_ptr, cf_markers_local_ptr
+      !integer, dimension(:), allocatable :: cf_markers_local_two
+#endif        
+      ! ~~~~~~~~~~
+
+#if defined(PETSC_HAVE_KOKKOS)    
+
+      call MatGetType(strength_mat, mat_type, ierr)
+      if (mat_type == MATMPIAIJKOKKOS .OR. mat_type == MATSEQAIJKOKKOS .OR. &
+            mat_type == MATAIJKOKKOS) then  
+
+         call PetscObjectGetComm(strength_mat, MPI_COMM_MATRIX, ierr)    
+         call MPI_Comm_rank(MPI_COMM_MATRIX, comm_rank, errorcode)                  
+
+         A_array = strength_mat%v  
+         pmis_int = 0
+         if (pmis) pmis_int = 1
+         zero_measure_c_point_int = 0
+         if (present(zero_measure_c_point)) then
+            if (zero_measure_c_point) zero_measure_c_point_int = 1
+         end if
+
+         ! Let's generate the random values on the host for now so they match
+         ! for comparisons with pmisr_cpu
+         call MatGetLocalSize(strength_mat, local_rows, local_cols, ierr)
+         allocate(measure_local(local_rows))   
+         call random_seed(size=seed_size)
+         allocate(seed(seed_size))
+         do kfree = 1, seed_size
+            seed(kfree) = comm_rank + 1 + kfree
+         end do   
+         call random_seed(put=seed) 
+         ! Fill the measure with random numbers
+         call random_number(measure_local)
+         deallocate(seed)   
+         
+         measure_local_ptr = c_loc(measure_local)
+
+         allocate(cf_markers_local(local_rows))  
+         cf_markers_local_ptr = c_loc(cf_markers_local)
+
+         call pmisr_kokkos(A_array, max_luby_steps, pmis_int, measure_local_ptr, cf_markers_local_ptr, zero_measure_c_point_int)
+
+         ! call pmisr_cpu(strength_mat, max_luby_steps, pmis, cf_markers_local_two, zero_measure_c_point)  
+         
+         ! if (any(cf_markers_local /= cf_markers_local_two)) then
+
+         !    do kfree = 1, local_rows
+         !       if (cf_markers_local(kfree) /= cf_markers_local_two(kfree)) then
+         !          print *, kfree, "no match", cf_markers_local(kfree), cf_markers_local_two(kfree)
+         !       end if
+         !    end do
+         !    call exit(0)
+         ! end if
+
+      else
+         call pmisr_cpu(strength_mat, max_luby_steps, pmis, cf_markers_local, zero_measure_c_point)       
+      end if
+#else
+      call pmisr_cpu(strength_mat, max_luby_steps, pmis, cf_markers_local, zero_measure_c_point)
+#endif        
+
+      ! ~~~~~~ 
+
+   end subroutine pmisr
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine pmisr_cpu(strength_mat, max_luby_steps, pmis, cf_markers_local, zero_measure_c_point)
 
       ! Let's do our own independent set with a Luby algorithm
       ! If PMIS is true, this is a traditional PMIS algorithm
@@ -549,7 +639,7 @@ module pmisr_ddc
          deallocate(measure_nonlocal)        
       end if
 
-   end subroutine pmisr  
+   end subroutine pmisr_cpu  
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 
