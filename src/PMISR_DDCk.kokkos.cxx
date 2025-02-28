@@ -13,10 +13,6 @@ using intKokkosViewHost = Kokkos::View<int *, Kokkos::HostSpace>;
 using intKokkosView = Kokkos::View<int *, Kokkos::DefaultExecutionSpace>;
 using boolKokkosView = Kokkos::View<bool *, Kokkos::DefaultExecutionSpace>;
 
-// Define C and F points in the CF marker 
-int C_POINT = 1;
-int F_POINT = -1;
-
 //------------------------------------------------------------------------------------------------------------------------
 
 // PMISR cf splitting but on the device
@@ -140,22 +136,22 @@ PETSC_INTERN void pmisr_kokkos(Mat *strength_mat, int max_luby_steps, int pmis_i
          if (zero_measure_c_point_int == 1) {
             if (pmis_int == 1) {
                // Set as F here but reversed below to become C
-               cf_markers_local_real_d(i) = F_POINT;
+               cf_markers_local_real_d(i) = -1;
             }
             else {
                // Becomes C
-               cf_markers_local_real_d(i) = C_POINT;
+               cf_markers_local_real_d(i) = 1;
             }  
          }
          else {
             if (pmis_int == 1) {
                // Set as C here but reversed below to become F
                // Otherwise dirichlet conditions persist down onto the coarsest grid
-               cf_markers_local_real_d(i) = C_POINT;
+               cf_markers_local_real_d(i) = 1;
             }
             else {
                // Becomes F
-               cf_markers_local_real_d(i) = F_POINT;
+               cf_markers_local_real_d(i) = -1;
             }
          }
       }
@@ -350,7 +346,7 @@ PETSC_INTERN void pmisr_kokkos(Mat *strength_mat, int max_luby_steps, int pmis_i
                      Kokkos::TeamThreadRange(t, ncols_nonlocal), [&](const PetscInt j) {
 
                         // Needs to be atomic as may being set by many threads
-                        Kokkos::atomic_store(&cf_markers_nonlocal_real_d(device_nonlocal_j[device_nonlocal_i[i] + j]), double(C_POINT));     
+                        Kokkos::atomic_store(&cf_markers_nonlocal_real_d(device_nonlocal_j[device_nonlocal_i[i] + j]), 1.0);     
                   });     
                }
          }); 
@@ -383,7 +379,7 @@ PETSC_INTERN void pmisr_kokkos(Mat *strength_mat, int max_luby_steps, int pmis_i
                   Kokkos::TeamThreadRange(t, ncols_local), [&](const PetscInt j) {
 
                      // Needs to be atomic as may being set by many threads
-                     Kokkos::atomic_store(&cf_markers_local_real_d(device_local_j[device_local_i[i] + j]), double(C_POINT));     
+                     Kokkos::atomic_store(&cf_markers_local_real_d(device_local_j[device_local_i[i] + j]), 1.0);     
                });     
             }
       });   
@@ -431,15 +427,15 @@ PETSC_INTERN void pmisr_kokkos(Mat *strength_mat, int max_luby_steps, int pmis_i
          
       if (cf_markers_local_real_const_d(i) == 0)
       {
-         cf_markers_local_d(i) = C_POINT;
+         cf_markers_local_d(i) = 1;
       }
       else if (cf_markers_local_real_const_d(i) < 0)
       {
-         cf_markers_local_d(i) = F_POINT;
+         cf_markers_local_d(i) = -1;
       }
       else
       {
-         cf_markers_local_d(i) = C_POINT;
+         cf_markers_local_d(i) = 1;
       }
       if (pmis_int) cf_markers_local_d(i) *= -1;
    });  
