@@ -918,6 +918,7 @@ PETSC_INTERN void MatSetAllValues_kokkos(Mat *input_mat, PetscReal val)
    if (mpi) Kokkos::deep_copy(a_nonlocal_d, val); 
 
    // Have to specify we've modifed data on the device
+   // Want to call MatSeqAIJKokkosModifyDevice but its PETSC_INTERN
    Mat_SeqAIJKokkos *aijkok = static_cast<Mat_SeqAIJKokkos *>(mat_local->spptr);
    aijkok->a_dual.clear_sync_state();
    aijkok->a_dual.modify_device();
