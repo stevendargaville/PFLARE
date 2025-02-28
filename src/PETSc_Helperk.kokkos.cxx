@@ -900,6 +900,10 @@ PETSC_INTERN void MatSetAllValues_kokkos(Mat *input_mat, PetscReal val)
    }
    PetscInt local_rows, local_cols;
    MatGetLocalSize(*input_mat, &local_rows, &local_cols);
+
+   Mat_SeqAIJKokkos *aijkok_nonlocal;
+   Mat_SeqAIJKokkos *aijkok_local = static_cast<Mat_SeqAIJKokkos *>(mat_local->spptr);
+   if(mpi) aijkok_nonlocal = static_cast<Mat_SeqAIJKokkos *>(mat_nonlocal->spptr);
    
    // ~~~~~~~~~~~~
    // Get pointers to the i,j,vals on the device
@@ -911,30 +915,28 @@ PETSC_INTERN void MatSetAllValues_kokkos(Mat *input_mat, PetscReal val)
    if (mpi) MatSeqAIJGetCSRAndMemType(mat_nonlocal, &device_nonlocal_i, &device_nonlocal_j, &device_nonlocal_vals, &mtype);          
 
    MatScalarKokkosView a_local_d, a_nonlocal_d;
-   a_local_d = PetscScalarKokkosView(device_local_vals, device_local_i[local_rows]);   
-   if (mpi) a_nonlocal_d = PetscScalarKokkosView(device_nonlocal_vals, device_nonlocal_i[local_rows]); 
+   a_local_d = PetscScalarKokkosView(device_local_vals, aijkok_local->csrmat.nnz());   
+   if (mpi) a_nonlocal_d = PetscScalarKokkosView(device_nonlocal_vals, aijkok_nonlocal->csrmat.nnz()); 
    // Copy in the val
    Kokkos::deep_copy(a_local_d, val); 
    if (mpi) Kokkos::deep_copy(a_nonlocal_d, val); 
 
    // Have to specify we've modifed data on the device
    // Want to call MatSeqAIJKokkosModifyDevice but its PETSC_INTERN
-   Mat_SeqAIJKokkos *aijkok = static_cast<Mat_SeqAIJKokkos *>(mat_local->spptr);
-   aijkok->a_dual.clear_sync_state();
-   aijkok->a_dual.modify_device();
-   aijkok->transpose_updated = PETSC_FALSE;
-   aijkok->hermitian_updated = PETSC_FALSE;
+
+   aijkok_local->a_dual.clear_sync_state();
+   aijkok_local->a_dual.modify_device();
+   aijkok_local->transpose_updated = PETSC_FALSE;
+   aijkok_local->hermitian_updated = PETSC_FALSE;
    //MatSeqAIJInvalidateDiagonal(mat_local);
    PetscObjectStateIncrease((PetscObject)input_mat);
 
-   aijkok->a_dual.modify_device();
    if (mpi)
    {
-      aijkok = static_cast<Mat_SeqAIJKokkos *>(mat_nonlocal->spptr);
-      aijkok->a_dual.clear_sync_state();
-      aijkok->a_dual.modify_device();
-      aijkok->transpose_updated = PETSC_FALSE;
-      aijkok->hermitian_updated = PETSC_FALSE;
+      aijkok_nonlocal->a_dual.clear_sync_state();
+      aijkok_nonlocal->a_dual.modify_device();
+      aijkok_nonlocal->transpose_updated = PETSC_FALSE;
+      aijkok_nonlocal->hermitian_updated = PETSC_FALSE;
       //MatSeqAIJInvalidateDiagonal(mat_local);    
    }
 
