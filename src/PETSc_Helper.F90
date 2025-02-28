@@ -183,9 +183,10 @@ module petsc_helper
 
       ! We know we never have more to do than the original nnzs
       allocate(row_indices(max_nnzs_total))
+      allocate(col_indices(max_nnzs_total))
       ! By default drop everything
       row_indices = -1
-      allocate(col_indices(max_nnzs_total))
+      col_indices = -1
       allocate(v(max_nnzs_total))      
 
       call MatCreate(MPI_COMM_MATRIX, output_mat, ierr)
@@ -491,6 +492,113 @@ module petsc_helper
       deallocate(v)  
          
    end subroutine remove_from_sparse_match
+
+   !------------------------------------------------------------------------------------------------------------------------
+   
+   subroutine MatSetAllValues(input_mat, val)
+
+      ! Sets all the values in the matrix to be val
+   
+      ! ~~~~~~~~~~
+      ! Input 
+      type(tMat), intent(in)  :: input_mat
+      PetscScalar, intent(in) :: val
+
+#if defined(PETSC_HAVE_KOKKOS)                     
+      integer(c_long_long) :: A_array
+      PetscErrorCode :: ierr
+      MatType :: mat_type
+#endif        
+      ! ~~~~~~~~~~
+
+#if defined(PETSC_HAVE_KOKKOS)    
+
+      call MatGetType(input_mat, mat_type, ierr)
+      if (mat_type == MATMPIAIJKOKKOS .OR. mat_type == MATSEQAIJKOKKOS .OR. &
+            mat_type == MATAIJKOKKOS) then  
+
+         A_array = input_mat%v             
+         call MatSetAllValues_kokkos(A_array, val) 
+
+      else
+         call MatSetAllValues_cpu(input_mat, val)          
+      end if
+#else
+      call MatSetAllValues_cpu(input_mat, val)    
+#endif        
+
+
+   end subroutine MatSetAllValues
+
+   !------------------------------------------------------------------------------------------------------------------------
+   
+   subroutine MatSetAllValues_cpu(input_mat, val)
+
+      ! Sets all the values in the matrix to be val
+   
+      ! ~~~~~~~~~~
+      ! Input 
+      type(tMat), intent(in)  :: input_mat
+      PetscScalar, intent(in) :: val
+
+      MPI_Comm :: MPI_COMM_MATRIX
+      integer :: errorcode, comm_size
+      PetscErrorCode :: ierr
+      type(tMat) :: Ad, Ao
+      PetscOffset :: iicol
+      PetscInt :: icol(1)      
+      PetscScalar, pointer :: xx_v(:)
+      PetscInt, dimension(:), pointer :: ad_ia, ad_ja, ao_ia, ao_ja
+      PetscInt :: shift = 0, n_ad, n_ao, local_rows, local_cols
+      logical :: symmetric = .false., inodecompressed=.false., done      
+
+      ! ~~~~~~~~~~
+
+      call PetscObjectGetComm(input_mat, MPI_COMM_MATRIX, ierr)    
+      ! Get the comm size 
+      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)      
+      call MatGetLocalSize(input_mat, local_rows, local_cols, ierr)
+
+      if (comm_size /= 1) then
+         ! Let's get the diagonal and off-diagonal parts of the strength matrix
+         call MatMPIAIJGetSeqAIJ(input_mat, Ad, Ao, icol, iicol, ierr) 
+      else
+         Ad = input_mat    
+      end if      
+
+      ! Need to know how many nnzs in xx_v, as its size isn't set
+      call MatGetRowIJF90(Ad,shift,symmetric,inodecompressed,n_ad,ad_ia,ad_ja,done,ierr) 
+      if (.NOT. done) then
+         print *, "Pointers not set in call to MatGetRowIJF90"
+         call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
+      end if
+      if (comm_size /= 1) then
+         call MatGetRowIJF90(Ao,shift,symmetric,inodecompressed,n_ao,ao_ia,ao_ja,done,ierr) 
+         if (.NOT. done) then
+            print *, "Pointers not set in call to MatGetRowIJF90"
+            call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
+         end if
+      end if       
+
+      ! Sequential part
+      call MatSeqAIJGetArrayF90(Ad,xx_v,ierr)
+      xx_v(1:ad_ia(local_rows+1)) = val
+      call MatSeqAIJRestoreArrayF90(Ad,xx_v,ierr)
+     
+      ! MPI part
+      if (comm_size /= 1) then
+         call MatSeqAIJGetArrayF90(Ao,xx_v,ierr)
+         xx_v(1:ao_ia(local_rows+1)) = val
+         call MatSeqAIJRestoreArrayF90(Ao,xx_v,ierr)         
+      end if   
+      
+      ! Restore the sequantial pointers once we're done
+      call MatRestoreRowIJF90(Ad,shift,symmetric,inodecompressed,n_ad,ad_ia,ad_ja,done,ierr) 
+      if (comm_size /= 1) then
+         call MatRestoreRowIJF90(Ao,shift,symmetric,inodecompressed,n_ao,ao_ia,ao_ja,done,ierr) 
+      end if        
+
+   end subroutine MatSetAllValues_cpu   
 
   !------------------------------------------------------------------------------------------------------------------------
    

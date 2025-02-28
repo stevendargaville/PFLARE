@@ -3,6 +3,7 @@ module cf_splitting
    use petsc
    use pmisr_ddc
    use aggregation
+   use petsc_helper
 
 #include "petsc/finclude/petsc.h"
 
@@ -92,16 +93,13 @@ module cf_splitting
       logical, intent(in)        :: symmetrize, square
       logical, intent(in), optional :: allow_drop_diagonal
       
-      PetscInt :: col, ncols, ifree, max_nnzs
+      PetscInt :: ifree
       PetscInt :: local_rows, local_cols, global_rows, global_cols
       PetscInt :: global_row_start, global_row_end_plus_one
-      PetscInt :: global_col_start, global_col_end_plus_one, jfree, diagonal_index
+      PetscInt :: global_col_start, global_col_end_plus_one
       integer :: counter, errorcode, comm_size
       PetscErrorCode :: ierr
-      PetscInt, dimension(:), allocatable :: nnzs_row, onzs_row, cols, cols_mod
-      PetscReal, dimension(:), allocatable :: vals, vals_copy
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0
-      PetscReal :: rel_row_tol, abs_biggest_entry
       MPI_Comm :: MPI_COMM_MATRIX
       type(tMat) :: transpose_mat
       type(tIS) :: zero_diags
@@ -193,24 +191,7 @@ module cf_splitting
       end if   
       
       ! Reset the entries in the strength matrix back to 1
-      if (symmetrize .OR. square) then
-         max_nnzs = 0
-         do ifree = global_row_start, global_row_end_plus_one-1     
-            call MatGetRow(output_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)  
-            if (ncols > max_nnzs) max_nnzs = ncols
-            call MatRestoreRow(output_mat, ifree, ncols, PETSC_NULL_INTEGER_ARRAY, PETSC_NULL_SCALAR_ARRAY, ierr)               
-         end do
-         allocate(vals(max_nnzs))
-         vals = 1d0
-         ! Set all the values in the matrix to one
-         do ifree = global_row_start, global_row_end_plus_one-1     
-            ! Set every entry in this row
-            call MatSetValuesRow(output_mat, ifree, vals, ierr)
-         end do
-         deallocate(vals)
-         call MatAssemblyBegin(output_mat, MAT_FINAL_ASSEMBLY, ierr)
-         call MatAssemblyEnd(output_mat, MAT_FINAL_ASSEMBLY, ierr)          
-      end if
+      if (symmetrize .OR. square) call MatSetAllValues(output_mat, 1d0)
 
    end subroutine generate_sabs     
 
