@@ -103,9 +103,24 @@ PETSC_INTERN void pmisr_kokkos(Mat *strength_mat, int max_luby_steps, int pmis_i
    // We use a vec to do our scatter
    Vec cf_markers_vec;
    PetscScalarKokkosView cf_markers_local_real_d;
-   ConstPetscScalarKokkosView cf_markers_local_real_const_d;
+   ConstPetscScalarKokkosView cf_markers_local_real_const_d, cf_markers_nonlocal_real_const_d;
    // Create a kokkos vector
    MatCreateVecs(*strength_mat, &cf_markers_vec, NULL);
+
+   // ~~~~~~~~~~~~~
+   // Now we're going to be very careful about when we get kokkos read/write views
+   // because we use vecscatter to do the communication
+   // We have to ensure that when we overwrite device data, that we call restore on 
+   // any writes so that petsc knows we have modified device data
+   // Also when we get a view write, we can't assume the data is up to date
+   // on the device as that is used when overwriting all the data
+   // So we have to use a confusing mix here of const views and view writes
+   // Don't ever have to call VecRestoreKokkosView on a const view
+   // Also if the mpi is not gpu aware, I think vecscatter does updates on the host
+   // So everytime after a vecscatter we will have to call VecGetKokkosView on the
+   // const views again to ensure everything is sync'd 
+   // if it is all sync'd it will do nothing anyway so should be no cost
+   // ~~~~~~~~~~~~~
 
    // Get a device pointer for cf_markers_vec
    VecGetKokkosViewWrite(cf_markers_vec, &cf_markers_local_real_d);
@@ -120,11 +135,9 @@ PETSC_INTERN void pmisr_kokkos(Mat *strength_mat, int max_luby_steps, int pmis_i
       VecScatterEnd(mat_mpi->Mvctx, cf_markers_vec, mat_mpi->lvec, INSERT_VALUES, SCATTER_FORWARD);
 
       // Get a device pointer for cf_markers_vec non local components
-      ConstPetscScalarKokkosView cf_markers_nonlocal_real_d;
-      VecGetKokkosView(mat_mpi->lvec, &cf_markers_nonlocal_real_d);
+      VecGetKokkosView(mat_mpi->lvec, &cf_markers_nonlocal_real_const_d);
       // Copy the non local measure
-      Kokkos::deep_copy(measure_nonlocal_d, cf_markers_nonlocal_real_d);    
-      VecRestoreKokkosView(mat_mpi->lvec, &cf_markers_nonlocal_real_d);   
+      Kokkos::deep_copy(measure_nonlocal_d, cf_markers_nonlocal_real_const_d);    
    }
 
    // Initialise the set
@@ -269,11 +282,9 @@ PETSC_INTERN void pmisr_kokkos(Mat *strength_mat, int max_luby_steps, int pmis_i
       // ~~~~~~~~           
       if (mpi) {
 
-         ConstPetscScalarKokkosView cf_markers_nonlocal_real_d;
-         VecGetKokkosView(mat_mpi->lvec, &cf_markers_nonlocal_real_d);         
-
          // Finish the async scatter
          VecScatterEnd(mat_mpi->Mvctx, cf_markers_vec, mat_mpi->lvec, INSERT_VALUES, SCATTER_FORWARD);
+         VecGetKokkosView(mat_mpi->lvec, &cf_markers_nonlocal_real_const_d);         
 
          Kokkos::parallel_for(
             Kokkos::TeamPolicy<>(PetscGetKokkosExecutionSpace(), local_rows, Kokkos::AUTO()),
@@ -294,8 +305,8 @@ PETSC_INTERN void pmisr_kokkos(Mat *strength_mat, int max_luby_steps, int pmis_i
                      Kokkos::TeamThreadRange(t, ncols_nonlocal),
                      [&](const PetscInt j, int& strong_count) {     
 
-                     if (measure_nonlocal_d(i) >= measure_nonlocal_d(device_nonlocal_j[device_nonlocal_i[i] + j])  && \
-                              cf_markers_nonlocal_real_d(device_nonlocal_j[device_nonlocal_i[i] + j]) == 0)
+                     if (measure_local_d(i) >= measure_nonlocal_d(device_nonlocal_j[device_nonlocal_i[i] + j])  && \
+                              cf_markers_nonlocal_real_const_d(device_nonlocal_j[device_nonlocal_i[i] + j]) == 0)
                      {
                         strong_count++;
                      }
@@ -310,25 +321,22 @@ PETSC_INTERN void pmisr_kokkos(Mat *strength_mat, int max_luby_steps, int pmis_i
                   });
                }
          }); 
-
-         VecRestoreKokkosView(mat_mpi->lvec, &cf_markers_nonlocal_real_d);            
       }
 
-      VecRestoreKokkosView(cf_markers_vec, &cf_markers_local_real_const_d);
       VecGetKokkosViewWrite(cf_markers_vec, &cf_markers_local_real_d);
 
-      // Any that aren't zero cf marker are already assigned so set to to false
+      // The nodes that have mark equal to true have no strong active neighbours in the IS
+      // hence they can be in the IS
       Kokkos::parallel_for(
          Kokkos::RangePolicy<>(0, local_rows), KOKKOS_LAMBDA(int i) {
 
             if (mark_d(i)) cf_markers_local_real_d(i) = double(loops_through);
       });      
       VecRestoreKokkosViewWrite(cf_markers_vec, &cf_markers_local_real_d);
-      VecGetKokkosView(cf_markers_vec, &cf_markers_local_real_const_d);
+
 
       if (mpi) 
       {
-
          // We need a non const view now
          PetscScalarKokkosView cf_markers_nonlocal_real_d;
          VecGetKokkosViewWrite(mat_mpi->lvec, &cf_markers_nonlocal_real_d); 
@@ -364,7 +372,7 @@ PETSC_INTERN void pmisr_kokkos(Mat *strength_mat, int max_luby_steps, int pmis_i
          // We've updated the values in cf_markers_nonlocal, which is a pointer to lvec
          // Calling a reverse scatter add will then update the values of cf_markers_vec
          // Begin the scatter asynchronously
-         VecScatterBegin(mat_mpi->Mvctx, cf_markers_vec, mat_mpi->lvec, ADD_VALUES, SCATTER_REVERSE);
+         VecScatterBegin(mat_mpi->Mvctx, mat_mpi->lvec, cf_markers_vec, ADD_VALUES, SCATTER_REVERSE);
       }
 
       VecGetKokkosViewWrite(cf_markers_vec, &cf_markers_local_real_d);
@@ -392,12 +400,11 @@ PETSC_INTERN void pmisr_kokkos(Mat *strength_mat, int max_luby_steps, int pmis_i
             }
       });   
       VecRestoreKokkosViewWrite(cf_markers_vec, &cf_markers_local_real_d);    
-      VecRestoreKokkosView(cf_markers_vec, &cf_markers_local_real_const_d);
 
       if (mpi) 
       {
          // Finish the scatter
-         VecScatterEnd(mat_mpi->Mvctx, cf_markers_vec, mat_mpi->lvec, ADD_VALUES, SCATTER_REVERSE);
+         VecScatterEnd(mat_mpi->Mvctx, mat_mpi->lvec, cf_markers_vec, ADD_VALUES, SCATTER_REVERSE);
       }
 
       // We've done another top level loop
@@ -414,8 +421,6 @@ PETSC_INTERN void pmisr_kokkos(Mat *strength_mat, int max_luby_steps, int pmis_i
          Kokkos::parallel_reduce ("ReductionCounter_undecided", local_rows, KOKKOS_LAMBDA (const int i, int& update) {
             if (cf_markers_local_real_const_d(i) == 0) update++;
          }, counter_undecided);  
-
-         VecRestoreKokkosView(cf_markers_vec, &cf_markers_local_real_const_d);       
 
          // Parallel reduction!
          MPI_Allreduce(&counter_undecided, &counter_parallel, 1, MPI_INTEGER, MPI_SUM, MPI_COMM_MATRIX);
@@ -447,8 +452,6 @@ PETSC_INTERN void pmisr_kokkos(Mat *strength_mat, int max_luby_steps, int pmis_i
       }
       if (pmis_int) cf_markers_local_d(i) *= -1;
    });  
-
-   VecRestoreKokkosView(cf_markers_vec, &cf_markers_local_real_const_d);   
 
    // Now copy device cf_markers_local_d back to host
    Kokkos::deep_copy(cf_markers_local_h, cf_markers_local_d);
