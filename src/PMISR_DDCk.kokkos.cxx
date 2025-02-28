@@ -74,17 +74,19 @@ PETSC_INTERN void pmisr_kokkos(Mat *strength_mat, int max_luby_steps, int pmis_i
    // Device memory for the mark
    boolKokkosView mark_d("mark_d", local_rows);   
 
-   Kokkos::Random_XorShift64_Pool<> random_pool(/*seed=*/12345);
+   // If you want to generate the randoms on the device
+   //Kokkos::Random_XorShift64_Pool<> random_pool(/*seed=*/12345);
    // Copy the input measure from host to device
-   //Kokkos::deep_copy(measure_local_d, measure_local_h);  
+   Kokkos::deep_copy(measure_local_d, measure_local_h);  
 
    // Compute the measure
    Kokkos::parallel_for(
       Kokkos::RangePolicy<>(0, local_rows), KOKKOS_LAMBDA(int i) {
 
-      auto generator = random_pool.get_state();
-      measure_local_d(i) = generator.drand(0., 1.);
-      random_pool.free_state(generator);
+      // Randoms on the device
+      // auto generator = random_pool.get_state();
+      // measure_local_d(i) = generator.drand(0., 1.);
+      // random_pool.free_state(generator);
          
       PetscInt ncols_local = device_local_i[i + 1] - device_local_i[i];
       measure_local_d(i) += ncols_local;

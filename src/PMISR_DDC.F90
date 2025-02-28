@@ -69,15 +69,15 @@ module pmisr_ddc
          ! for comparisons with pmisr_cpu
          call MatGetLocalSize(strength_mat, local_rows, local_cols, ierr)
          allocate(measure_local(local_rows))   
-         ! call random_seed(size=seed_size)
-         ! allocate(seed(seed_size))
-         ! do kfree = 1, seed_size
-         !    seed(kfree) = comm_rank + 1 + kfree
-         ! end do   
-         ! call random_seed(put=seed) 
-         ! ! Fill the measure with random numbers
-         ! call random_number(measure_local)
-         ! deallocate(seed)   
+         call random_seed(size=seed_size)
+         allocate(seed(seed_size))
+         do kfree = 1, seed_size
+            seed(kfree) = comm_rank + 1 + kfree
+         end do   
+         call random_seed(put=seed) 
+         ! Fill the measure with random numbers
+         call random_number(measure_local)
+         deallocate(seed)   
          
          measure_local_ptr = c_loc(measure_local)
 
