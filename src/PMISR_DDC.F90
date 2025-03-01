@@ -44,7 +44,7 @@ module pmisr_ddc
       PetscInt :: local_rows, local_cols
       MPI_Comm :: MPI_COMM_MATRIX    
       type(c_ptr)  :: measure_local_ptr, cf_markers_local_ptr
-      !integer, dimension(:), allocatable :: cf_markers_local_two
+      integer, dimension(:), allocatable :: cf_markers_local_two
 #endif        
       ! ~~~~~~~~~~
 
@@ -86,17 +86,22 @@ module pmisr_ddc
 
          call pmisr_kokkos(A_array, max_luby_steps, pmis_int, measure_local_ptr, cf_markers_local_ptr, zero_measure_c_point_int)
 
-         ! call pmisr_cpu(strength_mat, max_luby_steps, pmis, cf_markers_local_two, zero_measure_c_point)  
-         
-         ! if (any(cf_markers_local /= cf_markers_local_two)) then
+         ! If debugging do a comparison between CPU and Kokkos results
+         if (kokkos_debug()) then         
+            call pmisr_cpu(strength_mat, max_luby_steps, pmis, cf_markers_local_two, zero_measure_c_point)  
+            
+            if (any(cf_markers_local /= cf_markers_local_two)) then
 
-         !    do kfree = 1, local_rows
-         !       if (cf_markers_local(kfree) /= cf_markers_local_two(kfree)) then
-         !          print *, kfree, "no match", cf_markers_local(kfree), cf_markers_local_two(kfree)
-         !       end if
-         !    end do
-         !    call exit(0)
-         ! end if
+               ! do kfree = 1, local_rows
+               !    if (cf_markers_local(kfree) /= cf_markers_local_two(kfree)) then
+               !       print *, kfree, "no match", cf_markers_local(kfree), cf_markers_local_two(kfree)
+               !    end if
+               ! end do
+               print *, "Kokkos and CPU versions of pmisr do not match"
+               call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode) 
+            end if
+            deallocate(cf_markers_local_two)
+         end if
 
       else
          call pmisr_cpu(strength_mat, max_luby_steps, pmis, cf_markers_local, zero_measure_c_point)       
@@ -664,8 +669,9 @@ module pmisr_ddc
       PetscErrorCode :: ierr
       MatType :: mat_type
       type(c_ptr)  :: cf_markers_local_ptr
-      !integer :: kfree      
-      !integer, dimension(:), allocatable :: cf_markers_local_two
+      integer :: errorcode
+      !integer :: kfree
+      integer, dimension(:), allocatable :: cf_markers_local_two
 #endif 
       ! ~~~~~~  
 
@@ -684,22 +690,30 @@ module pmisr_ddc
          indices = is_fine%v
          cf_markers_local_ptr = c_loc(cf_markers_local)
 
-         !allocate(cf_markers_local_two(size(cf_markers_local)))
-         !cf_markers_local_two = cf_markers_local
+         ! If debugging do a comparison between CPU and Kokkos results
+         if (kokkos_debug()) then         
+            allocate(cf_markers_local_two(size(cf_markers_local)))
+            cf_markers_local_two = cf_markers_local
+         end if
 
          call ddc_kokkos(A_array, indices, fraction_swap, cf_markers_local_ptr)
 
-         ! call ddc_cpu(input_mat, is_fine, fraction_swap, cf_markers_local_two)  
+         ! If debugging do a comparison between CPU and Kokkos results
+         if (kokkos_debug()) then  
+            call ddc_cpu(input_mat, is_fine, fraction_swap, cf_markers_local_two)  
 
-         ! if (any(cf_markers_local /= cf_markers_local_two)) then
+            if (any(cf_markers_local /= cf_markers_local_two)) then
 
-         !    do kfree = 1, size(cf_markers_local)
-         !       if (cf_markers_local(kfree) /= cf_markers_local_two(kfree)) then
-         !          print *, kfree-1, "no match", cf_markers_local(kfree), cf_markers_local_two(kfree)
-         !       end if
-         !    end do
-         !    call exit(0)
-         ! end if
+               ! do kfree = 1, size(cf_markers_local)
+               !    if (cf_markers_local(kfree) /= cf_markers_local_two(kfree)) then
+               !       print *, kfree-1, "no match", cf_markers_local(kfree), cf_markers_local_two(kfree)
+               !    end if
+               ! end do
+               print *, "Kokkos and CPU versions of ddc do not match"
+               call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode) 
+            end if
+            deallocate(cf_markers_local_two)
+         end if
 
       else
          call ddc_cpu(input_mat, is_fine, fraction_swap, cf_markers_local)     

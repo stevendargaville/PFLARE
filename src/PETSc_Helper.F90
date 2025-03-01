@@ -10,6 +10,9 @@ module petsc_helper
 
 #include "petsc_legacy.h"
 
+logical, protected :: got_debug_kokkos_env = .FALSE.
+logical, protected :: kokkos_debug_global = .FALSE.
+
    public
 
    ! -------------------------------------------------------------------------------------------------------------------------------
@@ -19,6 +22,49 @@ module petsc_helper
    ! -------------------------------------------------------------------------------------------------------------------------------      
 
    contains 
+
+   !~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   function kokkos_debug ()
+
+      ! This checks if an environmental variable is defined 
+      ! If it is we check if the Kokkos and CPU versions of routines
+      ! are the same
+
+      ! ~~~~~~~~~~~~
+      logical      :: kokkos_debug
+
+#if defined(PETSC_HAVE_KOKKOS)       
+      integer :: env_val, length, status
+      CHARACTER(len=255) :: env_char      
+#endif      
+      ! ~~~~~~~~~~~~
+      
+      kokkos_debug = .FALSE.
+     
+#if defined(PETSC_HAVE_KOKKOS)    
+
+      ! Only get the environmental variable once
+      if (got_debug_kokkos_env) then
+         kokkos_debug = kokkos_debug_global
+      else
+         ! Check if the environment variable is set
+         call get_environment_variable('PFLARE_KOKKOS_DEBUG', env_char, &
+                  length=length, status=status)
+
+         got_debug_kokkos_env = .TRUE.
+         if (status /= 1 .AND. length /= 0) then
+            read(env_char, '(I3)') env_val
+            if (env_val == 1) then
+               kokkos_debug_global = .TRUE.
+               kokkos_debug = kokkos_debug_global
+            end if
+         end if
+      end if
+
+#endif
+      
+    end function kokkos_debug   
  
    !------------------------------------------------------------------------------------------------------------------------
    
@@ -36,11 +82,11 @@ module petsc_helper
       
 #if defined(PETSC_HAVE_KOKKOS)                     
       integer(c_long_long) :: A_array, B_array
-      integer :: lump_int, allow_drop_diagonal_int, rel_max_row_tol_int
+      integer :: lump_int, allow_drop_diagonal_int, rel_max_row_tol_int, errorcode
       PetscErrorCode :: ierr
       MatType :: mat_type
-      !Mat :: temp_mat
-      !PetscScalar normy;
+      Mat :: temp_mat
+      PetscScalar normy;
 #endif      
       ! ~~~~~~~~~~
 
@@ -72,19 +118,22 @@ module petsc_helper
                   B_array, rel_max_row_tol_int, lump_int, allow_drop_diagonal_int) 
          output_mat%v = B_array
 
-         ! Debug check if the CPU and Kokkos versions are the same
-         ! call remove_small_from_sparse_cpu(input_mat, tol, temp_mat, relative_max_row_tol_int, &
-         !          lump, drop_diagonal_int)       
+         ! If debugging do a comparison between CPU and Kokkos results
+         if (kokkos_debug()) then
 
-         ! call MatAXPY(temp_mat, -1d0, output_mat, DIFFERENT_NONZERO_PATTERN, ierr)
-         ! call MatNorm(temp_mat, NORM_FROBENIUS, normy, ierr)
-         ! if (normy .gt. 1d-14) then
-         !    print *, "diff"
-         !    call MatFilter(temp_mat, 1d-14, PETSC_TRUE, PETSC_FALSE, ierr)
-         !    !call MatView(temp_mat, PETSC_VIEWER_STDOUT_WORLD, ierr)
-         !    print *, "Kokkos and CPU versions of remove_small_from_sparse do not match"
-         !    call exit(0)
-         ! end if
+            ! Debug check if the CPU and Kokkos versions are the same
+            call remove_small_from_sparse_cpu(input_mat, tol, temp_mat, relative_max_row_tol_int, &
+                     lump, drop_diagonal_int)       
+
+            call MatAXPY(temp_mat, -1d0, output_mat, DIFFERENT_NONZERO_PATTERN, ierr)
+            call MatNorm(temp_mat, NORM_FROBENIUS, normy, ierr)
+            if (normy .gt. 1d-13) then
+               !call MatFilter(temp_mat, 1d-14, PETSC_TRUE, PETSC_FALSE, ierr)
+               !call MatView(temp_mat, PETSC_VIEWER_STDOUT_WORLD, ierr)
+               print *, "Kokkos and CPU versions of remove_small_from_sparse do not match"
+               call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)  
+            end if
+         end if
 
       else
 
