@@ -133,6 +133,7 @@ logical, protected :: kokkos_debug_global = .FALSE.
                print *, "Kokkos and CPU versions of remove_small_from_sparse do not match"
                call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)  
             end if
+            call MatDestroy(temp_mat, ierr)
          end if
 
       else
