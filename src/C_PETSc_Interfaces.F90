@@ -265,6 +265,18 @@ module c_petsc_interfaces
  
    end interface     
 
+   interface   
+      
+      subroutine ddc_kokkos(A_array, indices, fraction_swap, cf_markers_local) &
+         bind(c, name="ddc_kokkos")
+         use iso_c_binding
+         integer(c_long_long) :: A_array, indices
+         PetscReal, value :: fraction_swap
+         type(c_ptr), value :: cf_markers_local
+      end subroutine ddc_kokkos         
+ 
+   end interface      
+
 ! -------------------------------------------------------------------------------------------------------------------------------
 
 end module c_petsc_interfaces

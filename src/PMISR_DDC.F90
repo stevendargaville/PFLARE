@@ -640,7 +640,7 @@ module pmisr_ddc
       end if
 
    end subroutine pmisr_cpu  
-   
+
 ! -------------------------------------------------------------------------------------------------------------------------------
 
    subroutine ddc(input_mat, is_fine, fraction_swap, cf_markers_local)
@@ -656,7 +656,76 @@ module pmisr_ddc
       ! ~~~~~~
       type(tMat), target, intent(in)      :: input_mat
       type(tIS), intent(in)               :: is_fine
-      PetscReal, intent(in)                    :: fraction_swap
+      PetscReal, intent(in)               :: fraction_swap
+      integer, dimension(:), allocatable, target, intent(inout) :: cf_markers_local
+
+#if defined(PETSC_HAVE_KOKKOS)                     
+      integer(c_long_long) :: A_array, indices
+      PetscErrorCode :: ierr
+      MatType :: mat_type
+      type(c_ptr)  :: cf_markers_local_ptr
+      !integer :: kfree      
+      !integer, dimension(:), allocatable :: cf_markers_local_two
+#endif 
+      ! ~~~~~~  
+
+      ! If we don't need to swap anything, return
+      if (fraction_swap == 0d0) then
+         return
+      end if      
+
+#if defined(PETSC_HAVE_KOKKOS)    
+
+      call MatGetType(input_mat, mat_type, ierr)
+      if (mat_type == MATMPIAIJKOKKOS .OR. mat_type == MATSEQAIJKOKKOS .OR. &
+            mat_type == MATAIJKOKKOS) then  
+
+         A_array = input_mat%v  
+         indices = is_fine%v
+         cf_markers_local_ptr = c_loc(cf_markers_local)
+
+         !allocate(cf_markers_local_two(size(cf_markers_local)))
+         !cf_markers_local_two = cf_markers_local
+
+         call ddc_kokkos(A_array, indices, fraction_swap, cf_markers_local_ptr)
+
+         ! call ddc_cpu(input_mat, is_fine, fraction_swap, cf_markers_local_two)  
+
+         ! if (any(cf_markers_local /= cf_markers_local_two)) then
+
+         !    do kfree = 1, size(cf_markers_local)
+         !       if (cf_markers_local(kfree) /= cf_markers_local_two(kfree)) then
+         !          print *, kfree-1, "no match", cf_markers_local(kfree), cf_markers_local_two(kfree)
+         !       end if
+         !    end do
+         !    call exit(0)
+         ! end if
+
+      else
+         call ddc_cpu(input_mat, is_fine, fraction_swap, cf_markers_local)     
+      end if
+#else
+      call ddc_cpu(input_mat, is_fine, fraction_swap, cf_markers_local)
+#endif        
+      
+   end subroutine ddc
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine ddc_cpu(input_mat, is_fine, fraction_swap, cf_markers_local)
+
+      ! Second pass diagonal dominance cleanup 
+      ! Flips the F definitions to C based on least diagonally dominant local rows
+      ! If fraction_swap = 0 this does nothing
+      ! If fraction_swap < 0 it uses abs(fraction_swap) to be a threshold 
+      !  for swapping C to F based on row-wise diagonal dominance (ie alpha_diag)
+      ! If fraction_swap > 0 it uses fraction_swap as the local fraction of worst C points to swap to F
+      !  though it won't hit that fraction exactly as we bin the diag dom ratios for speed, it will be close to the fraction
+
+      ! ~~~~~~
+      type(tMat), target, intent(in)      :: input_mat
+      type(tIS), intent(in)               :: is_fine
+      PetscReal, intent(in)               :: fraction_swap
       integer, dimension(:), allocatable, intent(inout) :: cf_markers_local
 
       ! Local
@@ -675,11 +744,6 @@ module pmisr_ddc
       integer, dimension(1000) :: dom_bins
 
       ! ~~~~~~  
-
-      ! If we don't need to swap anything, return
-      if (fraction_swap == 0d0) then
-         return
-      end if
 
       ! The indices are the numbering in Aff matrix
       call ISGetIndicesF90(is_fine, is_pointer, ierr)   
@@ -778,7 +842,7 @@ module pmisr_ddc
          ! Otherwise swap everything bigger than a fixed fraction
          else
 
-            ! In order to reduce the size of the sort required, we have binned the entries into 100 bins
+            ! In order to reduce the size of the sort required, we have binned the entries into 1000 bins
             ! Let's count backwards from the biggest entries to find which bin we know the nth_element is in
             ! and then we only include those bins and higher into the sort
             bin_sum = 0
@@ -815,7 +879,7 @@ module pmisr_ddc
       call ISRestoreIndicesF90(is_fine, is_pointer, ierr)
       call MatDestroy(Aff, ierr)     
 
-   end subroutine ddc      
+   end subroutine ddc_cpu      
    
 ! -------------------------------------------------------------------------------------------------------------------------------
 

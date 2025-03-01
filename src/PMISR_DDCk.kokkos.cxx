@@ -13,6 +13,7 @@ using DefaultMemorySpace    = Kokkos::DefaultExecutionSpace::memory_space;
 using intKokkosViewHost = Kokkos::View<int *, Kokkos::HostSpace>;
 using intKokkosView = Kokkos::View<int *, Kokkos::DefaultExecutionSpace>;
 using boolKokkosView = Kokkos::View<bool *, Kokkos::DefaultExecutionSpace>;
+using PetscIntConstKokkosViewHost = Kokkos::View<const PetscInt *, Kokkos::HostSpace>;
 
 //------------------------------------------------------------------------------------------------------------------------
 
@@ -457,6 +458,237 @@ PETSC_INTERN void pmisr_kokkos(Mat *strength_mat, int max_luby_steps, int pmis_i
    Kokkos::deep_copy(cf_markers_local_h, cf_markers_local_d);
    // Can now destroy our vec
    VecDestroy(&cf_markers_vec);
+
+   return;
+}
+
+//------------------------------------------------------------------------------------------------------------------------
+
+// ddc cleanup but on the device
+PETSC_INTERN void ddc_kokkos(Mat *input_mat, IS *is_fine, PetscReal fraction_swap, int *cf_markers_local)
+{
+   MPI_Comm MPI_COMM_MATRIX;
+   PetscInt local_rows, local_cols, global_rows, global_cols;
+   MatType mat_type;
+
+   MatGetType(*input_mat, &mat_type);
+   // Are we in parallel?
+   bool mpi = strcmp(mat_type, MATMPIAIJKOKKOS) == 0;
+
+   // Get the comm
+   PetscObjectGetComm((PetscObject)*input_mat, &MPI_COMM_MATRIX);
+   MatGetLocalSize(*input_mat, &local_rows, &local_cols);
+   MatGetSize(*input_mat, &global_rows, &global_cols);
+   // This returns the global index of the local portion of the matrix
+
+   // Host and device memory for the cf_markers - be careful these aren't petsc ints
+   intKokkosViewHost cf_markers_local_h(cf_markers_local, local_rows);
+   intKokkosView cf_markers_local_d("cf_markers_local_d", local_rows);   
+   // Now copy cf markers to device
+   Kokkos::deep_copy(cf_markers_local_d, cf_markers_local_h);   
+
+   // Get pointers to the indices on the host
+   const PetscInt *fine_indices_ptr;
+   ISGetIndices(*is_fine, &fine_indices_ptr);
+
+   PetscInt fine_local_size;
+   ISGetLocalSize(*is_fine, &fine_local_size);     
+
+   // Create a host view of the existing indices
+   auto fine_view_h = PetscIntConstKokkosViewHost(fine_indices_ptr, fine_local_size);    
+   auto fine_view_d = PetscIntKokkosView("fine_view_d", fine_local_size);   
+   // Copy fine indices to the device
+   Kokkos::deep_copy(fine_view_d, fine_view_h);
+
+   // Do a fixed alpha_diag
+   PetscInt search_size;
+   if (fraction_swap < 0) {
+      // We have to look through all the local rows
+      search_size = fine_local_size;
+   }
+   // Or pick alpha_diag based on the worst % of rows
+   else {
+      // Only need to go through the biggest % of indices
+      search_size = int(double(fine_local_size) * fraction_swap);
+   }   
+
+   // Pull out Aff for ease of use
+   Mat Aff;
+   MatCreateSubMatrix(*input_mat, \
+            *is_fine, *is_fine, MAT_INITIAL_MATRIX, \
+            &Aff);
+
+   // Can't put this above because of collective operations in parallel (namely the getsubmatrix)
+   // If we have local points to swap
+   if (search_size > 0)
+   {
+
+      Mat_MPIAIJ *mat_mpi = nullptr;
+      Mat mat_local, mat_nonlocal;
+
+      if (mpi)
+      {
+         mat_mpi = (Mat_MPIAIJ *)(Aff)->data;
+         mat_local = mat_mpi->A;
+         mat_nonlocal = mat_mpi->B;
+      }
+      else
+      {
+         mat_local = Aff;
+      }            
+
+      // ~~~~~~~~~~~~
+      // Get pointers to the i,j,vals of Aff on the device
+      // ~~~~~~~~~~~~
+      const PetscInt *device_local_i = nullptr, *device_local_j = nullptr, *device_nonlocal_i = nullptr, *device_nonlocal_j = nullptr;
+      PetscMemType mtype;
+      PetscScalar *device_local_vals = nullptr, *device_nonlocal_vals = nullptr;  
+      MatSeqAIJGetCSRAndMemType(mat_local, &device_local_i, &device_local_j, &device_local_vals, &mtype);  
+      if (mpi) MatSeqAIJGetCSRAndMemType(mat_nonlocal, &device_nonlocal_i, &device_nonlocal_j, &device_nonlocal_vals, &mtype);  
+
+      PetscInt local_rows_aff, local_cols_aff, a_global_row_start_aff, a_global_row_end_plus_one_aff;
+      PetscInt input_row_start, input_row_end_plus_one, a_global_col_start_aff, a_global_col_end_plus_one_aff;
+
+      // Get the local sizes
+      MatGetLocalSize(Aff, &local_rows_aff, &local_cols_aff);
+      MatGetOwnershipRange(Aff, &a_global_row_start_aff, &a_global_row_end_plus_one_aff);
+      MatGetOwnershipRangeColumn(Aff, &a_global_col_start_aff, &a_global_col_end_plus_one_aff);
+      MatGetOwnershipRange(*input_mat, &input_row_start, &input_row_end_plus_one);
+
+      // Create device memory for the diag_dom_ratio and bins
+      auto diag_dom_ratio_d = PetscScalarKokkosView("diag_dom_ratio_d", local_rows_aff);   
+      auto dom_bins_d = PetscIntKokkosView("dom_bins_d", 1000);
+      Kokkos::deep_copy(dom_bins_d, 0);
+
+      // Get the diagonal and off-diagonal sums
+      Kokkos::parallel_for(
+         Kokkos::TeamPolicy<>(PetscGetKokkosExecutionSpace(), local_rows_aff, Kokkos::AUTO()),
+         KOKKOS_LAMBDA(const KokkosTeamMemberType &t) {
+
+         PetscInt i   = t.league_rank(); // row i
+         PetscInt ncols_local = device_local_i[i + 1] - device_local_i[i];
+
+         // First find diagonal value with Max reduction - originally had this a single parallel reduce
+         // rather than two but some kokkos bug was intialising my reduction variable wrong
+         PetscReal diag_val = 0.0;
+         Kokkos::parallel_reduce(
+            Kokkos::TeamThreadRange(t, ncols_local),
+            [&](const PetscInt j, PetscReal& thread_diag) {
+               bool is_diagonal = (device_local_j[device_local_i[i] + j] + 
+                                 a_global_col_start_aff == i + a_global_row_start_aff);
+               if (is_diagonal) {
+                  thread_diag = abs(device_local_vals[device_local_i[i] + j]);
+               }
+            }, 
+            Kokkos::Max<PetscReal>(diag_val)
+         );
+
+         // Then find off-diagonal sum
+         PetscReal off_diag_sum = 0.0;
+         PetscReal off_diag_sum_nonlocal = 0.0;
+         Kokkos::parallel_reduce(
+            Kokkos::TeamThreadRange(t, ncols_local),
+            [&](const PetscInt j, PetscReal& thread_sum) {
+               bool is_diagonal = (device_local_j[device_local_i[i] + j] + 
+                                 a_global_col_start_aff == i + a_global_row_start_aff);
+               if (!is_diagonal) {
+                  thread_sum += abs(device_local_vals[device_local_i[i] + j]);
+               }
+            }, 
+            off_diag_sum
+         );
+
+         // Add in the off-diagonal contributions from the non local part
+         if (mpi) {
+
+            PetscInt ncols_nonlocal = device_nonlocal_i[i + 1] - device_nonlocal_i[i];
+
+            Kokkos::parallel_reduce(
+               Kokkos::TeamThreadRange(t, ncols_nonlocal),
+               [&](const PetscInt j, PetscReal& thread_sum) {
+                  thread_sum += abs(device_nonlocal_vals[device_nonlocal_i[i] + j]);
+               }, 
+               off_diag_sum_nonlocal
+            );           
+         }     
+
+         // Finished our parallel reductions for this row, have one thread store the results
+         Kokkos::single(Kokkos::PerTeam(t), [&]() {     
+
+            // If diag_val is zero we didn't find a diagonal
+            if (diag_val != 0.0){
+               // Compute the diagonal dominance ratio
+               diag_dom_ratio_d(i) = (off_diag_sum + off_diag_sum_nonlocal) / diag_val;
+            }
+            else{
+               diag_dom_ratio_d(i) = 0.0;
+            }
+
+            // Let's bin the entry
+            if (fraction_swap > 0)
+            {
+               int bin;
+               int test_bin = floor(diag_dom_ratio_d(i) * double(dom_bins_d.extent(0))) + 1;
+               if (test_bin < int(dom_bins_d.extent(0)) && test_bin >= 0) {
+                  bin = test_bin;
+               }
+               else {
+                  bin = dom_bins_d.extent(0);
+               }
+               // Only one thread writing here
+               dom_bins_d(bin - 1)++;
+            }
+
+         });
+      });
+
+      PetscReal swap_dom_val;
+      // Do a fixed alpha_diag
+      if (fraction_swap < 0){
+         swap_dom_val = -fraction_swap;
+      }
+      // Otherwise swap everything bigger than a fixed fraction
+      else{
+
+         // Parallel scan to inclusive sum the number of entries we have in 
+         // the bins
+         Kokkos::parallel_scan (dom_bins_d.extent(0), KOKKOS_LAMBDA (const PetscInt i, PetscInt& update, const bool final) {
+            // Inclusive scan
+            update += dom_bins_d(i);         
+            if (final) {
+               dom_bins_d(i) = update; // only update array on final pass
+            }
+         });        
+
+         // Now if we reduce how many are > the search_size, we know the bin boundary we want
+         int bin_boundary = 0;  
+         Kokkos::parallel_reduce ("ReductionBin", dom_bins_d.extent(0), KOKKOS_LAMBDA (const int i, int& update) {
+            if (dom_bins_d(i) > dom_bins_d(dom_bins_d.extent(0)-1) - search_size) update++;
+         }, bin_boundary);   
+
+         bin_boundary = dom_bins_d.extent(0) - bin_boundary;                
+         swap_dom_val = double(bin_boundary) / double(dom_bins_d.extent(0));
+
+      }
+
+      // Go and swap F points to C points
+      Kokkos::parallel_for(
+         Kokkos::RangePolicy<>(0, local_rows_aff), KOKKOS_LAMBDA(int i) {
+
+            if (diag_dom_ratio_d(i) != 0.0 && diag_dom_ratio_d(i) >= swap_dom_val)
+            {
+               // This is the actual numbering in A, rather than Aff
+               PetscInt idx = fine_view_d(i) - input_row_start;
+               cf_markers_local_d(idx) *= -1;
+            }
+      }); 
+   }
+
+   // Now copy device cf_markers_local_d back to host
+   Kokkos::deep_copy(cf_markers_local_h, cf_markers_local_d);   
+
+   ISRestoreIndices(*is_fine, &fine_indices_ptr);
+   MatDestroy(&Aff);
 
    return;
 }

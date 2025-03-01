@@ -788,6 +788,7 @@ PETSC_INTERN void remove_small_from_sparse_kokkos(Mat *input_mat, PetscReal tol,
          PetscIntKokkosView colmap_output_d_big("colmap_output_d_big", cols_ao);
          Kokkos::deep_copy(colmap_output_d_big, colmap_input_d);                
 
+         // Mark which of the keys don't exist
          Kokkos::parallel_for(
             Kokkos::RangePolicy<>(0, cols_ao), KOKKOS_LAMBDA(int i) { 
 
