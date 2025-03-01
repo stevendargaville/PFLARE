@@ -52,7 +52,7 @@ module sai_z
       PetscInt, parameter :: nz_ignore = -1, one=1, zero=0, maxits=1000
       PetscInt, dimension(:), allocatable :: cols, j_rows, i_rows, ad_indices
       integer, dimension(:), allocatable :: pivots, j_indices, i_indices
-      PetscReal, dimension(:), allocatable :: vals, e_row, j_vals, sols
+      PetscReal, dimension(:), allocatable :: vals, e_row, j_vals
       PetscReal, dimension(:,:), allocatable :: submat_vals
       type(itree) :: i_rows_tree
       PetscReal, dimension(:), allocatable :: work
@@ -70,6 +70,7 @@ module sai_z
       PetscInt, dimension(:), allocatable :: col_indices_off_proc_array
       integer(c_long_long) :: A_array
       MatType:: mat_type
+      PetscReal, dimension(:), pointer :: vec_vals
 
       ! ~~~~~~
 
@@ -438,16 +439,16 @@ module sai_z
                call KSPSetOperators(ksp, submatrices(1), submatrices(1), ierr)             
                call KSPSetUp(ksp, ierr) 
 
-               call VecCreateSeqWithArray(PETSC_COMM_SELF, one, &
-                  i_size, &
-                  PETSC_NULL_SCALAR_ARRAY, &
-                  solution, &
-                  ierr)              
-               call VecPlaceArray(solution, e_row(1), ierr)          
+               call MatCreateVecs(submatrices(1), solution, PETSC_NULL_VEC, ierr)
+               call VecGetArrayF90(solution, vec_vals, ierr)
+               vec_vals(1:i_size) = e_row(1:i_size)
 
                ! Do the solve - overwrite the rhs
                call KSPSolveTranspose(ksp, solution, solution, ierr)
                call KSPGetIterationNumber(ksp, iterations_taken, ierr)
+
+               e_row(1:i_size) = vec_vals(1:i_size)
+               call VecRestoreArrayF90(solution, vec_vals, ierr)     
 
                call KSPReset(ksp, ierr)
                call VecDestroy(solution, ierr)
@@ -482,34 +483,25 @@ module sai_z
 
                call KSPSetOperators(ksp, transpose_mat, transpose_mat, ierr)                           
                call KSPSetUp(ksp, ierr)
-               
-               ! Have to be more careful here with sizes due to rectangular
-               call VecCreateSeqWithArray(PETSC_COMM_SELF, one, &
-                  j_size, &
-                  PETSC_NULL_SCALAR_ARRAY, &
-                  solution, &
-                  ierr) 
-               call VecCreateSeqWithArray(PETSC_COMM_SELF, one, &
-                  i_size, &
-                  PETSC_NULL_SCALAR_ARRAY, &
-                  rhs, &
-                  ierr)     
-               allocate(sols(size(j_rows)))
-               call VecPlaceArray(solution, sols(1), ierr)          
-               call VecPlaceArray(rhs, e_row(1), ierr)          
+
+               call MatCreateVecs(submatrices(1), solution, rhs, ierr)  
+               call VecGetArrayF90(rhs, vec_vals, ierr)
+               vec_vals(1:i_size) = e_row(1:i_size)
+               call VecRestoreArrayF90(rhs, vec_vals, ierr)                                
 
                ! Do the solve
                call KSPSolve(ksp, rhs, solution, ierr)
                call KSPGetIterationNumber(ksp, iterations_taken, ierr)
 
                ! Copy solution into e_row
-               e_row(1:size(j_rows)) = sols(1:size(j_rows))
+               call VecGetArrayF90(solution, vec_vals, ierr)
+               e_row(1:size(j_rows)) = vec_vals(1:size(j_rows))
+               call VecRestoreArrayF90(solution, vec_vals, ierr) 
 
                call KSPReset(ksp, ierr)
                call VecDestroy(solution, ierr)
                call VecDestroy(rhs, ierr)
                call MatDestroy(transpose_mat, ierr)
-               deallocate(sols)
 
             ! ~~~~~~~~~~~~~
             ! Exact dense solve with QR
