@@ -13,6 +13,8 @@ LABEL description="PFLARE_intel"
 
 ENV CHECKOUT_BRANCH=$BRANCH
 ENV PETSC_ARCH=$ARCH
+# Ensure any test failures are caught and the build fails
+ENV PETSC_OPTIONS="-on_error_abort"
 
 WORKDIR /build
 
