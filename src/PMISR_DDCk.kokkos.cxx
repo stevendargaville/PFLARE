@@ -145,7 +145,7 @@ PETSC_INTERN void pmisr_kokkos(Mat *strength_mat, int max_luby_steps, int pmis_i
    int counter_in_set_start = 0;
    // Count how many in the set to begin with
    Kokkos::parallel_reduce ("Reduction", local_rows, KOKKOS_LAMBDA (const int i, int& update) {
-      if (abs(measure_local_d(i) < 1)) update++;
+      if (abs(measure_local_d(i)) < 1) update++;
    }, counter_in_set_start);
 
    VecGetKokkosViewWrite(cf_markers_vec, &cf_markers_local_real_d);
@@ -153,7 +153,7 @@ PETSC_INTERN void pmisr_kokkos(Mat *strength_mat, int max_luby_steps, int pmis_i
    Kokkos::parallel_for(
       Kokkos::RangePolicy<>(0, local_rows), KOKKOS_LAMBDA(int i) {
          
-      if (abs(measure_local_d(i) < 1))
+      if (abs(measure_local_d(i)) < 1)
       {
          if (zero_measure_c_point_int == 1) {
             if (pmis_int == 1) {
