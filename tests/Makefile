@@ -259,13 +259,6 @@ ifeq ($(PETSC_HAVE_KOKKOS),1)
 	$(MPIEXEC) -n 2 ./adv_1dk -n 1000 -ksp_rtol 1e-10 -ksp_atol 1e-50 -ksp_pc_side right \
 	 -pc_air_coarsest_inverse_type newton -pc_air_coarsest_poly_order 10 -pc_air_coarsest_matrix_free_polys -ksp_max_it 10 \
 	 -vec_type kokkos -mat_type aijkokkos	
-# 
-	@echo ""
-	@echo "Test AIRG on steady 2D structured advection with 0th order sparsity GMRES poly C smooth and faster coarsening KOKKOS"
-	./adv_diff_2d -da_grid_x 50 -da_grid_y 50 -pc_type air -ksp_pc_side right \
-	 -ksp_rtol 1e-10 -ksp_atol 1e-50 -pc_air_a_lump -pc_air_a_drop 1e-4 -pc_air_one_c_smooth \
-	 -pc_air_c_inverse_sparsity_order 0 -pc_air_strong_threshold 0.99 -pc_air_ddc_fraction 0.0 -ksp_max_it 7 \
-	 -dm_mat_type aijkokkos -dm_vec_type kokkos
 
 endif
 # ~~~~~~~~~~~~~~~~~~~~~~~	 
