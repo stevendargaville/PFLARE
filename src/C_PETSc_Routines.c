@@ -7,6 +7,16 @@
 #include <../src/mat/impls/aij/mpi/mpiaij.h>
 #include <petsc/private/pcimpl.h>
 
+// Set shell vec type - need this for the r, b and rhs it creates during 
+// the mg setup
+PETSC_INTERN void ShellSetVecType_c(Mat *matrix, Mat *shellmatrix)
+{
+   VecType vtype;
+   MatGetVecType(*matrix, &vtype);
+   MatShellSetVecType(*shellmatrix, vtype);
+   return;
+}
+
 // Annoying as versions of petsc before 3.15 don't have easy access to colmap in fortran
 PETSC_INTERN void get_colmap_c(Mat *matrix, PetscInt **colmap)
 {

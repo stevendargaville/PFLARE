@@ -2,6 +2,7 @@ module gmres_poly_newton
 
    use petsc
    use gmres_poly
+   use c_petsc_interfaces
 
 #include "petsc/finclude/petsc.h"   
 
@@ -631,6 +632,8 @@ module gmres_poly_newton
 
          call MatAssemblyBegin(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)
          call MatAssemblyEnd(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)
+         ! Have to make sure to set the type of vectors the shell creates
+         call ShellSetVecType(matrix, inv_matrix)          
          
          ! Create temporary vectors we use during application
          ! Make sure to use matrix here to get the right type (as the shell doesn't know about gpus)

@@ -3,6 +3,7 @@ module neumann_poly
    use petsc
    use gmres_poly
    use matshell
+   use c_petsc_interfaces
 
 #include "petsc/finclude/petsc.h"
 
@@ -166,6 +167,8 @@ module neumann_poly
 
             call MatAssemblyBegin(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)
             call MatAssemblyEnd(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)
+            ! Have to make sure to set the type of vectors the shell creates
+            call ShellSetVecType(matrix, inv_matrix)              
             
             ! Create temporary vector we use during horner
             ! Make sure to use matrix here to get the right type (as the shell doesn't know about gpus)            
@@ -191,7 +194,9 @@ module neumann_poly
                         MATOP_MULT, petsc_matvec_ida_neumann_poly_mf, ierr)
 
             call MatAssemblyBegin(mat_ctx%mat_ida, MAT_FINAL_ASSEMBLY, ierr)
-            call MatAssemblyEnd(mat_ctx%mat_ida, MAT_FINAL_ASSEMBLY, ierr)    
+            call MatAssemblyEnd(mat_ctx%mat_ida, MAT_FINAL_ASSEMBLY, ierr)   
+            ! Have to make sure to set the type of vectors the shell creates
+            call ShellSetVecType(matrix, mat_ctx%mat_ida)   
             
             ! Create temporary vector we use during horner
             ! Make sure to use matrix here to get the right type (as the shell doesn't know about gpus)            

@@ -1395,7 +1395,24 @@ module petsc_helper
          call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)         
       end if      
   
-    end subroutine pseudo_inv   
+    end subroutine pseudo_inv 
+    
+   !-------------------------------------------------------------------------------------------------------------------------------
+
+    subroutine ShellSetVecType(input_mat, input_mat_shell)
+
+      ! ~~~~~~~~~~~~~~~~
+      type(tMat), intent(in) :: input_mat, input_mat_shell
+
+      integer(c_long_long) :: A_array, B_array
+      ! ~~~~~~~~~~~~~~~~
+
+      A_array = input_mat%v
+      B_array = input_mat_shell%v
+
+      call ShellSetVecType_c(A_array, B_array) 
+  
+    end subroutine ShellSetVecType      
 
    !-------------------------------------------------------------------------------------------------------------------------------
 
