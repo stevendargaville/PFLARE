@@ -635,8 +635,9 @@ PETSC_INTERN void ddc_kokkos(Mat *input_mat, IS *is_fine, PetscReal fraction_swa
                else {
                   bin = dom_bins_d.extent(0);
                }
-               // Only one thread writing here
-               dom_bins_d(bin - 1)++;
+               // Has to be atomic as many threads from different rows
+               // may be writing to the same bin
+               Kokkos::atomic_increment(&dom_bins_d(bin - 1));
             }
 
          });
