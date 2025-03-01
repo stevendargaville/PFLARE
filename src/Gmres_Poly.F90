@@ -1530,6 +1530,8 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
 
             call MatAssemblyBegin(inv_matrix, MAT_FINAL_ASSEMBLY, ierr)
             call MatAssemblyEnd(inv_matrix, MAT_FINAL_ASSEMBLY, ierr) 
+            ! Have to make sure to set the type of vectors the shell creates
+            call ShellSetVecType(matrix, inv_matrix)              
 
             ! Create temporary vector we use during horner
             ! Make sure to use matrix here to get the right type (as the shell doesn't know about gpus)            
