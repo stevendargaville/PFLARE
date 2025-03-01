@@ -312,7 +312,6 @@ module air_data_type
       ! Temporary storage
       type(petsc_vec_array), dimension(4) :: temp_vecs_fine, temp_vecs_coarse 
       type(petsc_vec_array), dimension(1) :: temp_vecs
-      type(tVec), dimension(:), allocatable :: temp_vecs_b, temp_vecs_x, temp_vecs_r
 
       ! Temporary reuse
       type(air_reuse_data), allocatable, dimension(:) :: reuse
@@ -397,9 +396,6 @@ module air_data_type
       allocate(air_data%temp_vecs_coarse(3)%array(air_data%options%max_levels))
       allocate(air_data%temp_vecs_coarse(4)%array(air_data%options%max_levels))
       allocate(air_data%temp_vecs(1)%array(air_data%options%max_levels))
-      allocate(air_data%temp_vecs_b(air_data%options%max_levels))
-      allocate(air_data%temp_vecs_x(air_data%options%max_levels))
-      allocate(air_data%temp_vecs_r(air_data%options%max_levels))
 
       ! Reuse 
       allocate(air_data%reuse(air_data%options%max_levels))

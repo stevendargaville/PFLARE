@@ -8,6 +8,7 @@ module air_mg_setup
    use timers
    use air_mg_stats
    use fc_smooth
+   use c_petsc_interfaces
 
 #include "petsc/finclude/petsc.h"
       
@@ -1040,7 +1041,7 @@ module air_mg_setup
       PetscErrorCode      :: ierr
       MPI_Comm            :: MPI_COMM_MATRIX
       PetscReal           :: ratio_local_nnzs_off_proc, achieved_rel_tol, norm_b
-      logical             :: continue_coarsening, trigger_proc_agglom, reusing_temp_mg_vecs
+      logical             :: continue_coarsening, trigger_proc_agglom
       type(tMat)          :: temp_mat
       type(tKSP)          :: ksp_smoother_up, ksp_smoother_down, ksp_coarse_solver
       type(tPC)           :: pc_smoother_up, pc_smoother_down, pc_coarse_solver
@@ -1075,7 +1076,6 @@ module air_mg_setup
       proc_stride = 1
       ! Copy the top grid matrix pointer
       air_data%coarse_matrix(1) = pmat
-      reusing_temp_mg_vecs = .TRUE.
 
       ! If on the cpu we have a veciscopy which is fast
       ! If on the gpu with kokkos we have a veciscopy which is fast
@@ -1711,29 +1711,6 @@ module air_mg_setup
          end if
 
          ! ~~~~~~~~~~~~~~
-         ! Go and create the temporary vecs for our PCMG on this level
-         ! It would normally create these automatically during pcmg setup
-         ! We allocate it as we need it to have the same type as our coarse matrices
-         ! even though we sometimes delete our coarse matrix and use a matshell instead
-         ! There is a MatShellSetVecType in C we could use to tell the matshell what type 
-         ! to produce, but that isn't available in fortran
-         ! ~~~~~~~~~~~~~~
-         ! If we're not re-using
-         if (.NOT. air_data%allocated_matrices_A_ff(our_level)) then
-            reusing_temp_mg_vecs = .FALSE.
-            if (our_level == 1) then
-               ! Only need r on the top grid
-               call MatCreateVecs(air_data%coarse_matrix(our_level), &
-                        air_data%temp_vecs_r(our_level), PETSC_NULL_VEC, ierr)   
-            else
-               call MatCreateVecs(air_data%coarse_matrix(our_level), &
-                        air_data%temp_vecs_b(our_level), PETSC_NULL_VEC, ierr)                 
-               call VecDuplicate(air_data%temp_vecs_b(our_level), air_data%temp_vecs_x(our_level), ierr)                        
-               call VecDuplicate(air_data%temp_vecs_b(our_level), air_data%temp_vecs_r(our_level), ierr)
-            end if
-         end if
-
-         ! ~~~~~~~~~~~~~~
 
          air_data%allocated_matrices_A_ff(our_level) = .TRUE.
          if (air_data%options%one_c_smooth .AND. &
@@ -1769,7 +1746,11 @@ module air_mg_setup
             call MatCreateShell(MPI_COMM_MATRIX, local_rows, local_cols, global_rows, global_cols, &
                         mat_ctx, air_data%coarse_matrix(our_level), ierr)
             call MatAssemblyBegin(air_data%coarse_matrix(our_level), MAT_FINAL_ASSEMBLY, ierr)
-            call MatAssemblyEnd(air_data%coarse_matrix(our_level), MAT_FINAL_ASSEMBLY, ierr)          
+            call MatAssemblyEnd(air_data%coarse_matrix(our_level), MAT_FINAL_ASSEMBLY, ierr)   
+            
+            ! Have to make sure to set the type of vectors the shell creates
+            ! Input can be any matrix, we just need the correct type
+            call ShellSetVecType(air_data%A_fc(our_level), air_data%coarse_matrix(our_level))                   
          end if
          
          air_data%allocated_coarse_matrix(our_level_coarse) = .TRUE.
@@ -1856,27 +1837,6 @@ module air_mg_setup
             ! Level is reverse ordering
             our_level = no_levels - int(petsc_level)
             our_level_coarse = our_level + 1
-
-            ! Set the temporary storage in the PCMG
-            if (.NOT. reusing_temp_mg_vecs) then
-               if (our_level == 1) then
-                  ! Only need r on the top grid
-                  call PCMGSetR(pcmg, petsc_level, air_data%temp_vecs_r(our_level), ierr)
-                  ! The reference counter is increased by PCMGSetRhs etc, so we have to destroy 
-                  ! our copy, the pcmg then owns this memory
-                  call VecDestroy(air_data%temp_vecs_r(our_level), ierr)              
-               else
-                  ! We don't bother creating this space on the coarse grid
-                  ! as we always have an assembled mat and the pcmg will auto 
-                  ! create the right vec types then
-                  call PCMGSetRhs(pcmg, petsc_level, air_data%temp_vecs_b(our_level), ierr)
-                  call VecDestroy(air_data%temp_vecs_b(our_level), ierr)
-                  call PCMGSetR(pcmg, petsc_level, air_data%temp_vecs_r(our_level), ierr)
-                  call VecDestroy(air_data%temp_vecs_r(our_level), ierr)
-                  call PCMGSetX(pcmg, petsc_level, air_data%temp_vecs_x(our_level), ierr)
-                  call VecDestroy(air_data%temp_vecs_x(our_level), ierr)
-               end if
-            end if
 
             ! Set the restrictor/prolongator
             if (.NOT. air_data%options%symmetric) then
@@ -2035,19 +1995,6 @@ module air_mg_setup
          call PCSetType(pc_coarse_solver, PCMAT, ierr)      
          call PCSetUp(pc_coarse_solver, ierr)
          call KSPSetUp(ksp_coarse_solver, ierr)   
-
-         ! Set the temporary storage in the PCMG for the coarsest grid
-         if (.NOT. reusing_temp_mg_vecs) then
-            call MatCreateVecs(air_data%coarse_matrix(no_levels), &
-                     air_data%temp_vecs_b(no_levels), PETSC_NULL_VEC, ierr)                 
-            call VecDuplicate(air_data%temp_vecs_b(no_levels), air_data%temp_vecs_x(no_levels), ierr)             
-
-            ! Don't need r on the coarsest grid
-            call PCMGSetRhs(pcmg, petsc_level, air_data%temp_vecs_b(no_levels), ierr)
-            call VecDestroy(air_data%temp_vecs_b(no_levels), ierr)
-            call PCMGSetX(pcmg, petsc_level, air_data%temp_vecs_x(no_levels), ierr)
-            call VecDestroy(air_data%temp_vecs_x(no_levels), ierr)            
-         end if
 
       ! If we've only got one level 
       else
@@ -2354,10 +2301,6 @@ module air_mg_setup
          deallocate(air_data%temp_vecs_coarse(2)%array)
          deallocate(air_data%temp_vecs_coarse(3)%array)
          deallocate(air_data%temp_vecs_coarse(4)%array)
-
-         deallocate(air_data%temp_vecs_b)
-         deallocate(air_data%temp_vecs_x)
-         deallocate(air_data%temp_vecs_r)
          
          deallocate(air_data%reuse)
          
