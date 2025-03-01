@@ -22,6 +22,7 @@ int main(int argc,char **args)
   KSP            ksp;
   PC             pc;
   KSPConvergedReason reason;
+  VecType vtype;
 
   ierr = PetscInitialize(&argc,&args,(char*)0,help);if (ierr) return ierr;
   ierr = PetscOptionsGetBool(NULL,NULL,"-b_in_f",&b_in_f,NULL);CHKERRQ(ierr);
@@ -54,7 +55,8 @@ int main(int argc,char **args)
     ierr = MatGetLocalSize(A,&m,&n);CHKERRQ(ierr);
     ierr = VecCreate(PETSC_COMM_WORLD,&tmp);CHKERRQ(ierr);
     ierr = VecSetSizes(tmp,m,PETSC_DECIDE);CHKERRQ(ierr);
-    ierr = VecSetFromOptions(tmp);CHKERRQ(ierr);
+    ierr = VecGetType(b, &vtype);CHKERRQ(ierr);
+    ierr = VecSetType(tmp, vtype);CHKERRQ(ierr);
     ierr = VecGetOwnershipRange(b,&start,&end);CHKERRQ(ierr);
     ierr = VecGetLocalSize(b,&mvec);CHKERRQ(ierr);
     ierr = VecGetArray(b,&bold);CHKERRQ(ierr);
