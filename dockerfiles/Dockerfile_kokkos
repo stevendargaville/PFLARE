@@ -14,6 +14,8 @@ LABEL description="PFLARE_kokkos"
 
 ENV CHECKOUT_BRANCH=$BRANCH
 ENV PETSC_ARCH=$ARCH
+# This turns on checks between kokkos and cpu versions
+ENV PFLARE_KOKKOS_DEBUG=1
 
 WORKDIR /build
 
