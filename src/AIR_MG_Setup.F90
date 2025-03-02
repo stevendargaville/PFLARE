@@ -1454,6 +1454,8 @@ module air_mg_setup
                ! Number of cores we have dofs on
                ! Stolen from calculate_repartition, make sure they match!
                no_active_cores = floor(dble(comm_size)/dble(proc_stride))
+               ! Be careful of rounding!
+               if (no_active_cores == 0) no_active_cores = 1                 
                ratio_local_nnzs_off_proc = 0d0
 
                ! If we have already setup our hierarchy, then we know what levels need to be repartitioned
@@ -1490,11 +1492,16 @@ module air_mg_setup
                   ! If we don't have at least process_eq_limit unknowns per core (on average)
                   ! then we need to be more aggressive with our processor agglomeration
                   ! We'll just keep increasing the stride until we have more than process_eq_limit unknowns per core
-                  do while (global_rows_repart < air_data%options%process_eq_limit * no_active_cores)
+                  stride_loop: do while (global_rows_repart < air_data%options%process_eq_limit * no_active_cores)
                      proc_stride = proc_stride * air_data%options%processor_agglom_factor
                      ! Stolen from calculate_repartition, make sure they match!
-                     no_active_cores = floor(dble(comm_size)/dble(proc_stride))                     
-                  end do                  
+                     no_active_cores = floor(dble(comm_size)/dble(proc_stride))     
+                     ! Be careful of rounding!
+                     if (no_active_cores == 0) no_active_cores = 1   
+                     ! If we can't agglomerate any more and we still haven't hit the desired
+                     ! process_eq_limit we'll just have to live with it
+                     if (no_active_cores == 1) exit stride_loop             
+                  end do stride_loop               
 
                   ! If we agglomerate down to one processor
                   if (proc_stride > comm_size) proc_stride = comm_size
