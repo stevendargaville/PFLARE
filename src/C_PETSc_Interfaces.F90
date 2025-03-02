@@ -287,6 +287,20 @@ module c_petsc_interfaces
  
    end interface      
 
+   interface   
+      
+      subroutine compute_P_from_W_kokkos(A_array, global_row_start, indices_fine, &
+                     indices_coarse, identity_int, reuse_int, B_array) &
+         bind(c, name="compute_P_from_W_kokkos")
+         use iso_c_binding
+         integer(c_long_long) :: A_array, indices_fine, indices_coarse
+         integer(c_long_long) :: B_array
+         PetscInt, value :: global_row_start
+         integer(c_int), value :: identity_int, reuse_int
+      end subroutine compute_P_from_W_kokkos         
+ 
+   end interface   
+
 ! -------------------------------------------------------------------------------------------------------------------------------
 
 end module c_petsc_interfaces

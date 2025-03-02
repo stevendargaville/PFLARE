@@ -1071,11 +1071,86 @@ logical, protected :: kokkos_debug_global = .FALSE.
 
       deallocate(cols, vals)
          
-   end subroutine generate_one_point_with_one_entry_from_sparse       
+   end subroutine generate_one_point_with_one_entry_from_sparse    
+   
+!------------------------------------------------------------------------------------------------------------------------
+   
+   subroutine compute_P_from_W(W, global_row_start, is_fine, is_coarse, identity, reuse, P)
+
+      ! Wrapper around compute_P_from_W_cpu and compute_P_from_W_kokkos 
+   
+      ! ~~~~~~~~~~
+      ! Input 
+      type(tMat), intent(inout) :: W, P
+      type(tIS), intent(in)     :: is_fine, is_coarse
+      PetscInt, intent(in)      :: global_row_start
+      logical, intent(in) :: identity, reuse
+
+#if defined(PETSC_HAVE_KOKKOS)                     
+      integer(c_long_long) :: A_array, B_array, indices_fine, indices_coarse
+      integer :: identity_int, reuse_int, errorcode
+      PetscErrorCode :: ierr
+      MatType :: mat_type
+      Mat :: temp_mat
+      PetscScalar normy;
+#endif        
+      ! ~~~~~~~~~~
+
+
+#if defined(PETSC_HAVE_KOKKOS)    
+
+      call MatGetType(W, mat_type, ierr)
+      if (mat_type == MATMPIAIJKOKKOS .OR. mat_type == MATSEQAIJKOKKOS .OR. &
+            mat_type == MATAIJKOKKOS) then
+
+         identity_int = 0
+         if (identity) identity_int = 1
+         reuse_int = 0
+         if (reuse) reuse_int = 1
+
+         A_array = W%v             
+         indices_fine = is_fine%v
+         indices_coarse = is_coarse%v
+         call compute_P_from_W_kokkos(A_array, global_row_start, &
+                     indices_fine, indices_coarse, &
+                     identity_int, reuse_int, B_array)
+         P%v = B_array
+
+         ! If debugging do a comparison between CPU and Kokkos results
+         if (kokkos_debug()) then
+
+            ! Debug check if the CPU and Kokkos versions are the same
+            call compute_P_from_W_cpu(W, global_row_start, is_fine, is_coarse, &
+                     identity, reuse, temp_mat)      
+
+            call MatAXPY(temp_mat, -1d0, P, DIFFERENT_NONZERO_PATTERN, ierr)
+            call MatNorm(temp_mat, NORM_FROBENIUS, normy, ierr)
+            if (normy .gt. 1d-13) then
+               !call MatFilter(temp_mat, 1d-14, PETSC_TRUE, PETSC_FALSE, ierr)
+               !call MatView(temp_mat, PETSC_VIEWER_STDOUT_WORLD, ierr)
+               print *, "Kokkos and CPU versions of compute_P_from_W do not match"
+               call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)  
+            end if
+            call MatDestroy(temp_mat, ierr)
+         end if
+
+      else
+
+         call compute_P_from_W_cpu(W, global_row_start, is_fine, is_coarse, &
+                  identity, reuse, P)         
+
+      end if
+#else
+      call compute_P_from_W_cpu(W, global_row_start, is_fine, is_coarse, &
+                  identity, reuse, P)
+#endif  
+
+         
+   end subroutine compute_P_from_W         
 
   !------------------------------------------------------------------------------------------------------------------------
    
-   subroutine compute_P_from_W(W, global_row_start, is_fine, is_coarse, identity, reuse, P)
+   subroutine compute_P_from_W_cpu(W, global_row_start, is_fine, is_coarse, identity, reuse, P)
 
       ! Pass in W and get out P = [W I]' (or [W 0] if identity is false)
    
@@ -1208,7 +1283,7 @@ logical, protected :: kokkos_debug_global = .FALSE.
       call ISRestoreIndicesF90(is_coarse, is_pointer_coarse, ierr)
       call ISRestoreIndicesF90(is_fine, is_pointer_fine, ierr)       
          
-   end subroutine compute_P_from_W      
+   end subroutine compute_P_from_W_cpu      
 
 
  !------------------------------------------------------------------------------------------------------------------------
