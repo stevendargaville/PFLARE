@@ -36,7 +36,7 @@ jobs:
       - runs-on=${{ github.run_id }}
       - runner=2cpu-linux-x64
     steps:
-      - run: echo "Hello from x64!"               
+      - run: echo "Hello from runson x64!"               
 
   build_gnu_debug:
     runs-on: ubuntu-22.04
