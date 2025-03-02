@@ -291,7 +291,8 @@ module air_mg_setup
       integer(c_long_long) :: A_array, B_array, C_array
       PetscInt :: global_row_start, global_row_end_plus_one
       PetscInt, parameter :: nz_ignore = -1
-      logical :: destroy_mat, reuse_one_point_classical, reuse_grid_transfer
+      logical :: destroy_mat, reuse_grid_transfer
+      MatType:: mat_type
 
       ! ~~~~~~~~~~
 
@@ -587,7 +588,7 @@ module air_mg_setup
          ! Calculate the prolongator
          ! ~~~~~~~~~~~~~~~~~~~
          ! ~~~~~~~~~~~~~~~~~~~
-         reuse_one_point_classical = air_data%options%one_point_classical_prolong .AND. &
+         air_data%reuse_one_point_classical_prolong = air_data%options%one_point_classical_prolong .AND. &
                .NOT. air_data%options%symmetric .AND. &
                .NOT. air_data%options%constrain_w .AND. &
                air_data%allocated_matrices_A_ff(our_level)
@@ -597,15 +598,29 @@ module air_mg_setup
          temp_is = air_data%reuse(our_level)%reuse_is(IS_REPARTITION)
          if (air_data%allocated_matrices_A_ff(our_level) .AND. &
                   .NOT. PetscISIsNull(temp_is)) then
+
+            ! Now when we're doing processor agglomeration, we have to be careful with 
+            ! Kokkos, as it gets fussy
+            ! about the exact same pointers being passed into spgemm_numeric
+            ! (rather than just having the same sparsity) once we've 
+            ! repartitioned. We have to force it to repartition to get around this
+            ! so the exact same matrices are used in every case
+            call MatGetType(air_data%A_ff(our_level), mat_type, ierr)
+            if (mat_type == MATMPIAIJKOKKOS) then
+               air_data%reuse_one_point_classical_prolong = .FALSE.
+            end if
+
             ! Destroy the grid transfer operators and rebuild them
             call MatDestroy(air_data%restrictors(our_level), ierr)
-            if (.NOT. reuse_one_point_classical) call MatDestroy(air_data%prolongators(our_level), ierr)
+            if (.NOT. air_data%reuse_one_point_classical_prolong) then
+               call MatDestroy(air_data%prolongators(our_level), ierr)
+            end if
             reuse_grid_transfer = .FALSE.
          end if
 
          ! If we've got a one point classical prolongator computed already we can just reuse the prolongator
          ! without change
-         if (.NOT. reuse_one_point_classical) then
+         if (.NOT. air_data%reuse_one_point_classical_prolong) then
             call compute_P_from_W(air_data%reuse(our_level)%reuse_mat(MAT_W_DROP), &
                      global_row_start, &
                      air_data%IS_fine_index(our_level), air_data%IS_coarse_index(our_level), &
@@ -1567,9 +1582,7 @@ module air_mg_setup
 
                      ! If we've got a one point classical prolongator then we just use the existing repartitioned
                      ! one so we don't need to repartition
-                     if (.NOT. (air_data%options%one_point_classical_prolong .AND. &
-                                 .NOT. air_data%options%symmetric .AND. &
-                                 .NOT. air_data%options%constrain_w)) then
+                     if (.NOT. air_data%reuse_one_point_classical_prolong) then
 
                         call MatCreateSubMatrix(air_data%prolongators(our_level), &
                                     is_unchanged, air_data%reuse(our_level)%reuse_is(IS_REPARTITION), &

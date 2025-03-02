@@ -271,6 +271,12 @@ module air_data_type
       integer :: no_levels = -1   
       ! Do we have a gpu matrix or one on the cpu 
       logical :: fast_veciscopy_exists = .FALSE.
+      ! Can we reuse a one point classical prolongator
+      ! We only need this explicitly due to kokkos which is fussy
+      ! about the exact same pointers being passed into spgemm_numeric
+      ! (rather than just having the same sparsity) once we've 
+      ! repartitioned
+      logical :: reuse_one_point_classical_prolong = .FALSE.
 
       ! Indices of F and C points on each level
       type(tIS), allocatable, dimension(:)               :: IS_fine_index, IS_coarse_index
