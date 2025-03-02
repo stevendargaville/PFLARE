@@ -7,10 +7,7 @@ ARG BRANCH=main
 ARG ARCH=arch-linux-nvidia
 
 LABEL maintainer="Steven Dargaville"
-LABEL description="PFLARE_nvidia"
-
-# If you want to debug inside the container
-# RUN apt-get update && apt-get install -y valgrind 
+LABEL description="PFLARE_nvidia" 
 
 ENV CHECKOUT_BRANCH=$BRANCH
 ENV PETSC_ARCH=$ARCH
