@@ -1091,7 +1091,7 @@ logical, protected :: kokkos_debug_global = .FALSE.
       integer :: identity_int, reuse_int, errorcode
       PetscErrorCode :: ierr
       MatType :: mat_type
-      Mat :: temp_mat
+      Mat :: temp_mat, temp_mat_reuse, temp_mat_compare
       PetscScalar normy;
 #endif        
       ! ~~~~~~~~~~
@@ -1111,27 +1111,50 @@ logical, protected :: kokkos_debug_global = .FALSE.
          A_array = W%v             
          indices_fine = is_fine%v
          indices_coarse = is_coarse%v
+         if (reuse) B_array = P%v
          call compute_P_from_W_kokkos(A_array, global_row_start, &
                      indices_fine, indices_coarse, &
                      identity_int, reuse_int, B_array)
          P%v = B_array
-
+         
          ! If debugging do a comparison between CPU and Kokkos results
          if (kokkos_debug()) then
 
+            ! If we're doing reuse and debug, then we have to always output the result 
+            ! from the cpu version, as it will have coo preallocation structures set
+            ! They aren't copied over if you do a matcopy (or matconvert)
+            ! If we didn't do that the next time we come through this routine 
+            ! and try to call the cpu version with reuse, it will segfault
+            if (reuse) then
+               temp_mat = P
+               call MatConvert(P, MATSAME, MAT_INITIAL_MATRIX, temp_mat_compare, ierr)  
+            else
+               temp_mat_compare = P                         
+            end if
+
             ! Debug check if the CPU and Kokkos versions are the same
             call compute_P_from_W_cpu(W, global_row_start, is_fine, is_coarse, &
-                     identity, reuse, temp_mat)      
+                     identity, reuse, temp_mat)   
 
-            call MatAXPY(temp_mat, -1d0, P, DIFFERENT_NONZERO_PATTERN, ierr)
-            call MatNorm(temp_mat, NORM_FROBENIUS, normy, ierr)
+            call MatConvert(temp_mat, MATSAME, MAT_INITIAL_MATRIX, &
+                        temp_mat_reuse, ierr)                       
+
+            call MatAXPY(temp_mat_reuse, -1d0, temp_mat_compare, DIFFERENT_NONZERO_PATTERN, ierr)
+            call MatNorm(temp_mat_reuse, NORM_FROBENIUS, normy, ierr)
             if (normy .gt. 1d-13) then
-               !call MatFilter(temp_mat, 1d-14, PETSC_TRUE, PETSC_FALSE, ierr)
-               !call MatView(temp_mat, PETSC_VIEWER_STDOUT_WORLD, ierr)
+               !call MatFilter(temp_mat_reuse, 1d-14, PETSC_TRUE, PETSC_FALSE, ierr)
+               !call MatView(temp_mat_reuse, PETSC_VIEWER_STDOUT_WORLD, ierr)
                print *, "Kokkos and CPU versions of compute_P_from_W do not match"
                call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)  
             end if
-            call MatDestroy(temp_mat, ierr)
+            call MatDestroy(temp_mat_reuse, ierr)
+            if (.NOT. reuse) then
+               call MatDestroy(P, ierr)
+            else
+               call MatDestroy(temp_mat_compare, ierr)
+            end if
+            P = temp_mat
+
          end if
 
       else
