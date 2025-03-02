@@ -172,6 +172,8 @@ module repartition
 
          ! Number of cores we want dofs on
          no_active_cores = floor(dble(comm_size)/dble(proc_stride))
+         ! Be careful of rounding!
+         if (no_active_cores == 0) no_active_cores = 1
 
          ! Have to symmetrize the input matrix or it won't work in parmetis
          ! as it expects a symmetric graph
