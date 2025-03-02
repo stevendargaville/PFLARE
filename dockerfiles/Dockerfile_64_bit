@@ -9,9 +9,6 @@ ARG ARCH=arch-linux-c-opt
 LABEL maintainer="Steven Dargaville"
 LABEL description="PFLARE_64_bit"
 
-# If you want to debug inside the container
-# RUN apt-get update && apt-get install -y valgrind 
-
 ENV CHECKOUT_BRANCH=$BRANCH
 ENV PETSC_ARCH=$ARCH
 # Ensure any test failures are caught and the build fails
