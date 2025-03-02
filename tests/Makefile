@@ -185,7 +185,11 @@ run_tests_no_load:
 	@echo "Test lAIR with GMRES polynomials with PC regenerated with no sparsity change"
 	./ex6f -m 10 -n 10 -regen -pc_air_z_type lair -pc_air_reuse_sparsity -ksp_max_it 3
 	@echo "Test lAIR SAI with GMRES polynomials with PC regenerated with no sparsity change"
-	./ex6f -m 10 -n 10 -regen -pc_air_z_type lair_sai -pc_air_reuse_sparsity	-ksp_max_it 3
+	./ex6f -m 10 -n 10 -regen -pc_air_z_type lair_sai -pc_air_reuse_sparsity -ksp_max_it 3
+	@echo "Test AIRG with GMRES polynomials with PC regenerated with no sparsity change with constrain w"
+	./ex6f -m 10 -n 10 -regen -pc_air_reuse_sparsity -ksp_max_it 3 -pc_air_constrain_w
+	@echo "Test AIRG with GMRES polynomials with PC regenerated with no sparsity change with constrain w"
+	$(MPIEXEC) -n 2 ./ex6f -m 10 -n 10 -regen -pc_air_reuse_sparsity -ksp_max_it 3 -pc_air_constrain_w	
 # 
 	@echo ""
 	@echo "Test AIRG with GMRES polynomials with PC regenerated with no sparsity change and polynomial coeffs stored"

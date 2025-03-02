@@ -1657,7 +1657,11 @@ module air_mg_setup
                      ! Can't use matcreatevecs here on coarse_matrix(our_level_coarse)
                      ! if the coarser matrix has gone down to one process it returns a serial vector
                      ! but we have to have the same type for the scatter (ie mpi and mpi)
-                     call VecGetType(left_null_vecs(1), vec_type, ierr)
+                     if (air_data%options%constrain_z) then
+                        call VecGetType(left_null_vecs(1), vec_type, ierr)
+                     else if (air_data%options%constrain_w) then
+                        call VecGetType(right_null_vecs(1), vec_type, ierr)
+                     end if
                      call VecCreate(MPI_COMM_MATRIX, temp_coarse_vec, ierr)
                      call VecSetSizes(temp_coarse_vec, local_rows_repart, global_rows_repart, ierr)
                      call VecSetType(temp_coarse_vec, vec_type, ierr)
