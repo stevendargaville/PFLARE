@@ -909,9 +909,10 @@ PETSC_INTERN void compute_P_from_W_kokkos(Mat *input_mat, PetscInt global_row_st
       MatGetSize(mat_nonlocal, &rows_ao, &cols_ao); 
 
       // We also copy the input mat colmap over to the device as we need it
-      colmap_input_h = PetscIntKokkosViewHost(mat_mpi->garray, cols_ao);
-      colmap_input_d = PetscIntKokkosView("colmap_input_d", cols_ao);
-      Kokkos::deep_copy(colmap_input_d, colmap_input_h);        
+      // Don't actually need on the device for this routine
+      // colmap_input_h = PetscIntKokkosViewHost(mat_mpi->garray, cols_ao);
+      //colmap_input_d = PetscIntKokkosView("colmap_input_d", cols_ao);
+      //Kokkos::deep_copy(colmap_input_d, colmap_input_h);        
    }
    else
    {
@@ -1205,7 +1206,15 @@ PETSC_INTERN void compute_P_from_W_kokkos(Mat *input_mat, PetscInt global_row_st
       // The equivalent of calling the internal MatCreateSeqAIJKokkosWithCSRMatrix
       MatCreate(PETSC_COMM_SELF, &output_mat_nonlocal);
       // Why isn't this publically available??
-      MatSetSeqAIJKokkosWithCSRMatrix_mine(output_mat_nonlocal, akok_nonlocal);    
+      MatSetSeqAIJKokkosWithCSRMatrix_mine(output_mat_nonlocal, akok_nonlocal);   
+
+      // We just take a copy of the original garray
+      PetscInt *garray_host = NULL; 
+      PetscMalloc1(cols_ao, &garray_host);
+      for (int i = 0; i < cols_ao; i++)
+      {
+         garray_host[i] = mat_mpi->garray[i];
+      }
 
       // Build our mpi kokkos matrix by passing in the local and 
       // nonlocal kokkos matrices and the colmap
@@ -1226,7 +1235,7 @@ PETSC_INTERN void compute_P_from_W_kokkos(Mat *input_mat, PetscInt global_row_st
       MatSetType(*output_mat, mat_type);
       // The garray is the same as the W
       // Why isn't this publically available??
-      MatSetMPIAIJKokkosWithSplitSeqAIJKokkosMatrices_mine(*output_mat, output_mat_local, output_mat_nonlocal, mat_mpi->garray);
+      MatSetMPIAIJKokkosWithSplitSeqAIJKokkosMatrices_mine(*output_mat, output_mat_local, output_mat_nonlocal, garray_host);
 
    }     
    // If in serial 
