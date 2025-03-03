@@ -123,8 +123,14 @@ static PetscErrorCode PCApply_AIR_c(PC pc, Vec x, Vec y)
 {
    PetscFunctionBegin;
    PC *pc_air_shell = (PC *)pc->data;
+
+   VecType vtypex, vtypey;
+   VecGetType(x, &vtypex);
+   VecGetType(y, &vtypey);
+   PetscViewerASCIIPrintf(PETSC_VIEWER_STDOUT_WORLD, "Vec types: %s %s\n", vtypex, vtypey);
+
    // Just call the underlying pcshell apply
-   PCApply(*pc_air_shell, x, y);
+   PCApply(*pc_air_shell, x, y); 
    PetscFunctionReturn(0);
 }
 
@@ -1413,7 +1419,15 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
             }
             else
             {
-               PetscViewerASCIIPrintf(viewer, "      assembled inverse, sparsity order %"PetscInt_FMT"\n", input_int_three);
+               // Only print out if the sparsity is less than the poly order
+               if (input_int_three < input_int_two)
+               {
+                  PetscViewerASCIIPrintf(viewer, "      assembled inverse, sparsity order %"PetscInt_FMT"\n", input_int_three);
+               }
+               else
+               {
+                  PetscViewerASCIIPrintf(viewer, "      assembled inverse\n");
+               }                 
             }
          }             
       }
@@ -1480,7 +1494,15 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
             }
             else
             {
-               PetscViewerASCIIPrintf(viewer, "      assembled inverse, sparsity order %"PetscInt_FMT"\n", input_int_three);
+               // Only print out if the sparsity is less than the poly order
+               if (input_int_three < input_int_two)
+               {               
+                  PetscViewerASCIIPrintf(viewer, "      assembled inverse, sparsity order %"PetscInt_FMT"\n", input_int_three);
+               }
+               else
+               {
+                  PetscViewerASCIIPrintf(viewer, "      assembled inverse\n");
+               }                
             }
          }  
 
@@ -1538,7 +1560,15 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
                }
                else
                {
-                  PetscViewerASCIIPrintf(viewer, "      assembled inverse, sparsity order %"PetscInt_FMT"\n", input_int_three);
+                  // Only print out if the sparsity is less than the poly order
+                  if (input_int_three < input_int_two)
+                  {                  
+                     PetscViewerASCIIPrintf(viewer, "      assembled inverse, sparsity order %"PetscInt_FMT"\n", input_int_three);
+                  }
+                  else
+                  {
+                     PetscViewerASCIIPrintf(viewer, "      assembled inverse\n");
+                  }                  
                }
             }  
          }           
@@ -1645,7 +1675,15 @@ static PetscErrorCode PCView_AIR_c(PC pc, PetscViewer viewer)
          }
          else
          {
-            PetscViewerASCIIPrintf(viewer, "    assembled inverse, sparsity order %"PetscInt_FMT"\n", input_int_three);
+            // Only print out if the sparsity is less than the poly order
+            if (input_int_three < input_int_two)
+            {            
+               PetscViewerASCIIPrintf(viewer, "    assembled inverse, sparsity order %"PetscInt_FMT"\n", input_int_three);
+            }
+            else
+            {
+               PetscViewerASCIIPrintf(viewer, "    assembled inverse\n");
+            }
          }
       }      
      
