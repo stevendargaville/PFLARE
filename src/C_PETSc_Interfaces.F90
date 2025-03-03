@@ -309,7 +309,21 @@ module c_petsc_interfaces
          integer(c_long_long) :: A_array, B_array
       end subroutine generate_one_point_with_one_entry_from_sparse_kokkos         
  
-   end interface      
+   end interface    
+   
+   interface   
+      
+      subroutine compute_R_from_Z_kokkos(A_array, global_row_start, indices_fine, &
+                     indices_coarse, indices_orig, identity_int, reuse_int, reuse_indices_int, B_array) &
+         bind(c, name="compute_R_from_Z_kokkos")
+         use iso_c_binding
+         integer(c_long_long) :: A_array, indices_fine, indices_coarse, indices_orig
+         integer(c_long_long) :: B_array
+         PetscInt, value :: global_row_start
+         integer(c_int), value :: identity_int, reuse_int, reuse_indices_int
+      end subroutine compute_R_from_Z_kokkos         
+ 
+   end interface     
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 

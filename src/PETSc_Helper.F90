@@ -1369,10 +1369,122 @@ logical, protected :: kokkos_debug_global = .FALSE.
          
    end subroutine compute_P_from_W_cpu      
 
+!------------------------------------------------------------------------------------------------------------------------
+   
+   subroutine compute_R_from_Z(Z, global_row_start, is_fine, is_coarse, &
+                     orig_fine_col_indices, &
+                     identity, reuse, &
+                     R)
+
+      ! Wrapper around compute_R_from_Z_kokkos and compute_R_from_Z_cpu
+   
+      ! ~~~~~~~~~~
+      ! Input 
+      type(tMat), intent(inout) :: Z, R
+      PetscInt, intent(in)      :: global_row_start
+      type(tIS), intent(in)     :: is_fine, is_coarse
+      type(tIS), intent(inout)  :: orig_fine_col_indices
+      logical, intent(in) :: identity, reuse
+
+#if defined(PETSC_HAVE_KOKKOS)                     
+      integer(c_long_long) :: A_array, B_array, indices_fine, indices_coarse, orig_indices
+      integer :: identity_int, reuse_int, reuse_indices_int, errorcode
+      PetscErrorCode :: ierr
+      MatType :: mat_type
+      Mat :: temp_mat, temp_mat_reuse, temp_mat_compare
+      PetscScalar normy;
+#endif        
+      ! ~~~~~~~~~~
+
+
+#if defined(PETSC_HAVE_KOKKOS)    
+
+      call MatGetType(Z, mat_type, ierr)
+      if (mat_type == MATMPIAIJKOKKOS .OR. mat_type == MATSEQAIJKOKKOS .OR. &
+            mat_type == MATAIJKOKKOS) then
+
+         identity_int = 0
+         if (identity) identity_int = 1
+         reuse_int = 0
+         if (reuse) reuse_int = 1
+         reuse_indices_int = 0;
+         if (.NOT. PetscISIsNull(orig_fine_col_indices)) reuse_indices_int = 1
+
+         A_array = Z%v             
+         indices_fine = is_fine%v
+         indices_coarse = is_coarse%v
+         orig_indices = orig_fine_col_indices%v
+         if (reuse) B_array = R%v
+         call compute_R_from_Z_kokkos(A_array, global_row_start, indices_fine, indices_coarse, &
+                        orig_indices, &
+                        identity_int, reuse_int, reuse_indices_int, &
+                        B_array)
+         R%v = B_array
+         
+         ! If debugging do a comparison between CPU and Kokkos results
+         if (kokkos_debug()) then
+
+            ! If we're doing reuse and debug, then we have to always output the result 
+            ! from the cpu version, as it will have coo preallocation structures set
+            ! They aren't copied over if you do a matcopy (or matconvert)
+            ! If we didn't do that the next time we come through this routine 
+            ! and try to call the cpu version with reuse, it will segfault
+            if (reuse) then
+               temp_mat = R
+               call MatConvert(R, MATSAME, MAT_INITIAL_MATRIX, temp_mat_compare, ierr)  
+            else
+               temp_mat_compare = R                       
+            end if
+
+            ! Debug check if the CPU and Kokkos versions are the same
+            call compute_R_from_Z_cpu(Z, global_row_start, is_fine, is_coarse, &
+                           orig_fine_col_indices, &
+                           identity, reuse, &
+                           temp_mat)  
+
+            call MatConvert(temp_mat, MATSAME, MAT_INITIAL_MATRIX, &
+                        temp_mat_reuse, ierr)                       
+
+            call MatAXPY(temp_mat_reuse, -1d0, temp_mat_compare, DIFFERENT_NONZERO_PATTERN, ierr)
+            call MatNorm(temp_mat_reuse, NORM_FROBENIUS, normy, ierr)
+            if (normy .gt. 1d-13) then
+               !call MatFilter(temp_mat_reuse, 1d-14, PETSC_TRUE, PETSC_FALSE, ierr)
+               !call MatView(temp_mat_reuse, PETSC_VIEWER_STDOUT_WORLD, ierr)
+               print *, "Kokkos and CPU versions of compute_R_from_Z do not match"
+               call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)  
+            end if
+            call MatDestroy(temp_mat_reuse, ierr)
+            if (.NOT. reuse) then
+               call MatDestroy(R, ierr)
+            else
+               call MatDestroy(temp_mat_compare, ierr)
+            end if
+            R = temp_mat
+
+         end if
+
+      else
+
+         call compute_R_from_Z_cpu(Z, global_row_start, is_fine, is_coarse, &
+                        orig_fine_col_indices, &
+                        identity, reuse, &
+                        R)       
+
+      end if
+#else
+      call compute_R_from_Z_cpu(Z, global_row_start, is_fine, is_coarse, &
+                     orig_fine_col_indices, &
+                     identity, reuse, &
+                     R)
+#endif 
+         
+         
+   end subroutine compute_R_from_Z   
+
 
  !------------------------------------------------------------------------------------------------------------------------
    
-   subroutine compute_R_from_Z(Z, global_row_start, is_fine, is_coarse, &
+   subroutine compute_R_from_Z_cpu(Z, global_row_start, is_fine, is_coarse, &
                      orig_fine_col_indices, &
                      identity, reuse, &
                      R)
@@ -1395,7 +1507,7 @@ logical, protected :: kokkos_debug_global = .FALSE.
       PetscInt :: rows_ao, cols_ao, rows_ad, cols_ad, size_cols
       PetscInt :: global_rows_z, global_cols_z
       PetscInt :: local_rows_z, local_cols_z, counter
-      integer :: comm_size, comm_size_world, errorcode
+      integer :: comm_size, errorcode
       PetscErrorCode :: ierr
       MPI_Comm :: MPI_COMM_MATRIX      
       PetscInt, dimension(:), allocatable :: cols
@@ -1419,15 +1531,14 @@ logical, protected :: kokkos_debug_global = .FALSE.
       call PetscObjectGetComm(Z, MPI_COMM_MATRIX, ierr)    
       ! Get the comm size 
       call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)
-      call MPI_Comm_size(MPI_COMM_WORLD, comm_size_world, errorcode)   
       
       call ISGetIndicesF90(is_fine, is_pointer_fine, ierr)
       call ISGetIndicesF90(is_coarse, is_pointer_coarse, ierr)      
 
-      call IsGetLocalSize(is_coarse, local_coarse_size, ierr)
-      call IsGetLocalSize(is_fine, local_fine_size, ierr)
-      call IsGetSize(is_coarse, global_coarse_size, ierr)
-      call IsGetSize(is_fine, global_fine_size, ierr)      
+      call ISGetLocalSize(is_coarse, local_coarse_size, ierr)
+      call ISGetLocalSize(is_fine, local_fine_size, ierr)
+      call ISGetSize(is_coarse, global_coarse_size, ierr)
+      call ISGetSize(is_fine, global_fine_size, ierr)      
 
       local_full_cols = local_coarse_size + local_fine_size
       global_full_cols = global_coarse_size + global_fine_size
@@ -1621,7 +1732,7 @@ logical, protected :: kokkos_debug_global = .FALSE.
       call ISRestoreIndicesF90(is_coarse, is_pointer_coarse, ierr)
       call ISRestoreIndicesF90(is_fine, is_pointer_fine, ierr)       
          
-   end subroutine compute_R_from_Z
+   end subroutine compute_R_from_Z_cpu
    
    !------------------------------------------------------------------------------------------------------------------------
    
