@@ -1297,7 +1297,7 @@ PETSC_INTERN void compute_P_from_W_kokkos(Mat *input_mat, PetscInt global_row_st
          a->ibdiagvalid = PETSC_FALSE;   
          a->inode.ibdiagvalid = PETSC_FALSE; 
       }      
-      PetscObjectStateIncrease((PetscObject)output_mat);      
+      PetscObjectStateIncrease((PetscObject)(*output_mat));    
 
    }
 
@@ -1466,7 +1466,7 @@ PETSC_INTERN void MatSetAllValues_kokkos(Mat *input_mat, PetscReal val)
       a->ibdiagvalid = PETSC_FALSE;   
       a->inode.ibdiagvalid = PETSC_FALSE;    
    }
-   PetscObjectStateIncrease((PetscObject)input_mat);
+   PetscObjectStateIncrease((PetscObject)(*input_mat));
 
    return;
 }
@@ -2333,7 +2333,7 @@ PETSC_INTERN void compute_R_from_Z_kokkos(Mat *input_mat, PetscInt global_row_st
          a->ibdiagvalid = PETSC_FALSE;   
          a->inode.ibdiagvalid = PETSC_FALSE;       
       }        
-      PetscObjectStateIncrease((PetscObject)output_mat);      
+      PetscObjectStateIncrease((PetscObject)(*output_mat));    
 
     }
 

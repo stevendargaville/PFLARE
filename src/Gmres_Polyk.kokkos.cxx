@@ -200,7 +200,7 @@ PETSC_INTERN void build_gmres_polynomial_inverse_0th_order_kokkos(Mat *input_mat
       a->idiagvalid  = PETSC_FALSE;
       a->ibdiagvalid = PETSC_FALSE;      
       a->inode.ibdiagvalid = PETSC_FALSE;           
-      PetscObjectStateIncrease((PetscObject)output_mat);
+      PetscObjectStateIncrease((PetscObject)(*output_mat));
    }
 
    return;
@@ -444,7 +444,7 @@ PETSC_INTERN void build_gmres_polynomial_inverse_0th_order_sparsity_kokkos(Mat *
       a->idiagvalid  = PETSC_FALSE;
       a->ibdiagvalid = PETSC_FALSE;      
       a->inode.ibdiagvalid = PETSC_FALSE;           
-      PetscObjectStateIncrease((PetscObject)output_mat);
+      PetscObjectStateIncrease((PetscObject)(*output_mat));
    }
 
    return;
