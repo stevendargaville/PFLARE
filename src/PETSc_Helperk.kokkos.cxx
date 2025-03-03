@@ -2221,92 +2221,97 @@ PETSC_INTERN void compute_R_from_Z_kokkos(Mat *input_mat, PetscInt global_row_st
    // If we're reusing, we can just write directly to the existing views
    else
    {
-      std::cout << "REUSE" << std::endl;
-      exit(1);
-//       // Get the existing output mats
-//       if (mpi)
-//       {
-//          mat_mpi_output = (Mat_MPIAIJ *)(*output_mat)->data;
-//          mat_local_output = mat_mpi_output->A;
-//          mat_nonlocal_output = mat_mpi_output->B;     
-//       }
-//       else
-//       {
-//          mat_local_output = *output_mat;
-//       }     
-//       Mat_SeqAIJKokkos *aijkok_local_output = static_cast<Mat_SeqAIJKokkos *>(mat_local_output->spptr);
-//       Mat_SeqAIJKokkos *aijkok_nonlocal_output;
-//       if (mpi) aijkok_nonlocal_output = static_cast<Mat_SeqAIJKokkos *>(mat_nonlocal_output->spptr);
+      // Get the existing output mats
+      if (mpi)
+      {
+         mat_mpi_output = (Mat_MPIAIJ *)(*output_mat)->data;
+         mat_local_output = mat_mpi_output->A;
+         mat_nonlocal_output = mat_mpi_output->B;     
+      }
+      else
+      {
+         mat_local_output = *output_mat;
+      }     
+      Mat_SeqAIJKokkos *aijkok_local_output = static_cast<Mat_SeqAIJKokkos *>(mat_local_output->spptr);
+      Mat_SeqAIJKokkos *aijkok_nonlocal_output;
+      if (mpi) aijkok_nonlocal_output = static_cast<Mat_SeqAIJKokkos *>(mat_nonlocal_output->spptr);
 
-//       // Annoying we can't just call MatSeqAIJGetKokkosView
-//       a_local_d = aijkok_local_output->a_dual.view_device();
-//       if (mpi) a_nonlocal_d = aijkok_nonlocal_output->a_dual.view_device();
+      // Annoying we can't just call MatSeqAIJGetKokkosView
+      a_local_d = aijkok_local_output->a_dual.view_device();
+      if (mpi) a_nonlocal_d = aijkok_nonlocal_output->a_dual.view_device();
 
-//       // Annoyingly there isn't currently the ability to get views for i (or j)
-//       const PetscInt *device_local_i_output = nullptr, *device_nonlocal_i_ouput = nullptr;
-//       PetscMemType mtype;
-//       MatSeqAIJGetCSRAndMemType(mat_local_output, &device_local_i_output, NULL, NULL, &mtype);  
-//       if (mpi) MatSeqAIJGetCSRAndMemType(mat_nonlocal_output, &device_nonlocal_i_ouput, NULL, NULL, &mtype);  
+      // Annoyingly there isn't currently the ability to get views for i (or j)
+      const PetscInt *device_local_i_output = nullptr, *device_local_j_output = nullptr, *device_nonlocal_i_ouput = nullptr;
+      PetscMemType mtype;
+      MatSeqAIJGetCSRAndMemType(mat_local_output, &device_local_i_output, &device_local_j_output, NULL, &mtype);  
+      if (mpi) MatSeqAIJGetCSRAndMemType(mat_nonlocal_output, &device_nonlocal_i_ouput, NULL, NULL, &mtype);  
 
-//       // Have these point at the existing i pointers - we don't need j if we're reusing
-//       ConstMatRowMapKokkosView i_local_const_d = ConstMatRowMapKokkosView(device_local_i_output, local_rows+1);
-//       ConstMatRowMapKokkosView i_nonlocal_const_d;
-//       if (mpi) i_nonlocal_const_d = ConstMatRowMapKokkosView(device_nonlocal_i_ouput, local_rows+1);        
+      // Have these point at the existing i pointers - we only need the local j
+      ConstMatRowMapKokkosView i_local_const_d = ConstMatRowMapKokkosView(device_local_i_output, local_rows_z+1);
+      ConstMatColIdxKokkosView j_local_const_d = ConstMatColIdxKokkosView(device_local_j_output, aijkok_local_output->csrmat.nnz());
+      ConstMatRowMapKokkosView i_nonlocal_const_d;
+      if (mpi) i_nonlocal_const_d = ConstMatRowMapKokkosView(device_nonlocal_i_ouput, local_rows_z+1);        
 
-//       // Only have to write W as the identity block cannot change
-//       // Loop over the rows of W - annoying we have const views as this is just the same loop as above
-//       Kokkos::parallel_for(
-//          Kokkos::TeamPolicy<>(PetscGetKokkosExecutionSpace(), local_rows_fine, Kokkos::AUTO()),
-//          KOKKOS_LAMBDA(const KokkosTeamMemberType &t) {
+      // Only have to write Z but have to be careful as we have the identity mixed 
+      // in there
+      // Loop over the rows of W - annoying we have const views as this is just the same loop as above
+      Kokkos::parallel_for(
+         Kokkos::TeamPolicy<>(PetscGetKokkosExecutionSpace(), local_rows_z, Kokkos::AUTO()),
+         KOKKOS_LAMBDA(const KokkosTeamMemberType &t) {
 
-//             // Row
-//             PetscInt i = t.league_rank();
+            // Row
+            PetscInt i = t.league_rank();
 
-//             // Convert to global fine index into a local index in the full matrix
-//             PetscInt row_index = fine_view_d(i) - global_row_start;
-//             // Still using i here (the local index into W)
-//             PetscInt ncols_local = device_local_i[i + 1] - device_local_i[i];         
+            // Simple row index
+            PetscInt row_index = i;
+            // Still using i here (the local index into W)
+            PetscInt ncols_local = device_local_i[i + 1] - device_local_i[i];         
 
-//             // For over local columns - copy in W
-//             Kokkos::parallel_for(
-//                Kokkos::TeamThreadRange(t, ncols_local), [&](const PetscInt j) {
+            // For over local columns - copy in Z
+            // We have to skip over the identity entries, which we know are always C points
+            Kokkos::parallel_for(
+               Kokkos::TeamThreadRange(t, ncols_local), [&](const PetscInt j) {
 
-//                a_local_d(i_local_const_d(row_index) + j) = device_local_vals[device_local_i[i] + j];
-                     
-//             });     
+               PetscInt offset = 0;
 
-//             // For over nonlocal columns - copy in W
-//             if (mpi)
-//             {
-//                PetscInt ncols_nonlocal = device_nonlocal_i[i + 1] - device_nonlocal_i[i];         
+               // If we're at or after the C point identity, our index into R gets a +1
+               // so we skip over writing to that index in R
+               if (j_local_const_d(i_local_const_d(row_index) + j) >= coarse_view_d(i) - global_row_start) offset = 1;
+               a_local_d(i_local_const_d(row_index) + j + offset) = device_local_vals[device_local_i[i] + j];
+            });     
 
-//                Kokkos::parallel_for(
-//                   Kokkos::TeamThreadRange(t, ncols_nonlocal), [&](const PetscInt j) {
+            // For over nonlocal columns - copy in Z - identical structure in the off-diag block
+            if (mpi)
+            {
+               PetscInt ncols_nonlocal = device_nonlocal_i[i + 1] - device_nonlocal_i[i];         
 
-//                   // We keep the existing local indices in the off-diagonal blocl here
-//                   // we have all the same columns as W and hence the same garray
-//                   a_nonlocal_d(i_nonlocal_const_d(row_index) + j) = device_nonlocal_vals[device_nonlocal_i[i] + j];
+               Kokkos::parallel_for(
+                  Kokkos::TeamThreadRange(t, ncols_nonlocal), [&](const PetscInt j) {
+
+                  // We keep the existing local indices in the off-diagonal blocl here
+                  // we have all the same columns as W and hence the same garray
+                  a_nonlocal_d(i_nonlocal_const_d(row_index) + j) = device_nonlocal_vals[device_nonlocal_i[i] + j];
                         
-//                });          
-//             }
-//       });   
+               });          
+            }
+      });   
 
-//       // Have to specify we've modifed data on the device
-//       // Want to call MatSeqAIJKokkosModifyDevice but its PETSC_INTERN
-//       aijkok_local_output->a_dual.clear_sync_state();
-//       aijkok_local_output->a_dual.modify_device();
-//       aijkok_local_output->transpose_updated = PETSC_FALSE;
-//       aijkok_local_output->hermitian_updated = PETSC_FALSE;
-//       if (mpi)
-//       {
-//          aijkok_nonlocal_output->a_dual.clear_sync_state();
-//          aijkok_nonlocal_output->a_dual.modify_device();
-//          aijkok_nonlocal_output->transpose_updated = PETSC_FALSE;
-//          aijkok_nonlocal_output->hermitian_updated = PETSC_FALSE;
-//          //MatSeqAIJInvalidateDiagonal(mat_local);    
-//       }      
-//       //MatSeqAIJInvalidateDiagonal(mat_local);
-//       PetscObjectStateIncrease((PetscObject)output_mat);      
+      // Have to specify we've modifed data on the device
+      // Want to call MatSeqAIJKokkosModifyDevice but its PETSC_INTERN
+      aijkok_local_output->a_dual.clear_sync_state();
+      aijkok_local_output->a_dual.modify_device();
+      aijkok_local_output->transpose_updated = PETSC_FALSE;
+      aijkok_local_output->hermitian_updated = PETSC_FALSE;
+      if (mpi)
+      {
+         aijkok_nonlocal_output->a_dual.clear_sync_state();
+         aijkok_nonlocal_output->a_dual.modify_device();
+         aijkok_nonlocal_output->transpose_updated = PETSC_FALSE;
+         aijkok_nonlocal_output->hermitian_updated = PETSC_FALSE;
+         //MatSeqAIJInvalidateDiagonal(mat_local);    
+      }      
+      //MatSeqAIJInvalidateDiagonal(mat_local);
+      PetscObjectStateIncrease((PetscObject)output_mat);      
 
     }
 
