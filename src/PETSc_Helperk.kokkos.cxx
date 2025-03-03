@@ -1995,7 +1995,10 @@ PETSC_INTERN void compute_R_from_Z_kokkos(Mat *input_mat, PetscInt global_row_st
       // We've now built the original fine indices
       ISDestroy(&col_indices);
       PetscFree(col_indices_off_proc_array);
-
+   }
+   else
+   {
+      ISGetLocalSize(*orig_fine_col_indices, &size_cols);
    }
 
    // Get pointers to the indices on the host
