@@ -1641,7 +1641,13 @@ PETSC_INTERN void generate_one_point_with_one_entry_from_sparse_kokkos(Mat *inpu
 
    // Store original counts before scan
    PetscIntKokkosView has_entry_local_d("has_entry_local_d", local_rows);
-   Kokkos::deep_copy(has_entry_local_d, nnz_match_local_row_d);   
+   Kokkos::deep_copy(has_entry_local_d, nnz_match_local_row_d); 
+   PetscIntKokkosView has_entry_nonlocal_d;
+   if (mpi)
+   {
+      has_entry_nonlocal_d = PetscIntKokkosView ("has_entry_nonlocal_d", local_rows);
+      Kokkos::deep_copy(has_entry_nonlocal_d, nnz_match_nonlocal_row_d);
+   }  
 
    // Need to do a scan on nnz_match_local_row_d to get where each row starts
    Kokkos::parallel_scan (local_rows, KOKKOS_LAMBDA (const PetscInt i, PetscInt& update, const bool final) {
@@ -1714,7 +1720,7 @@ PETSC_INTERN void generate_one_point_with_one_entry_from_sparse_kokkos(Mat *inpu
          j_local_d(i_local_d(i)) = max_col_row_d(i);
          a_local_d(i_local_d(i)) = 1.0;
       }
-      else if (mpi)
+      else if (mpi && has_entry_nonlocal_d(i) > 0)
       {
          j_nonlocal_d(i_nonlocal_d(i)) = max_col_row_d(i);
          a_nonlocal_d(i_nonlocal_d(i)) = 1.0;         
