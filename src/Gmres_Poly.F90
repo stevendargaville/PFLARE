@@ -740,13 +740,13 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       PetscInt :: local_rows, local_cols, global_rows, global_cols
       PetscInt :: global_row_start, global_row_end_plus_one
       PetscInt :: global_col_start, global_col_end_plus_one, n, ncols, ncols_two, ifree, max_nnzs
-      PetscInt :: i_loc, j_loc, row_size, rows_ao, cols_ao, rows_ad, cols_ad, shift = 0, counter
+      PetscInt :: i_loc, j_loc, row_size, rows_ao, cols_ao, rows_ad, cols_ad, shift = 0
 #ifdef _OPENMP
       integer :: omp_threads, omp_threads_env, length, status
       CHARACTER(len=255) :: omp_threads_env_char
 #endif      
       integer :: errorcode, match_counter, term, order, location
-      integer :: comm_size, comm_size_world
+      integer :: comm_size
       PetscErrorCode :: ierr      
       PetscReal, dimension(:), allocatable :: vals_two, vals_power_temp, vals_previous_power_temp
       PetscReal, dimension(:), allocatable, target :: vals
@@ -773,10 +773,8 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       PetscReal, dimension(:), pointer :: vals_two_ptr, vals_ptr
       real(c_double), pointer :: submatrices_vals(:)
       logical :: symmetric = .false., inodecompressed=.false., done, reuse_triggered
-      type(tVec) :: rhs_copy, diag_vec, power_vec
       PetscInt, parameter :: one = 1, zero = 0
       MatType:: mat_type    
-      PetscInt, allocatable, dimension(:) :: indices
       
       ! ~~~~~~~~~~  
 
@@ -790,7 +788,6 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       call PetscObjectGetComm(matrix, MPI_COMM_MATRIX, ierr)    
       ! Get the comm size 
       call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)
-      call MPI_Comm_size(MPI_COMM_WORLD, comm_size_world, errorcode)
 
       ! Get the local sizes
       call MatGetLocalSize(matrix, local_rows, local_cols, ierr)
@@ -807,69 +804,10 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       ! ~~~~~~~~~~
       if (poly_sparsity_order == 0) then
 
-         ! Our matrix has to be square
-         call MatCreateVecs(matrix, rhs_copy, diag_vec, ierr)
-         call MatGetDiagonal(matrix, diag_vec, ierr)
-
-         ! This stores D^order
-         call VecDuplicate(diag_vec, power_vec, ierr)
-         call MatGetDiagonal(matrix, power_vec, ierr)
-
-         ! ~~~~~~~~~~~      
-         ! Finish the non-blocking all-reduce and compute our polynomial coefficients
-         ! ~~~~~~~~~~~
-         call finish_gmres_polynomial_coefficients_power(poly_order, buffers, coefficients)         
-
-         ! Set: alpha_0 * I
-         call VecSet(rhs_copy, coefficients(1), ierr)
-
-         ! Calculate: alpha_0 * I + alpha_1 * D + alpha_2 * D^2
-         do order = 1, poly_order
-            call VecAXPY(rhs_copy, coefficients(order+1), power_vec, ierr)
-            ! Compute power_vec = power_vec * D
-            call VecPointwiseMult(power_vec, power_vec, diag_vec, ierr)
-         end do
-
-         ! If not re-using
-         if (.NOT. reuse_triggered) then
-
-            call MatCreate(MPI_COMM_MATRIX, cmat, ierr)
-            call MatSetSizes(cmat, local_rows, local_cols, &
-                             global_rows, global_cols, ierr)
-            ! Match the output type
-            call MatSetType(cmat, mat_type, ierr)
-            call MatSetUp(cmat, ierr)
-
-         end if
-
-         ! Don't set any off processor entries so no need for a reduction when assembling
-         call MatSetOption(cmat, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)
-         call MatSetOption(cmat, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)                
-   
-         if (.NOT. reuse_triggered) then
-            allocate(indices(local_rows))
-
-            ! Set the diagonal
-            counter = 1
-            do i_loc = global_row_start, global_row_end_plus_one-1
-               indices(counter) = i_loc
-               counter = counter + 1
-            end do
-            ! Set the diagonal
-            call MatSetPreallocationCOO(cmat, local_rows, indices, indices, ierr)
-            deallocate(indices)
-
-         end if                   
-
-         ! Set the diagonal to our polynomial
-         call MatDiagonalSet(cmat, rhs_copy, INSERT_VALUES, ierr)
-      
-         call VecDestroy(diag_vec, ierr)
-         call VecDestroy(rhs_copy, ierr) 
-         call VecDestroy(power_vec, ierr)         
+         call build_gmres_polynomial_inverse_0th_order_sparsity(matrix, poly_order, buffers, &
+                  coefficients, cmat)     
 
          return
-
       end if
 
       ! ~~~~~~~~~~
@@ -1853,6 +1791,109 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       deallocate(v)                     
 
    end subroutine build_gmres_polynomial_inverse_0th_order_cpu   
+
+
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine build_gmres_polynomial_inverse_0th_order_sparsity(matrix, poly_order, buffers, coefficients, &
+                  inv_matrix)
+
+      ! Specific inverse with 0th order sparsity
+
+      ! ~~~~~~
+      type(tMat), intent(in)                            :: matrix
+      integer, intent(in)                               :: poly_order
+      type(tsqr_buffers), intent(inout)                 :: buffers
+      PetscReal, dimension(:), target, intent(inout)    :: coefficients
+      type(tMat), intent(inout)                         :: inv_matrix
+
+      ! Local variables
+      PetscInt :: global_row_start, global_row_end_plus_one, counter
+      PetscInt :: global_rows, global_cols, local_rows, local_cols, i_loc
+      integer :: comm_size, errorcode, order
+      PetscErrorCode :: ierr      
+      MPI_Comm :: MPI_COMM_MATRIX
+      logical :: reuse_triggered
+      MatType:: mat_type
+      PetscInt, allocatable, dimension(:) :: indices
+      type(tVec) :: rhs_copy, diag_vec, power_vec
+      ! ~~~~~~      
+
+      call PetscObjectGetComm(matrix, MPI_COMM_MATRIX, ierr)    
+      ! Get the comm size 
+      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)
+      call MatGetType(matrix, mat_type, ierr)
+
+      ! Get the local sizes
+      call MatGetLocalSize(matrix, local_rows, local_cols, ierr)
+      call MatGetSize(matrix, global_rows, global_cols, ierr)
+      ! This returns the global index of the local portion of the matrix
+      call MatGetOwnershipRange(matrix, global_row_start, global_row_end_plus_one, ierr)  
+
+      reuse_triggered = .NOT. PetscMatIsNull(inv_matrix)
+
+       ! Our matrix has to be square
+      call MatCreateVecs(matrix, rhs_copy, diag_vec, ierr)
+      call MatGetDiagonal(matrix, diag_vec, ierr)
+
+      ! This stores D^order
+      call VecDuplicate(diag_vec, power_vec, ierr)
+      call MatGetDiagonal(matrix, power_vec, ierr)
+
+      ! ~~~~~~~~~~~      
+      ! Finish the non-blocking all-reduce and compute our polynomial coefficients
+      ! ~~~~~~~~~~~
+      call finish_gmres_polynomial_coefficients_power(poly_order, buffers, coefficients)         
+
+      ! Set: alpha_0 * I
+      call VecSet(rhs_copy, coefficients(1), ierr)
+
+      ! Calculate: alpha_0 * I + alpha_1 * D + alpha_2 * D^2
+      do order = 1, poly_order
+         call VecAXPY(rhs_copy, coefficients(order+1), power_vec, ierr)
+         ! Compute power_vec = power_vec * D
+         call VecPointwiseMult(power_vec, power_vec, diag_vec, ierr)
+      end do
+
+      ! If not re-using
+      if (.NOT. reuse_triggered) then
+
+         call MatCreate(MPI_COMM_MATRIX, inv_matrix, ierr)
+         call MatSetSizes(inv_matrix, local_rows, local_cols, &
+                          global_rows, global_cols, ierr)
+         ! Match the output type
+         call MatSetType(inv_matrix, mat_type, ierr)
+         call MatSetUp(inv_matrix, ierr)
+
+      end if
+
+      ! Don't set any off processor entries so no need for a reduction when assembling
+      call MatSetOption(inv_matrix, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)
+      call MatSetOption(inv_matrix, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)                
+
+      if (.NOT. reuse_triggered) then
+         allocate(indices(local_rows))
+
+         ! Set the diagonal
+         counter = 1
+         do i_loc = global_row_start, global_row_end_plus_one-1
+            indices(counter) = i_loc
+            counter = counter + 1
+         end do
+         ! Set the diagonal
+         call MatSetPreallocationCOO(inv_matrix, local_rows, indices, indices, ierr)
+         deallocate(indices)
+
+      end if                   
+
+      ! Set the diagonal to our polynomial
+      call MatDiagonalSet(inv_matrix, rhs_copy, INSERT_VALUES, ierr)
+   
+      call VecDestroy(diag_vec, ierr)
+      call VecDestroy(rhs_copy, ierr) 
+      call VecDestroy(power_vec, ierr)                      
+
+   end subroutine build_gmres_polynomial_inverse_0th_order_sparsity      
    
 
 ! -------------------------------------------------------------------------------------------------------------------------------
