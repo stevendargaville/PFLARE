@@ -977,6 +977,67 @@ logical, protected :: kokkos_debug_global = .FALSE.
    
    subroutine generate_one_point_with_one_entry_from_sparse(input_mat, output_mat)
 
+      ! Wrapper around generate_one_point_with_one_entry_from_sparse_kokkos and 
+      ! generate_one_point_with_one_entry_from_sparse_cpu
+   
+      ! ~~~~~~~~~~
+      ! Input 
+      type(tMat), intent(in) :: input_mat
+      type(tMat), intent(inout) :: output_mat
+      
+#if defined(PETSC_HAVE_KOKKOS)                     
+      integer(c_long_long) :: A_array, B_array
+      integer :: errorcode
+      PetscErrorCode :: ierr
+      MatType :: mat_type
+      Mat :: temp_mat
+      PetscScalar normy;
+#endif      
+      ! ~~~~~~~~~~
+
+#if defined(PETSC_HAVE_KOKKOS)    
+
+      call MatGetType(input_mat, mat_type, ierr)
+      if (mat_type == MATMPIAIJKOKKOS .OR. mat_type == MATSEQAIJKOKKOS .OR. &
+            mat_type == MATAIJKOKKOS) then      
+
+         A_array = input_mat%v             
+         call generate_one_point_with_one_entry_from_sparse_kokkos(A_array, B_array) 
+         output_mat%v = B_array
+
+         ! If debugging do a comparison between CPU and Kokkos results
+         if (kokkos_debug()) then
+
+            ! Debug check if the CPU and Kokkos versions are the same
+            call generate_one_point_with_one_entry_from_sparse_cpu(input_mat, temp_mat)      
+
+            call MatAXPY(temp_mat, -1d0, output_mat, DIFFERENT_NONZERO_PATTERN, ierr)
+            call MatNorm(temp_mat, NORM_FROBENIUS, normy, ierr)
+            if (normy .gt. 1d-13) then
+               !call MatFilter(temp_mat, 1d-14, PETSC_TRUE, PETSC_FALSE, ierr)
+               !call MatView(temp_mat, PETSC_VIEWER_STDOUT_WORLD, ierr)
+               print *, "Kokkos and CPU versions of generate_one_point_with_one_entry_from_sparse do not match"
+               call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)  
+            end if
+            call MatDestroy(temp_mat, ierr)
+         end if
+
+      else
+
+         call generate_one_point_with_one_entry_from_sparse_cpu(input_mat, output_mat)         
+
+      end if
+#else
+      call generate_one_point_with_one_entry_from_sparse_cpu(input_mat, output_mat)  
+#endif 
+
+         
+   end subroutine generate_one_point_with_one_entry_from_sparse    
+
+  !------------------------------------------------------------------------------------------------------------------------
+   
+   subroutine generate_one_point_with_one_entry_from_sparse_cpu(input_mat, output_mat)
+
       ! Returns a copy of a sparse matrix, but with only one in the spot of the biggest entry
       ! This can be used to generate a classical one point prolongator for example
    
@@ -1071,7 +1132,7 @@ logical, protected :: kokkos_debug_global = .FALSE.
 
       deallocate(cols, vals)
          
-   end subroutine generate_one_point_with_one_entry_from_sparse    
+   end subroutine generate_one_point_with_one_entry_from_sparse_cpu   
    
 !------------------------------------------------------------------------------------------------------------------------
    
