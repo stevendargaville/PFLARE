@@ -31,6 +31,12 @@ PETSC_INTERN void build_gmres_polynomial_inverse_0th_order_kokkos(Mat *input_mat
    MatGetLocalSize(*input_mat, &local_rows, &local_cols);
    MatGetSize(*input_mat, &global_rows, &global_cols);       
 
+   // We also copy the coefficients over to the device as we need it
+   PetscInt one = 1;
+   auto coefficients_h = PetscScalarKokkosViewHost(coefficients, one);
+   auto coefficients_d = PetscScalarKokkosView("colmap_input_d", one);
+   Kokkos::deep_copy(coefficients_d, coefficients_h);   
+
    // ~~~~~~~~~~~~
    // Get the number of nnzs
    // ~~~~~~~~~~~~
@@ -103,7 +109,7 @@ PETSC_INTERN void build_gmres_polynomial_inverse_0th_order_kokkos(Mat *input_mat
             j_local_d(i) = i;
       });    
       // 0th order polynomial is just the first coefficient on the diagonal
-      Kokkos::deep_copy(a_local_d, coefficients[0]);   
+      Kokkos::deep_copy(a_local_d, coefficients_d(0));   
 
       // Have to specify that we've modified the device data
       a_local_dual.modify_device();
@@ -186,7 +192,7 @@ PETSC_INTERN void build_gmres_polynomial_inverse_0th_order_kokkos(Mat *input_mat
       Mat_SeqAIJKokkos *aijkok_local_output = static_cast<Mat_SeqAIJKokkos *>(mat_local_output->spptr);
       // Annoying we can't just call MatSeqAIJGetKokkosView
       a_local_d = aijkok_local_output->a_dual.view_device();
-      Kokkos::deep_copy(a_local_d, coefficients[0]);  
+      Kokkos::deep_copy(a_local_d, coefficients_d(0));  
 
       // Have to specify we've modifed local data on the device
       // Want to call MatSeqAIJKokkosModifyDevice but its PETSC_INTERN
@@ -225,7 +231,13 @@ PETSC_INTERN void build_gmres_polynomial_inverse_0th_order_sparsity_kokkos(Mat *
    // Get the comm
    PetscObjectGetComm((PetscObject)*input_mat, &MPI_COMM_MATRIX);
    MatGetLocalSize(*input_mat, &local_rows, &local_cols);
-   MatGetSize(*input_mat, &global_rows, &global_cols);       
+   MatGetSize(*input_mat, &global_rows, &global_cols);  
+
+   // We also copy the coefficients over to the device as we need it
+   PetscInt coeff_size = poly_order + 1;
+   auto coefficients_h = PetscScalarKokkosViewHost(coefficients, coeff_size);
+   auto coefficients_d = PetscScalarKokkosView("colmap_input_d", coeff_size);
+   Kokkos::deep_copy(coefficients_d, coefficients_h);         
 
    // ~~~~~~~~~~~~
    // Get the number of nnzs
@@ -348,14 +360,14 @@ PETSC_INTERN void build_gmres_polynomial_inverse_0th_order_sparsity_kokkos(Mat *
          Kokkos::TeamThreadRange(t, 1, poly_order+1),
          [&](const PetscInt j, PetscReal& thread_data) {
 
-            thread_data += coefficients[j] * pow(diag_vec_d(i), j);
+            thread_data += coefficients_d[j] * pow(diag_vec_d(i), j);
          }, row_val
       );
 
       // Only want one thread in the team to write the result
       Kokkos::single(Kokkos::PerTeam(t), [&]() {     
          // Add the powers and the 0th order coefficient
-         a_local_d(i) = row_val + coefficients[0];
+         a_local_d(i) = row_val + coefficients_d[0];
       });      
    });    
 
