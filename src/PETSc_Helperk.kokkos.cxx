@@ -1197,7 +1197,7 @@ PETSC_INTERN void compute_P_from_W_kokkos(Mat *input_mat, PetscInt global_row_st
                Kokkos::parallel_for(
                   Kokkos::TeamThreadRange(t, ncols_nonlocal), [&](const PetscInt j) {
 
-                  // We keep the existing local indices in the off-diagonal blocl here
+                  // We keep the existing local indices in the off-diagonal block here
                   // we have all the same columns as W and hence the same garray
                   j_nonlocal_d(i_nonlocal_d(row_index) + j) = device_nonlocal_j[device_nonlocal_i[i] + j];
                   a_nonlocal_d(i_nonlocal_d(row_index) + j) = device_nonlocal_vals[device_nonlocal_i[i] + j];
@@ -2197,9 +2197,10 @@ PETSC_INTERN void compute_R_from_Z_kokkos(Mat *input_mat, PetscInt global_row_st
                Kokkos::parallel_for(
                   Kokkos::TeamThreadRange(t, ncols_nonlocal), [&](const PetscInt j) {
 
-                  // This will give the global column indices
-                  // Remember orig_view_d has all the local block in 1:cols_ad, then the nonlocal ones
-                  j_nonlocal_d(i_nonlocal_d(row_index) + j) = orig_view_d(device_nonlocal_j[device_nonlocal_i[i] + j] + cols_ad);
+                  // We keep the existing local indices in the off-diagonal block here
+                  // we have all the same non-local local column indices as Z (as the identity added is always local)
+                  // The garray is the same size, its just the global indices that have changed
+                  j_nonlocal_d(i_nonlocal_d(row_index) + j) = device_nonlocal_j[device_nonlocal_i[i] + j];
                   a_nonlocal_d(i_nonlocal_d(row_index) + j) = device_nonlocal_vals[device_nonlocal_i[i] + j];
                         
                });          
@@ -2336,7 +2337,7 @@ PETSC_INTERN void compute_R_from_Z_kokkos(Mat *input_mat, PetscInt global_row_st
       // Why isn't this publically available??
       MatSetSeqAIJKokkosWithCSRMatrix_mine(output_mat_local, akok_local);   
 
-      // we also have to go and build the a, i, j for the non-local off-diagonal block
+      // we also have to go and build our off block matrix and then the output
       if (mpi) 
       {
          // Have to specify that we've modified the device data
@@ -2344,102 +2345,17 @@ PETSC_INTERN void compute_R_from_Z_kokkos(Mat *input_mat, PetscInt global_row_st
          i_nonlocal_dual.modify_device();
          j_nonlocal_dual.modify_device();
 
-         // Now we need to build garray on the host and rewrite the j_nonlocal_d indices so they are local
-         // The default values here are for the case where we 
-         // let do it, it resets this internally in MatSetUpMultiply_MPIAIJ
-         PetscInt *garray_host = NULL;
-         PetscInt col_ao_output = global_full_cols;
-         if (cols_ao == 0)
+         // We know the garray is just the original but rewritten to be 
+         // the full indices, which we have in in is_pointer_orig_fine_col(cols_ad:end)
+         PetscInt *garray_host = NULL; 
+         PetscMalloc1(cols_ao, &garray_host);
+         for (int i = 0; i < cols_ao; i++)
          {
-            // Silly but depending on the compiler this may return a non-null pointer
-            col_ao_output = 0;
-            PetscMalloc1(col_ao_output, &garray_host);
-         }
-
-         // We can use the Kokkos::UnorderedMap to do this if our 
-         // off diagonal block has fewer than 4 billion non-zero columns (max capacity of uint32_t)
-         // Otherwise we can just tell petsc to do do it on the host (in MatSetUpMultiply_MPIAIJ)
-         // and rely on the hash tables in petsc on the host which can handle more than 4 billion entries
-         // We trigger petsc doing it by passing in null as garray_host to MatSetMPIAIJKokkosWithSplitSeqAIJKokkosMatrices
-         // If we have no off-diagonal entries (either we started with zero or we've dropped them all)
-         // just skip all this and leave garray_host as null
-
-         // If we have 4 bit ints, we know cols_ao can never be bigger than the capacity of uint32_t
-         bool size_small_enough = sizeof(PetscInt) == 4 || \
-                     (sizeof(PetscInt) > 4 && cols_ao < 4294967295);
-         if (size_small_enough && cols_ao > 0 && nnzs_match_nonlocal > 0)
-         {
-            // Have to tell it the max capacity, we know we will have no more 
-            // than the input off-diag columns
-            Kokkos::UnorderedMap<PetscInt, PetscInt> hashmap((uint32_t)(cols_ao+1));
-
-            // Let's insert all the existing global col indices as keys (with no value to start)
-            Kokkos::parallel_for(
-               Kokkos::RangePolicy<>(0, nnzs_match_nonlocal), KOKKOS_LAMBDA(int i) {      
-               
-               // Insert the key (global col indices) without a value
-               // Duplicates will be ignored
-               hashmap.insert(j_nonlocal_d(i));
-            });
-
-            // We now know how many unique global columns we have
-            col_ao_output = hashmap.size();
-
-            // Tag which of the original garray stick around  
-            PetscIntKokkosView colmap_output_d_big("colmap_output_d_big", cols_ao);
-            Kokkos::deep_copy(colmap_output_d_big, colmap_input_d);                
-
-            // Mark which of the keys don't exist
-            Kokkos::parallel_for(
-               Kokkos::RangePolicy<>(0, cols_ao), KOKKOS_LAMBDA(int i) { 
-
-               // If the key doesn't exist set the global index to -1
-               if (!hashmap.exists(colmap_output_d_big(i))) colmap_output_d_big(i) = -1; 
-            });         
-
-            // Now sort the global columns indices
-            // All the -1 should be at the start
-            Kokkos::sort(colmap_output_d_big);
-
-            // Count the number of -1 - this will be the index of the first entry
-            // that isn't -1
-            // It should never be equal to start index, because otherwise we
-            // have dropped all nonlocal entries
-            auto &exec = PetscGetKokkosExecutionSpace();
-            PetscInt start_index = Kokkos::Experimental::count(exec, colmap_output_d_big, -1);
-
-            // Our final colmap_output_d is colmap_output_d_big(start_index:end)
-            PetscIntKokkosView colmap_output_d = Kokkos::subview(colmap_output_d_big, \
-                     Kokkos::make_pair(start_index, cols_ao));
-
-            // Now we can clear the hash and instead stick in the global indices
-            // but now with the local indices as values
-            hashmap.clear();
-            Kokkos::parallel_for(
-               Kokkos::RangePolicy<>(0, colmap_output_d.extent(0)), KOKKOS_LAMBDA(int i) { 
-
-               hashmap.insert(colmap_output_d(i), i);
-            });          
-
-            // And now we can overwrite j_nonlocal_d with the local indices
-            Kokkos::parallel_for(
-               Kokkos::RangePolicy<>(0, nnzs_match_nonlocal), KOKKOS_LAMBDA(int i) {     
-
-               // Find where our global col index is at
-               uint32_t loc = hashmap.find(j_nonlocal_d(i));
-               // And get the value (the new local index)
-               j_nonlocal_d(i) = hashmap.value_at(loc);
-            });      
-            hashmap.clear();
-
-            // Create some host space for the output garray (that stays in scope) and copy it
-            PetscMalloc1(colmap_output_d.extent(0), &garray_host);
-            PetscIntKokkosViewHost colmap_output_h = PetscIntKokkosViewHost(garray_host, colmap_output_d.extent(0));
-            Kokkos::deep_copy(colmap_output_h, colmap_output_d);   
-         }
+            garray_host[i] = is_pointer_orig_fine_col[i + cols_ad];
+         }    
 
          // We can create our nonlocal diagonal block matrix directly on the device
-         auto akok_nonlocal = new Mat_SeqAIJKokkos(local_rows_z, col_ao_output, \
+         auto akok_nonlocal = new Mat_SeqAIJKokkos(local_rows_z, cols_ao, \
                   nnzs_match_nonlocal, i_nonlocal_dual, j_nonlocal_dual, a_nonlocal_dual);  
          // The equivalent of calling the internal MatCreateSeqAIJKokkosWithCSRMatrix
          MatCreate(PETSC_COMM_SELF, &output_mat_nonlocal);

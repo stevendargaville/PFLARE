@@ -1420,6 +1420,7 @@ logical, protected :: kokkos_debug_global = .FALSE.
                         identity_int, reuse_int, reuse_indices_int, &
                         B_array)
          R%v = B_array
+         orig_fine_col_indices%v = orig_indices
          
          ! If debugging do a comparison between CPU and Kokkos results
          if (kokkos_debug()) then
