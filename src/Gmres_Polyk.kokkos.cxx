@@ -177,13 +177,15 @@ PETSC_INTERN void build_gmres_polynomial_inverse_0th_order_kokkos(Mat *input_mat
       Mat_SeqAIJKokkos *aijkok_local_output = static_cast<Mat_SeqAIJKokkos *>(mat_local_output->spptr);
       // Annoying we can't just call MatSeqAIJGetKokkosView
       a_local_d = aijkok_local_output->a_dual.view_device();
+      Kokkos::deep_copy(a_local_d, coefficients[0]);  
 
       // Have to specify we've modifed local data on the device
       // Want to call MatSeqAIJKokkosModifyDevice but its PETSC_INTERN
       aijkok_local_output->a_dual.clear_sync_state();
       aijkok_local_output->a_dual.modify_device();
-      aijkok_local_output->transpose_updated = PETSC_FALSE;
-      aijkok_local_output->hermitian_updated = PETSC_FALSE;
+      // Transpose is the same
+      //aijkok_local_output->transpose_updated = PETSC_FALSE;
+      //aijkok_local_output->hermitian_updated = PETSC_FALSE;
       // Invalidate diagonals
       Mat_SeqAIJ *a = (Mat_SeqAIJ *)mat_local_output->data;
       a->idiagvalid  = PETSC_FALSE;

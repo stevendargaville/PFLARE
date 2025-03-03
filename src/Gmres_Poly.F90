@@ -1740,7 +1740,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
             if (normy .gt. 1d-13) then
                !call MatFilter(temp_mat, 1d-14, PETSC_TRUE, PETSC_FALSE, ierr)
                !call MatView(temp_mat, PETSC_VIEWER_STDOUT_WORLD, ierr)
-               print *, "Kokkos and CPU versions of generate_one_point_with_one_entry_from_sparse do not match"
+               print *, "Kokkos and CPU versions of build_gmres_polynomial_inverse_0th_order do not match"
                call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)  
             end if
             call MatDestroy(temp_mat_reuse, ierr)
