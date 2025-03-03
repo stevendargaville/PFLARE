@@ -1480,17 +1480,14 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       type(tMat), intent(inout)                         :: reuse_mat, inv_matrix
 
       ! Local variables
-      PetscInt :: global_row_start, global_row_end_plus_one, counter
-      PetscInt :: global_rows, global_cols, local_rows, local_cols, j_loc
+      PetscInt :: global_row_start, global_row_end_plus_one
+      PetscInt :: global_rows, global_cols, local_rows, local_cols
       integer :: comm_size, errorcode, order
       PetscErrorCode :: ierr      
       MPI_Comm :: MPI_COMM_MATRIX
       type(tMat) :: mat_power, temp_mat
       type(mat_ctxtype), pointer :: mat_ctx
-      logical :: reuse_triggered
-      MatType:: mat_type
-      PetscInt, allocatable, dimension(:) :: indices
-      PetscReal, allocatable, dimension(:) :: v       
+      logical :: reuse_triggered      
 
       ! ~~~~~~       
 
@@ -1558,48 +1555,9 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       ! If we're zeroth order poly this is trivial as it's just the coefficient(1) on the diagonal
       if (poly_order == 0) then
 
-         ! If not re-using
-         if (.NOT. reuse_triggered) then
+         call build_gmres_polynomial_inverse_0th_order(matrix, poly_order, buffers, coefficients, &
+               inv_matrix)         
 
-            call MatCreate(MPI_COMM_MATRIX, inv_matrix, ierr)
-            call MatSetSizes(inv_matrix, local_rows, local_cols, &
-                             global_rows, global_cols, ierr)
-            ! Match the output type
-            call MatGetType(matrix, mat_type, ierr)
-            call MatSetType(inv_matrix, mat_type, ierr)
-            call MatSetUp(inv_matrix, ierr)                
-
-         end if        
-
-         ! Don't set any off processor entries so no need for a reduction when assembling
-         call MatSetOption(inv_matrix, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)
-         call MatSetOption(inv_matrix, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)                     
-
-         ! Finish off the non-blocking all reduce to compute our coefficients
-         call finish_gmres_polynomial_coefficients_power(poly_order, buffers, coefficients)
-
-         allocate(v(local_rows))
-         ! Set the diagonal
-         v = coefficients(1)      
-         
-         ! Set the diagonal
-         if (.NOT. reuse_triggered) then
-            allocate(indices(local_rows))
-
-            ! Set the diagonal
-            counter = 1
-            do j_loc = global_row_start, global_row_end_plus_one-1
-               indices(counter) = j_loc
-               counter = counter + 1
-            end do            
-            call MatSetPreallocationCOO(inv_matrix, local_rows, indices, indices, ierr)
-            deallocate(indices)
-
-         end if
-
-         call MatSetValuesCOO(inv_matrix, v, INSERT_VALUES, ierr)    
-         deallocate(v)                  
-                           
          ! Then just return
          return
 
@@ -1704,7 +1662,198 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       ! There is an assemble in the shift so don't need a separate one       
       call MatShift(inv_matrix, coefficients(1), ierr)       
 
-   end subroutine build_gmres_polynomial_inverse       
+   end subroutine build_gmres_polynomial_inverse  
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine build_gmres_polynomial_inverse_0th_order(matrix, poly_order, buffers, coefficients, &
+                  inv_matrix)
+
+      ! Wrapper around build_gmres_polynomial_inverse_0th_order_kokkos and 
+      ! build_gmres_polynomial_inverse_0th_order_cpu
+
+      ! ~~~~~~
+      type(tMat), intent(in)                            :: matrix
+      integer, intent(in)                               :: poly_order
+      type(tsqr_buffers), intent(inout)                 :: buffers
+      PetscReal, dimension(:), target, intent(inout)    :: coefficients
+      type(tMat), intent(inout)                         :: inv_matrix
+      
+#if defined(PETSC_HAVE_KOKKOS)                     
+      integer(c_long_long) :: A_array, B_array
+      integer :: errorcode, reuse_int
+      PetscErrorCode :: ierr
+      MatType :: mat_type
+      Mat :: temp_mat, temp_mat_reuse, temp_mat_compare
+      PetscScalar normy;
+      logical :: reuse_triggered
+      type(c_ptr)  :: coefficients_ptr
+#endif      
+      ! ~~~~~~~~~~
+
+#if defined(PETSC_HAVE_KOKKOS)    
+
+      call MatGetType(matrix, mat_type, ierr)
+      if (mat_type == MATMPIAIJKOKKOS .OR. mat_type == MATSEQAIJKOKKOS .OR. &
+            mat_type == MATAIJKOKKOS) then   
+               
+         ! Finish off the non-blocking all reduce to compute our coefficients
+         ! This is a fortran routine and we don't want to call this inside the kokkos
+         call finish_gmres_polynomial_coefficients_power(poly_order, buffers, coefficients)               
+
+         A_array = matrix%v             
+         reuse_triggered = .NOT. PetscMatIsNull(inv_matrix) 
+         reuse_int = 0
+         if (reuse_triggered) then
+            reuse_int = 1
+            B_array = inv_matrix%v
+         end if
+         coefficients_ptr = c_loc(coefficients)
+         call build_gmres_polynomial_inverse_0th_order_kokkos(A_array, poly_order, coefficients_ptr, &
+                  reuse_int, B_array)
+         inv_matrix%v = B_array
+
+         ! If debugging do a comparison between CPU and Kokkos results
+         if (kokkos_debug()) then
+
+            ! If we're doing reuse and debug, then we have to always output the result 
+            ! from the cpu version, as it will have coo preallocation structures set
+            ! They aren't copied over if you do a matcopy (or matconvert)
+            ! If we didn't do that the next time we come through this routine 
+            ! and try to call the cpu version with reuse, it will segfault
+            if (reuse_triggered) then
+               temp_mat = inv_matrix
+               call MatConvert(inv_matrix, MATSAME, MAT_INITIAL_MATRIX, temp_mat_compare, ierr)  
+            else
+               temp_mat_compare = inv_matrix                         
+            end if            
+
+            ! Debug check if the CPU and Kokkos versions are the same
+            call build_gmres_polynomial_inverse_0th_order_cpu(matrix, poly_order, buffers, coefficients, &
+                     temp_mat)  
+                     
+            call MatConvert(temp_mat, MATSAME, MAT_INITIAL_MATRIX, &
+                        temp_mat_reuse, ierr)                        
+
+            call MatAXPY(temp_mat_reuse, -1d0, temp_mat_compare, DIFFERENT_NONZERO_PATTERN, ierr)
+            call MatNorm(temp_mat_reuse, NORM_FROBENIUS, normy, ierr)
+            if (normy .gt. 1d-13) then
+               !call MatFilter(temp_mat, 1d-14, PETSC_TRUE, PETSC_FALSE, ierr)
+               !call MatView(temp_mat, PETSC_VIEWER_STDOUT_WORLD, ierr)
+               print *, "Kokkos and CPU versions of generate_one_point_with_one_entry_from_sparse do not match"
+               call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)  
+            end if
+            call MatDestroy(temp_mat_reuse, ierr)
+            if (.NOT. reuse_triggered) then
+               call MatDestroy(inv_matrix, ierr)
+            else
+               call MatDestroy(temp_mat_compare, ierr)
+            end if
+            inv_matrix = temp_mat
+         end if
+
+      else
+
+         call build_gmres_polynomial_inverse_0th_order_cpu(matrix, poly_order, buffers, coefficients, &
+                  inv_matrix)        
+
+      end if
+#else
+      call build_gmres_polynomial_inverse_0th_order_cpu(matrix, poly_order, buffers, coefficients, &
+            inv_matrix) 
+#endif                
+
+   end subroutine build_gmres_polynomial_inverse_0th_order
+   
+! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine build_gmres_polynomial_inverse_0th_order_cpu(matrix, poly_order, buffers, coefficients, &
+                  inv_matrix)
+
+      ! Specific 0th order inverse
+
+      ! ~~~~~~
+      type(tMat), intent(in)                            :: matrix
+      integer, intent(in)                               :: poly_order
+      type(tsqr_buffers), intent(inout)                 :: buffers
+      PetscReal, dimension(:), target, intent(inout)    :: coefficients
+      type(tMat), intent(inout)                         :: inv_matrix
+
+      ! Local variables
+      PetscInt :: global_row_start, global_row_end_plus_one, counter
+      PetscInt :: global_rows, global_cols, local_rows, local_cols, j_loc
+      integer :: comm_size, errorcode
+      PetscErrorCode :: ierr      
+      MPI_Comm :: MPI_COMM_MATRIX
+      logical :: reuse_triggered
+      MatType:: mat_type
+      PetscInt, allocatable, dimension(:) :: indices
+      PetscReal, allocatable, dimension(:) :: v       
+
+      ! ~~~~~~      
+      
+      if (poly_order /= 0) then
+         print *, "This is a 0th order inverse, but poly_order is not 0"
+         call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)
+      end if
+
+      ! We might want to call the gmres poly creation on a sub communicator
+      ! so let's get the comm attached to the matrix and make sure to use that 
+      call PetscObjectGetComm(matrix, MPI_COMM_MATRIX, ierr)    
+      ! Get the comm size 
+      call MPI_Comm_size(MPI_COMM_MATRIX, comm_size, errorcode)        
+
+      ! Get the local sizes
+      call MatGetLocalSize(matrix, local_rows, local_cols, ierr)
+      call MatGetSize(matrix, global_rows, global_cols, ierr)
+      ! This returns the global index of the local portion of the matrix
+      call MatGetOwnershipRange(matrix, global_row_start, global_row_end_plus_one, ierr)     
+
+      reuse_triggered = .NOT. PetscMatIsNull(inv_matrix) 
+      ! If not re-using
+      if (.NOT. reuse_triggered) then
+
+         call MatCreate(MPI_COMM_MATRIX, inv_matrix, ierr)
+         call MatSetSizes(inv_matrix, local_rows, local_cols, &
+                           global_rows, global_cols, ierr)
+         ! Match the output type
+         call MatGetType(matrix, mat_type, ierr)
+         call MatSetType(inv_matrix, mat_type, ierr)
+         call MatSetUp(inv_matrix, ierr)                
+
+      end if        
+
+      ! Don't set any off processor entries so no need for a reduction when assembling
+      call MatSetOption(inv_matrix, MAT_NO_OFF_PROC_ENTRIES, PETSC_TRUE, ierr)
+      call MatSetOption(inv_matrix, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE,  ierr)                     
+
+      ! Finish off the non-blocking all reduce to compute our coefficients
+      call finish_gmres_polynomial_coefficients_power(poly_order, buffers, coefficients)
+
+      allocate(v(local_rows))
+      ! Set the diagonal
+      v = coefficients(1)      
+      
+      ! Set the diagonal
+      if (.NOT. reuse_triggered) then
+         allocate(indices(local_rows))
+
+         ! Set the diagonal
+         counter = 1
+         do j_loc = global_row_start, global_row_end_plus_one-1
+            indices(counter) = j_loc
+            counter = counter + 1
+         end do            
+         call MatSetPreallocationCOO(inv_matrix, local_rows, indices, indices, ierr)
+         deallocate(indices)
+
+      end if
+
+      call MatSetValuesCOO(inv_matrix, v, INSERT_VALUES, ierr)    
+      deallocate(v)                     
+
+   end subroutine build_gmres_polynomial_inverse_0th_order_cpu   
+   
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 

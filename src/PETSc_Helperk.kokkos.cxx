@@ -7,10 +7,8 @@
 #include "Kokkos_UnorderedMap.hpp"
 #include <Kokkos_StdAlgorithms.hpp>
 #include <../src/vec/vec/impls/seq/kokkos/veckokkosimpl.hpp>
-
-using DefaultExecutionSpace = Kokkos::DefaultExecutionSpace;
-using DefaultMemorySpace    = Kokkos::DefaultExecutionSpace::memory_space;
-using PetscIntConstKokkosViewHost = Kokkos::View<const PetscInt *, Kokkos::HostSpace>;
+// Our kokkos definitions
+#include "kokkos_helper.h"
 
 struct ReduceData {
    PetscInt count;
@@ -87,7 +85,7 @@ namespace Kokkos {
 }
 
 // Another horrid copy given it's only declared in the .cxx
-static PetscErrorCode MatSetMPIAIJKokkosWithSplitSeqAIJKokkosMatrices_mine(Mat mat, Mat A, Mat B, PetscInt *garray)
+PetscErrorCode MatSetMPIAIJKokkosWithSplitSeqAIJKokkosMatrices_mine(Mat mat, Mat A, Mat B, PetscInt *garray)
 {
   Mat_MPIAIJ *mpiaij = static_cast<Mat_MPIAIJ *>(mat->data);
   PetscInt    m, n, M, N, Am, An, Bm, Bn;
@@ -213,7 +211,7 @@ PetscErrorCode MatSeqAIJSetPreallocation_SeqAIJ_mine(Mat B, PetscInt nz, const P
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PETSC_INTERN PetscErrorCode MatSetSeqAIJKokkosWithCSRMatrix_mine(Mat A, Mat_SeqAIJKokkos *akok)
+PetscErrorCode MatSetSeqAIJKokkosWithCSRMatrix_mine(Mat A, Mat_SeqAIJKokkos *akok)
 {
   Mat_SeqAIJ *aseq;
   PetscInt    i, m, n;

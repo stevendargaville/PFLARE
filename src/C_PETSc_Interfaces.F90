@@ -323,7 +323,22 @@ module c_petsc_interfaces
          integer(c_int), value :: identity_int, reuse_int, reuse_indices_int
       end subroutine compute_R_from_Z_kokkos         
  
-   end interface     
+   end interface
+   
+   interface   
+      
+      subroutine build_gmres_polynomial_inverse_0th_order_kokkos(A_array, poly_order, &
+                  coefficients, reuse_int, B_array) &
+         bind(c, name="build_gmres_polynomial_inverse_0th_order_kokkos")
+         use iso_c_binding
+         integer(c_long_long) :: A_array
+         integer(c_long_long) :: B_array
+         integer, value :: poly_order
+         type(c_ptr), value :: coefficients
+         integer(c_int), value :: reuse_int
+      end subroutine build_gmres_polynomial_inverse_0th_order_kokkos         
+ 
+   end interface    
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 

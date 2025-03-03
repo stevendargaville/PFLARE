@@ -7,14 +7,8 @@
 #include <Kokkos_StdAlgorithms.hpp>
 #include <../src/vec/vec/impls/seq/kokkos/veckokkosimpl.hpp>
 #include <Kokkos_Random.hpp>
-
-using DefaultExecutionSpace = Kokkos::DefaultExecutionSpace;
-using DefaultMemorySpace    = Kokkos::DefaultExecutionSpace::memory_space;
-using intKokkosViewHost = Kokkos::View<int *, Kokkos::HostSpace>;
-using intKokkosView = Kokkos::View<int *, Kokkos::DefaultExecutionSpace>;
-using boolKokkosView = Kokkos::View<bool *, Kokkos::DefaultExecutionSpace>;
-using PetscIntConstKokkosViewHost = Kokkos::View<const PetscInt *, Kokkos::HostSpace>;
-
+// Our kokkos definitions
+#include "kokkos_helper.h"
 //------------------------------------------------------------------------------------------------------------------------
 
 // PMISR cf splitting but on the device
