@@ -1283,15 +1283,22 @@ PETSC_INTERN void compute_P_from_W_kokkos(Mat *input_mat, PetscInt global_row_st
       aijkok_local_output->a_dual.modify_device();
       aijkok_local_output->transpose_updated = PETSC_FALSE;
       aijkok_local_output->hermitian_updated = PETSC_FALSE;
+      // Invalidate diagonals
+      Mat_SeqAIJ *a = (Mat_SeqAIJ *)mat_local_output->data;
+      a->idiagvalid  = PETSC_FALSE;
+      a->ibdiagvalid = PETSC_FALSE;      
+      a->inode.ibdiagvalid = PETSC_FALSE;        
       if (mpi)
       {
          aijkok_nonlocal_output->a_dual.clear_sync_state();
          aijkok_nonlocal_output->a_dual.modify_device();
          aijkok_nonlocal_output->transpose_updated = PETSC_FALSE;
          aijkok_nonlocal_output->hermitian_updated = PETSC_FALSE;
-         //MatSeqAIJInvalidateDiagonal(mat_local);    
+         a = (Mat_SeqAIJ *)mat_nonlocal_output->data;
+         a->idiagvalid  = PETSC_FALSE;
+         a->ibdiagvalid = PETSC_FALSE;   
+         a->inode.ibdiagvalid = PETSC_FALSE; 
       }      
-      //MatSeqAIJInvalidateDiagonal(mat_local);
       PetscObjectStateIncrease((PetscObject)output_mat);      
 
    }
@@ -1444,8 +1451,11 @@ PETSC_INTERN void MatSetAllValues_kokkos(Mat *input_mat, PetscReal val)
    aijkok_local->a_dual.modify_device();
    aijkok_local->transpose_updated = PETSC_FALSE;
    aijkok_local->hermitian_updated = PETSC_FALSE;
-   //MatSeqAIJInvalidateDiagonal(mat_local);
-   PetscObjectStateIncrease((PetscObject)input_mat);
+   // Invalidate diagonals
+   Mat_SeqAIJ *a = (Mat_SeqAIJ *)mat_local->data;
+   a->idiagvalid  = PETSC_FALSE;
+   a->ibdiagvalid = PETSC_FALSE;      
+   a->inode.ibdiagvalid = PETSC_FALSE;  
 
    if (mpi)
    {
@@ -1453,8 +1463,12 @@ PETSC_INTERN void MatSetAllValues_kokkos(Mat *input_mat, PetscReal val)
       aijkok_nonlocal->a_dual.modify_device();
       aijkok_nonlocal->transpose_updated = PETSC_FALSE;
       aijkok_nonlocal->hermitian_updated = PETSC_FALSE;
-      //MatSeqAIJInvalidateDiagonal(mat_local);    
+      a = (Mat_SeqAIJ *)mat_nonlocal->data;
+      a->idiagvalid  = PETSC_FALSE;
+      a->ibdiagvalid = PETSC_FALSE;   
+      a->inode.ibdiagvalid = PETSC_FALSE;    
    }
+   PetscObjectStateIncrease((PetscObject)input_mat);
 
    return;
 }
@@ -2305,15 +2319,22 @@ PETSC_INTERN void compute_R_from_Z_kokkos(Mat *input_mat, PetscInt global_row_st
       aijkok_local_output->a_dual.modify_device();
       aijkok_local_output->transpose_updated = PETSC_FALSE;
       aijkok_local_output->hermitian_updated = PETSC_FALSE;
+      // Invalidate diagonals
+      Mat_SeqAIJ *a = (Mat_SeqAIJ *)mat_local_output->data;
+      a->idiagvalid  = PETSC_FALSE;
+      a->ibdiagvalid = PETSC_FALSE;      
+      a->inode.ibdiagvalid = PETSC_FALSE;      
       if (mpi)
       {
          aijkok_nonlocal_output->a_dual.clear_sync_state();
          aijkok_nonlocal_output->a_dual.modify_device();
          aijkok_nonlocal_output->transpose_updated = PETSC_FALSE;
          aijkok_nonlocal_output->hermitian_updated = PETSC_FALSE;
-         //MatSeqAIJInvalidateDiagonal(mat_local);    
-      }      
-      //MatSeqAIJInvalidateDiagonal(mat_local);
+         a = (Mat_SeqAIJ *)mat_nonlocal_output->data;
+         a->idiagvalid  = PETSC_FALSE;
+         a->ibdiagvalid = PETSC_FALSE;   
+         a->inode.ibdiagvalid = PETSC_FALSE;       
+      }        
       PetscObjectStateIncrease((PetscObject)output_mat);      
 
     }
