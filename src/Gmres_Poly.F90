@@ -1792,10 +1792,110 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
 
    end subroutine build_gmres_polynomial_inverse_0th_order_cpu   
 
+   ! -------------------------------------------------------------------------------------------------------------------------------
+
+   subroutine build_gmres_polynomial_inverse_0th_order_sparsity(matrix, poly_order, buffers, coefficients, &
+                  inv_matrix)
+
+      ! Wrapper around build_gmres_polynomial_inverse_0th_order_sparsity_kokkos and 
+      ! build_gmres_polynomial_inverse_0th_order_sparsity_cpu
+
+      ! ~~~~~~
+      type(tMat), intent(in)                            :: matrix
+      integer, intent(in)                               :: poly_order
+      type(tsqr_buffers), intent(inout)                 :: buffers
+      PetscReal, dimension(:), target, intent(inout)    :: coefficients
+      type(tMat), intent(inout)                         :: inv_matrix
+      
+#if defined(PETSC_HAVE_KOKKOS)                     
+      integer(c_long_long) :: A_array, B_array
+      integer :: errorcode, reuse_int
+      PetscErrorCode :: ierr
+      MatType :: mat_type
+      Mat :: temp_mat, temp_mat_reuse, temp_mat_compare
+      PetscScalar normy;
+      logical :: reuse_triggered
+      type(c_ptr)  :: coefficients_ptr
+#endif      
+      ! ~~~~~~~~~~
+
+#if defined(PETSC_HAVE_KOKKOS)    
+
+      call MatGetType(matrix, mat_type, ierr)
+      if (mat_type == MATMPIAIJKOKKOS .OR. mat_type == MATSEQAIJKOKKOS .OR. &
+            mat_type == MATAIJKOKKOS) then   
+               
+         ! Finish off the non-blocking all reduce to compute our coefficients
+         ! This is a fortran routine and we don't want to call this inside the kokkos
+         call finish_gmres_polynomial_coefficients_power(poly_order, buffers, coefficients)               
+
+         A_array = matrix%v             
+         reuse_triggered = .NOT. PetscMatIsNull(inv_matrix) 
+         reuse_int = 0
+         if (reuse_triggered) then
+            reuse_int = 1
+            B_array = inv_matrix%v
+         end if
+         coefficients_ptr = c_loc(coefficients)
+         call build_gmres_polynomial_inverse_0th_order_sparsity_kokkos(A_array, poly_order, coefficients_ptr, &
+                  reuse_int, B_array)
+         inv_matrix%v = B_array
+
+         ! If debugging do a comparison between CPU and Kokkos results
+         if (kokkos_debug()) then
+
+            ! If we're doing reuse and debug, then we have to always output the result 
+            ! from the cpu version, as it will have coo preallocation structures set
+            ! They aren't copied over if you do a matcopy (or matconvert)
+            ! If we didn't do that the next time we come through this routine 
+            ! and try to call the cpu version with reuse, it will segfault
+            if (reuse_triggered) then
+               temp_mat = inv_matrix
+               call MatConvert(inv_matrix, MATSAME, MAT_INITIAL_MATRIX, temp_mat_compare, ierr)  
+            else
+               temp_mat_compare = inv_matrix                         
+            end if            
+
+            ! Debug check if the CPU and Kokkos versions are the same
+            call build_gmres_polynomial_inverse_0th_order_sparsity_cpu(matrix, poly_order, buffers, coefficients, &
+                     temp_mat)  
+                     
+            call MatConvert(temp_mat, MATSAME, MAT_INITIAL_MATRIX, &
+                        temp_mat_reuse, ierr)                        
+
+            call MatAXPY(temp_mat_reuse, -1d0, temp_mat_compare, DIFFERENT_NONZERO_PATTERN, ierr)
+            call MatNorm(temp_mat_reuse, NORM_FROBENIUS, normy, ierr)
+            if (normy .gt. 1d-13) then
+               !call MatFilter(temp_mat, 1d-14, PETSC_TRUE, PETSC_FALSE, ierr)
+               !call MatView(temp_mat, PETSC_VIEWER_STDOUT_WORLD, ierr)
+               print *, "Kokkos and CPU versions of build_gmres_polynomial_inverse_0th_order_sparsity do not match"
+               call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)  
+            end if
+            call MatDestroy(temp_mat_reuse, ierr)
+            if (.NOT. reuse_triggered) then
+               call MatDestroy(inv_matrix, ierr)
+            else
+               call MatDestroy(temp_mat_compare, ierr)
+            end if
+            inv_matrix = temp_mat
+         end if
+
+      else
+
+         call build_gmres_polynomial_inverse_0th_order_sparsity_cpu(matrix, poly_order, buffers, coefficients, &
+                  inv_matrix)        
+
+      end if
+#else
+      call build_gmres_polynomial_inverse_0th_order_sparsity_cpu(matrix, poly_order, buffers, coefficients, &
+            inv_matrix) 
+#endif                      
+
+   end subroutine build_gmres_polynomial_inverse_0th_order_sparsity  
 
 ! -------------------------------------------------------------------------------------------------------------------------------
 
-   subroutine build_gmres_polynomial_inverse_0th_order_sparsity(matrix, poly_order, buffers, coefficients, &
+   subroutine build_gmres_polynomial_inverse_0th_order_sparsity_cpu(matrix, poly_order, buffers, coefficients, &
                   inv_matrix)
 
       ! Specific inverse with 0th order sparsity
@@ -1838,7 +1938,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
 
       ! This stores D^order
       call VecDuplicate(diag_vec, power_vec, ierr)
-      call MatGetDiagonal(matrix, power_vec, ierr)
+      call VecCopy(diag_vec, power_vec, ierr)
 
       ! ~~~~~~~~~~~      
       ! Finish the non-blocking all-reduce and compute our polynomial coefficients
@@ -1893,7 +1993,7 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
       call VecDestroy(rhs_copy, ierr) 
       call VecDestroy(power_vec, ierr)                      
 
-   end subroutine build_gmres_polynomial_inverse_0th_order_sparsity      
+   end subroutine build_gmres_polynomial_inverse_0th_order_sparsity_cpu      
    
 
 ! -------------------------------------------------------------------------------------------------------------------------------

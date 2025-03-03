@@ -338,6 +338,21 @@ module c_petsc_interfaces
          integer(c_int), value :: reuse_int
       end subroutine build_gmres_polynomial_inverse_0th_order_kokkos         
  
+   end interface
+   
+   interface   
+      
+      subroutine build_gmres_polynomial_inverse_0th_order_sparsity_kokkos(A_array, poly_order, &
+                  coefficients, reuse_int, B_array) &
+         bind(c, name="build_gmres_polynomial_inverse_0th_order_sparsity_kokkos")
+         use iso_c_binding
+         integer(c_long_long) :: A_array
+         integer(c_long_long) :: B_array
+         integer, value :: poly_order
+         type(c_ptr), value :: coefficients
+         integer(c_int), value :: reuse_int
+      end subroutine build_gmres_polynomial_inverse_0th_order_sparsity_kokkos         
+ 
    end interface    
 
 ! -------------------------------------------------------------------------------------------------------------------------------
