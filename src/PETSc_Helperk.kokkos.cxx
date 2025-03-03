@@ -1709,12 +1709,13 @@ PETSC_INTERN void generate_one_point_with_one_entry_from_sparse_kokkos(Mat *inpu
    }        
 
    // Initialize i_local_d row pointers (1 to local_rows) with cumulative sums from the scan
-   auto i_local_range = Kokkos::subview(i_local_d, Kokkos::make_pair(1, local_rows+1));
+   PetscInt one = 1;
+   auto i_local_range = Kokkos::subview(i_local_d, Kokkos::make_pair(one, local_rows+1));
    Kokkos::deep_copy(i_local_range, nnz_match_local_row_d);
    
    // Similarly for MPI nonlocal case if needed
    if (mpi) {
-      auto i_nonlocal_range = Kokkos::subview(i_nonlocal_d, Kokkos::make_pair(1, local_rows+1));
+      auto i_nonlocal_range = Kokkos::subview(i_nonlocal_d, Kokkos::make_pair(one, local_rows+1));
       Kokkos::deep_copy(i_nonlocal_range, nnz_match_nonlocal_row_d);
    }          
    
