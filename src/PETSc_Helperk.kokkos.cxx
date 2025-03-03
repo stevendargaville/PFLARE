@@ -1526,13 +1526,12 @@ PETSC_INTERN void generate_one_point_with_one_entry_from_sparse_kokkos(Mat *inpu
    // Let's build our i, j, and a on the device
    // ~~~~~~~~~~~~~~~~~~~~~~~   
    // We need to know where our max values are
-   PetscScalarKokkosView max_val_row_d("max_val_row_d", local_rows);             
    PetscIntKokkosView max_col_row_d("max_col_row_d", local_rows);    
    // We need to know how many entries are in each row  
    PetscIntKokkosView nnz_match_local_row_d("nnz_match_local_row_d", local_rows);             
    PetscIntKokkosView nnz_match_nonlocal_row_d("nnz_match_nonlocal_row_d", local_rows); 
    Kokkos::deep_copy(nnz_match_local_row_d, 0);
-   Kokkos::deep_copy(nnz_match_nonlocal_row_d, 0);       
+   Kokkos::deep_copy(nnz_match_nonlocal_row_d, 0);
 
    // Loop over the rows and find the biggest entry in each row
    Kokkos::parallel_for(
@@ -1578,20 +1577,40 @@ PETSC_INTERN void generate_one_point_with_one_entry_from_sparse_kokkos(Mat *inpu
       // Only want one thread in the team to write the result
       Kokkos::single(Kokkos::PerTeam(t), [&]() {     
 
+         // If our biggest entry is nonlocal
          if (nonlocal_row_result.val > local_row_result.val) {
             // Check we found an entry
             if (nonlocal_row_result.col != -1) {
-               max_val_row_d(i) = nonlocal_row_result.val;
                max_col_row_d(i) = nonlocal_row_result.col;
                nnz_match_nonlocal_row_d(i)++;
             }
          }
+         // Here we only know nonlocal <= local
          else {
-            // Check we found an entry
-            if (local_row_result.col != -1) {
-               max_val_row_d(i) = local_row_result.val;
-               max_col_row_d(i) = local_row_result.col;
-               nnz_match_local_row_d(i)++;
+            // Catch the less than case
+            if (nonlocal_row_result.val < local_row_result.val) {
+               // Check we found an entry
+               if (local_row_result.col != -1) {
+                  max_col_row_d(i) = local_row_result.col;
+                  nnz_match_local_row_d(i)++;
+               }
+            }
+            // This is the == case, let's check we actually
+            // found anything
+            else if (local_row_result.col != -1)
+            {
+               // We want to match the same as the cpu results, which 
+               // uses matgetrow and then finds the first max global index
+               // This means they are sorted
+               // Would be a nicer thing to always pick the local entry
+               if (local_row_result.col + global_col_start < nonlocal_row_result.col) {
+                  max_col_row_d(i) = local_row_result.col;
+                  nnz_match_local_row_d(i)++;
+               }
+               else {
+                  max_col_row_d(i) = nonlocal_row_result.col;
+                  nnz_match_nonlocal_row_d(i)++;
+               }
             }
          }
       });      
