@@ -1865,7 +1865,9 @@ subroutine  finish_gmres_polynomial_coefficients_power(poly_order, buffers, coef
 
             call MatAXPY(temp_mat_reuse, -1d0, temp_mat_compare, DIFFERENT_NONZERO_PATTERN, ierr)
             call MatNorm(temp_mat_reuse, NORM_FROBENIUS, normy, ierr)
-            if (normy .gt. 1d-13) then
+            ! There is floating point compute in these inverses, so we have to be a 
+            ! bit more tolerant to rounding differences
+            if (normy .gt. 1d-11) then
                !call MatFilter(temp_mat, 1d-14, PETSC_TRUE, PETSC_FALSE, ierr)
                !call MatView(temp_mat, PETSC_VIEWER_STDOUT_WORLD, ierr)
                print *, "Kokkos and CPU versions of build_gmres_polynomial_inverse_0th_order_sparsity do not match"
