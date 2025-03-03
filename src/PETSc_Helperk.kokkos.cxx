@@ -1577,27 +1577,37 @@ PETSC_INTERN void generate_one_point_with_one_entry_from_sparse_kokkos(Mat *inpu
       // Only want one thread in the team to write the result
       Kokkos::single(Kokkos::PerTeam(t), [&]() {     
 
-         // If our biggest entry is nonlocal
-         if (nonlocal_row_result.val > local_row_result.val) {
+         // We know the entry is local
+         if (!mpi)
+         {
             // Check we found an entry
-            if (nonlocal_row_result.col != -1) {
-               max_col_row_d(i) = nonlocal_row_result.col;
-               nnz_match_nonlocal_row_d(i)++;
+            if (local_row_result.col != -1) {
+               max_col_row_d(i) = local_row_result.col;
+               nnz_match_local_row_d(i)++;
             }
          }
-         // Here we only know nonlocal <= local
-         else {
-            // Catch the less than case
-            if (nonlocal_row_result.val < local_row_result.val) {
+         // If we have mpi we have to check both the local
+         // and nonlocal block maxs
+         else
+         {
+            // If our biggest entry is nonlocal
+            if (nonlocal_row_result.val > local_row_result.val) {
                // Check we found an entry
-               if (local_row_result.col != -1) {
-                  max_col_row_d(i) = local_row_result.col;
-                  nnz_match_local_row_d(i)++;
+               if (nonlocal_row_result.col != -1) {
+                  max_col_row_d(i) = nonlocal_row_result.col;
+                  nnz_match_nonlocal_row_d(i)++;
                }
             }
-            // This is the == case, let's check we actually
-            // found anything
-            else if (local_row_result.col != -1)
+            // The local entry is the biggest
+            else if (nonlocal_row_result.val < local_row_result.val) {
+                  // Check we found an entry
+                  if (local_row_result.col != -1) {
+                     max_col_row_d(i) = local_row_result.col;
+                     nnz_match_local_row_d(i)++;
+                  }
+            }        
+            // If they are equal - let's check they're valid to start
+            else if (local_row_result.col != -1 && nonlocal_row_result.col != -1)
             {
                // We want to match the same as the cpu results, which 
                // uses matgetrow and then finds the first max global index
@@ -1611,7 +1621,7 @@ PETSC_INTERN void generate_one_point_with_one_entry_from_sparse_kokkos(Mat *inpu
                   max_col_row_d(i) = nonlocal_row_result.col;
                   nnz_match_nonlocal_row_d(i)++;
                }
-            }
+            }    
          }
       });      
    });      
@@ -1628,6 +1638,10 @@ PETSC_INTERN void generate_one_point_with_one_entry_from_sparse_kokkos(Mat *inpu
    }   
 
    // ~~~~~~~~~~~~
+
+   // Store original counts before scan
+   PetscIntKokkosView has_entry_local_d("has_entry_local_d", local_rows);
+   Kokkos::deep_copy(has_entry_local_d, nnz_match_local_row_d);   
 
    // Need to do a scan on nnz_match_local_row_d to get where each row starts
    Kokkos::parallel_scan (local_rows, KOKKOS_LAMBDA (const PetscInt i, PetscInt& update, const bool final) {
@@ -1696,7 +1710,7 @@ PETSC_INTERN void generate_one_point_with_one_entry_from_sparse_kokkos(Mat *inpu
       if (mpi) i_nonlocal_d(i + 1) = nnz_match_nonlocal_row_d(i); 
 
       // If our max val is in the local block
-      if (nnz_match_local_row_d(i) > 0) {
+      if (has_entry_local_d(i) > 0) {
          j_local_d(i_local_d(i)) = max_col_row_d(i);
          a_local_d(i_local_d(i)) = 1.0;
       }
