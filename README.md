@@ -28,7 +28,7 @@ Installing and using PFLARE adds new methods to PETSc, including:
 
 Details for each are given below, please also see references [1-6]. 
 
-Note: for methods with GPU setup labelled "No" in the tables below, this indicates the some/all of the setup occurs on the CPU before being transferred to the GPU. The setup for these methods may therefore be slow. The solves however all occur on the GPU.   
+Note: for methods with GPU setup labelled "No" in the tables below, this indicates that some/all of the setup occurs on the CPU before being transferred to the GPU. The setup for these methods may therefore be slow. The solves however all occur on the GPU.   
 
 ### PCPFLAREINV - A new PETSc PC type
 
@@ -126,9 +126,9 @@ For Python:
 
 ## Modifying existing code to use PFLARE
 
-After linking your application to the PFLARE library, using the components of PFLARE in an existing PETSc code is very simple. 
+After linking your application to the PFLARE library, using the components of PFLARE through PETSc is very simple. 
 
-For Fortran/C, the user must call a single function which registers the new PC types with PETSc, while in Python this is handled by the import statement. For example, the only modifications required in existing code are:
+For Fortran/C, the user must call a single function which registers the new PC types with PETSc, while in Python this is handled by the import statement. For example, the only modifications required in an existing code are:
 
 in Fortran:
 
@@ -151,7 +151,7 @@ or in Python with petsc4py:
 
 ## Using PFLARE
 
-Once the new PC types have been registered, they can then be used like native PETSc types, either by writing code to set the PETSc type/options, or through command line arguments. A few examples include:
+Once the new PC types have been registered they can then be used like native PETSc types, either by writing code to set the PETSc type/options, or through command line arguments. A few examples include:
 
 #### 1) Using PCAIR with default options, namely AIRG with parameters tuned for a time independent advection equation on 2D unstructured triangles:
 
