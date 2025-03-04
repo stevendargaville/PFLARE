@@ -14,7 +14,7 @@
 
       PetscErrorCode  ierr
       PetscInt its,m,n,mlocal,nlocal
-      PetscBool  flg
+      PetscBool  flg, second_solve
       PetscScalar      none
       PetscReal        norm
       Vec              x,b,u, b_diff_type
@@ -26,6 +26,7 @@
       KSPConvergedReason reason
       PetscInt, parameter :: one=1
       MatType :: mtype, mtype_input
+      PetscLogStage :: gpu_copy
 
       none = -1d0
       call PetscInitialize(PETSC_NULL_CHARACTER,ierr)
@@ -39,6 +40,8 @@
      &        PETSC_NULL_CHARACTER,'-f',f,flg,ierr)
       call PetscViewerBinaryOpen(PETSC_COMM_WORLD,f,FILE_MODE_READ,     &
      &     fd,ierr)
+     second_solve = PETSC_FALSE
+     call PetscOptionsGetBool(PETSC_NULL_OPTIONS,PETSC_NULL_CHARACTER,'-second_solve',second_solve,flg,ierr)  
 
       call MatCreate(PETSC_COMM_WORLD,A,ierr)
       call MatLoad(A,fd,ierr)
@@ -102,8 +105,16 @@
 ! - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ! - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+      call PetscLogStageRegister("GPU copy stage - triggered by a prelim KSPSolve",gpu_copy, ierr)
+      call PetscLogStagePush(gpu_copy, ierr)
       call KSPSetFromOptions(ksp,ierr)
       call KSPSolve(ksp,b,x,ierr)
+      call PetscLogStagePop()
+
+      if (second_solve) then
+         call VecSet(x, 1d0, ierr)
+         call KSPSolve(ksp,b,x,ierr)
+      end if
 
 ! Show result
       call MatMult(A,x,u,ierr)

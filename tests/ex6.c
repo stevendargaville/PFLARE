@@ -11,7 +11,7 @@ int main(int argc,char **args)
   PetscErrorCode ierr;
   PetscInt       its;
 #if defined(PETSC_USE_LOG)
-  PetscLogStage  stage1,stage2;
+  PetscLogStage  stage1,stage2, gpu_copy;
 #endif
   PetscReal      norm;
   Vec            x,b,u, diag_vec, b_diff_type;
@@ -28,6 +28,9 @@ int main(int argc,char **args)
 
   ierr = PetscInitialize(&argc,&args,(char*)0,help);if (ierr) return ierr;
   ierr = PetscOptionsGetBool(NULL,NULL,"-b_in_f",&b_in_f,NULL);CHKERRQ(ierr);
+
+  PetscBool second_solve= PETSC_FALSE;
+  PetscOptionsGetBool(NULL, NULL, "-second_solve", &second_solve, NULL);   
 
   /* Read matrix and RHS */
   ierr = PetscOptionsGetString(NULL,NULL,"-f",file,sizeof(file),&flg);CHKERRQ(ierr);
@@ -154,10 +157,19 @@ int main(int argc,char **args)
   ierr = PetscLogStagePop();CHKERRQ(ierr);
   ierr = PetscBarrier((PetscObject)A);CHKERRQ(ierr);
 
-  ierr = PetscLogStageRegister("mystage 2",&stage2);CHKERRQ(ierr);
-  ierr = PetscLogStagePush(stage2);CHKERRQ(ierr);
+  ierr = PetscLogStageRegister("GPU copy stage - triggered by a prelim KSPSolve",&gpu_copy);CHKERRQ(ierr);
+  ierr = PetscLogStagePush(gpu_copy);CHKERRQ(ierr);
   ierr = KSPSolve(ksp,b,x);CHKERRQ(ierr);
-  ierr = PetscLogStagePop();CHKERRQ(ierr);
+  ierr = PetscLogStagePop();CHKERRQ(ierr);  
+
+  if (second_solve)
+  {
+   ierr = VecSet(x, 1.0);CHKERRQ(ierr);
+   ierr = PetscLogStageRegister("mystage 2",&stage2);CHKERRQ(ierr);
+   ierr = PetscLogStagePush(stage2);CHKERRQ(ierr);
+   ierr = KSPSolve(ksp,b,x);CHKERRQ(ierr);
+   ierr = PetscLogStagePop();CHKERRQ(ierr);  
+  }
 
   /* Show result */
   ierr = MatMult(A,x,u);CHKERRQ(ierr);
