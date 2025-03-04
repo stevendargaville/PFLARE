@@ -355,6 +355,18 @@ module c_petsc_interfaces
  
    end interface    
 
+   interface   
+      
+      subroutine mat_duplicate_copy_plus_diag_kokkos(A_array, reuse_int, B_array) &
+         bind(c, name="mat_duplicate_copy_plus_diag_kokkos")
+         use iso_c_binding
+         integer(c_long_long) :: A_array
+         integer(c_long_long) :: B_array
+         integer(c_int), value :: reuse_int
+      end subroutine mat_duplicate_copy_plus_diag_kokkos         
+ 
+   end interface   
+
 ! -------------------------------------------------------------------------------------------------------------------------------
 
 end module c_petsc_interfaces

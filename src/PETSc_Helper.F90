@@ -654,6 +654,95 @@ logical, protected :: kokkos_debug_global = .FALSE.
    
    subroutine mat_duplicate_copy_plus_diag(input_mat, reuse, output_mat)
 
+      ! Wrapper around mat_duplicate_copy_plus_diag_kokkos and mat_duplicate_copy_plus_diag_cpu
+   
+      ! ~~~~~~~~~~
+      ! Input 
+      type(tMat), intent(in) :: input_mat
+      logical, intent(in) :: reuse
+      type(tMat), intent(inout) :: output_mat
+
+#if defined(PETSC_HAVE_KOKKOS)                     
+      integer(c_long_long) :: A_array, B_array
+      integer :: reuse_int, errorcode
+      PetscErrorCode :: ierr
+      MatType :: mat_type
+      Mat :: temp_mat, temp_mat_reuse, temp_mat_compare
+      PetscScalar normy;
+#endif        
+      ! ~~~~~~~~~~
+
+
+#if defined(PETSC_HAVE_KOKKOS)    
+
+      call MatGetType(input_mat, mat_type, ierr)
+      if (mat_type == MATMPIAIJKOKKOS .OR. mat_type == MATSEQAIJKOKKOS .OR. &
+            mat_type == MATAIJKOKKOS) then
+
+         reuse_int = 0
+         if (reuse) reuse_int = 1
+
+         A_array = input_mat%v             
+         if (reuse) B_array = output_mat%v
+         call mat_duplicate_copy_plus_diag_kokkos(A_array, reuse_int, B_array)
+         output_mat%v = B_array
+         
+         ! If debugging do a comparison between CPU and Kokkos results
+         if (kokkos_debug()) then
+
+            ! If we're doing reuse and debug, then we have to always output the result 
+            ! from the cpu version, as it will have coo preallocation structures set
+            ! They aren't copied over if you do a matcopy (or matconvert)
+            ! If we didn't do that the next time we come through this routine 
+            ! and try to call the cpu version with reuse, it will segfault
+            if (reuse) then
+               temp_mat = output_mat
+               call MatConvert(output_mat, MATSAME, MAT_INITIAL_MATRIX, temp_mat_compare, ierr)  
+            else
+               temp_mat_compare = output_mat                 
+            end if
+
+            ! Debug check if the CPU and Kokkos versions are the same
+            call mat_duplicate_copy_plus_diag_cpu(input_mat, reuse, temp_mat)
+
+            call MatConvert(temp_mat, MATSAME, MAT_INITIAL_MATRIX, &
+                        temp_mat_reuse, ierr)                       
+
+            call MatAXPY(temp_mat_reuse, -1d0, temp_mat_compare, DIFFERENT_NONZERO_PATTERN, ierr)
+            call MatNorm(temp_mat_reuse, NORM_FROBENIUS, normy, ierr)
+            if (normy .gt. 1d-13) then
+               !call MatFilter(temp_mat_reuse, 1d-14, PETSC_TRUE, PETSC_FALSE, ierr)
+               !call MatView(temp_mat_reuse, PETSC_VIEWER_STDOUT_WORLD, ierr)
+               print *, "Kokkos and CPU versions of compute_R_from_Z do not match"
+               call MPI_Abort(MPI_COMM_WORLD, MPI_ERR_OTHER, errorcode)  
+            end if
+            call MatDestroy(temp_mat_reuse, ierr)
+            if (.NOT. reuse) then
+               call MatDestroy(output_mat, ierr)
+            else
+               call MatDestroy(temp_mat_compare, ierr)
+            end if
+            output_mat = temp_mat
+
+         end if
+
+      else
+
+         call mat_duplicate_copy_plus_diag_cpu(input_mat, reuse, output_mat)     
+
+      end if
+#else
+      call mat_duplicate_copy_plus_diag_cpu(input_mat, reuse, output_mat)
+#endif       
+
+         
+   end subroutine mat_duplicate_copy_plus_diag  
+   
+
+  !------------------------------------------------------------------------------------------------------------------------
+   
+   subroutine mat_duplicate_copy_plus_diag_cpu(input_mat, reuse, output_mat)
+
       ! Duplicates and copies the values from input matrix into the output mat, but ensures
       ! there are always diagonal entries present that are set to zero if absent
    
@@ -766,7 +855,7 @@ logical, protected :: kokkos_debug_global = .FALSE.
       deallocate(cols, vals)
 
          
-   end subroutine mat_duplicate_copy_plus_diag   
+   end subroutine mat_duplicate_copy_plus_diag_cpu   
 
    !------------------------------------------------------------------------------------------------------------------------
    
