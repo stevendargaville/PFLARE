@@ -2,8 +2,7 @@
 
 #$ python setup.py build_ext --inplace
 
-from distutils.core import setup
-from distutils.extension import Extension
+from setuptools import setup, Extension
 from Cython.Build import cythonize
 
 import numpy
@@ -45,11 +44,14 @@ def configure():
 extensions = [
     Extension('pflare_defs',
               sources = ['pflare_defs.pyx'],
-              extra_link_args=['-lpetsc', '-lblas', '-llapack'],
+              extra_link_args=['-lpetsc'],
               **configure()),
 ]
 
 setup(name = "pflare_defs",
       ext_modules = cythonize(
-          extensions, include_path=[petsc4py.get_include()]),
+          extensions, 
+          include_path=[petsc4py.get_include()],
+          compiler_directives={'language_level': 3}  # Use python3
+      ),
 )
