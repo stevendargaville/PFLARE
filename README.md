@@ -74,7 +74,7 @@ There are several features used to improve the parallel performance of PCAIR:
 
 ### CF splittings
 
-The CF splittings in PFLARE are used within PCAIR to form the multigrid hierarchy and can be specified with ``-pc_air_cf_splitting_type``: The CF splittings can also be called independently from PCAIR.
+The CF splittings in PFLARE are used within PCAIR to form the multigrid hierarchy. They can also be called independently from PCAIR. The CF splitting type within PCAIR can be specified with ``-pc_air_cf_splitting_type``: 
 
    | Command line type  | Flag | Description | GPU setup |
    | ------------- | -- | ------------- | -- |
@@ -86,7 +86,9 @@ The CF splittings in PFLARE are used within PCAIR to form the multigrid hierarch
 
 ## Building PFLARE
 
-This library depends on MPI, BLAS, LAPACK and PETSc (3.15 to 3.22) configured with a graph partitioner (e.g., ParMETIS). Please compile PETSc directly from the source code, as PFLARE requires access to some of the PETSc types only available in the source. 
+This library depends on MPI, BLAS, LAPACK and PETSc (3.15 to 3.22) configured with a graph partitioner (e.g., ParMETIS). 
+
+Please compile PETSc directly from the source code, as PFLARE requires access to some of the PETSc types only available in the source. We would recommend configuring PETSc with Kokkos if you wish to run on GPUs.
 
 PFLARE has been tested with GNU, Intel, LLVM, NVIDIA and Cray compilers. PFLARE uses the same compilers and flags defined in the PETSc configure.
 
@@ -148,10 +150,6 @@ or in Python with petsc4py:
      ...
 
 ## Using PFLARE
-
-There are several different ways to use the methods in the PFLARE library.
-
-### Using the new PC types:
 
 Once the new PC types have been registered, they can then be used like native PETSc types, either by writing code to set the PETSc type/options, or through command line arguments. A few examples include:
 
@@ -418,13 +416,13 @@ It is recommended that PFLARE be linked with unthreaded BLAS/LAPACK libraries, a
 
 If PETSc has been configured with GPU support then PCPFLAREINV and PCAIR support GPUs. We recommend configuring PETSc with Kokkos and always specifying the matrix/vector types as Kokkos as this works across different GPU hardware (Nvidia, AMD, Intel). PFLARE also contains Kokkos routines to speed-up the setup/solve on GPUs. 
 
-For example, if we don't specify the matrix/vector types in the 1D advection problem ``tests/adv_1d`` it will run on the CPU. If we solve on the CPU with a 30th order GMRES polynomial applied matrix-free:
+By default the tests run on the CPU unless the matrix/vector types are specified as those compatible with GPUs. For example, the following arguments specify that the 1D advection problem ``tests/adv_1d`` will use a 30th order GMRES polynomial applied matrix-free to solve on the CPU:
 
 ``./adv_1d -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30``
 
 To run on GPUs, we set the matrix/vector types as Kokkos, which can be easily set through command line arguments. Our tests use either ``-mat_type`` and ``-vec_type``, or if set by a DM directly use ``-dm_mat_type`` and ``-dm_vec_type``.
 
-For example, running on GPUs with KOKKOS:
+For example, running the same problem on a single GPU with KOKKOS:
 
 ``./adv_1d -n 1000 -ksp_type richardson -pc_type pflareinv -pc_pflareinv_type arnoldi -pc_pflareinv_matrix_free -pc_pflareinv_order 30 -mat_type aijkokkos -vec_type kokkos``
 
